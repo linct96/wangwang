@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "wangwang",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-26",
+  "workers_dev": false,
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wangwang-db",
+      "database_id": "local",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG_CACHE",
+      "id": "local"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "wangwang-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "wangwang-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 3
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "vars": {
+    "APP_HOST": "example.com",
+    "ACCESS_TEAM_DOMAIN": "example.cloudflareaccess.com",
+    "ACCESS_AUD": "local"
+  }
+}
