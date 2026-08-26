@@ -1,0 +1,7 @@
+{
+  "name": "wangwang-wizard",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"console.log('静态向导无需构建')\""
+  }
+}
