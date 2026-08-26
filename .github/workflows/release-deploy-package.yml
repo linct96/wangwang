@@ -1,0 +1,35 @@
+name: Release Wangwang deploy package
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package:deploy
+        env:
+          WANGWANG_VERSION: ${{ github.ref_name }}
+      - run: sha256sum .deploy/wangwang-deploy-v${GITHUB_REF_NAME#v}.tar.gz > .deploy/wangwang-deploy-v${GITHUB_REF_NAME#v}.tar.gz.sha256
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .deploy/wangwang-deploy-${{ github.ref_name }}.tar.gz
+            .deploy/wangwang-deploy-${{ github.ref_name }}.tar.gz.sha256
+            .deploy/wangwang-${{ github.ref_name }}/worker.js
+            .deploy/wangwang-${{ github.ref_name }}/assets.json
+            .deploy/wangwang-${{ github.ref_name }}/manifest.json
+            .deploy/wangwang-${{ github.ref_name }}/migration.sql
