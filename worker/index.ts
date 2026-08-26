@@ -385,11 +385,6 @@ async function adminAsset(c: AppContext) {
 }
 
 app.get('/', (c) => c.redirect('/admin'))
-app.get('/wizard', async (c) => {
-  const url = new URL(c.req.url)
-  url.pathname = '/admin/index.html'
-  return c.env.ASSETS.fetch(new Request(url, c.req.raw))
-})
 app.get('/admin', adminAsset)
 app.get('/admin/*', adminAsset)
 

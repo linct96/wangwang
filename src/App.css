@@ -115,15 +115,6 @@ legend { margin-bottom: 9px; color: #47525e; font-size: 13px; font-weight: 600; 
 .danger-link { margin-top: 18px; padding: 0; display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: #b33c3c; font-size: 13px; }
 .yaml-panel { border: 1px solid #333b44; border-radius: 6px; background: #181d23; overflow: auto; }
 .yaml-panel pre { min-height: 460px; margin: 0; padding: 18px; color: #dce5ec; font: 12px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.wizard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 980px; }
-.wizard-grid .section-title h2 { display: flex; align-items: center; gap: 8px; }
-.wizard-grid .section-title svg { width: 17px; height: 17px; color: #168460; }
-.wizard-result { grid-column: 1 / -1; }
-.resource-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px; }
-.resource-list > div { display: grid; gap: 5px; padding: 14px; border: 1px solid #dfe3e8; border-radius: 5px; }
-.resource-list code { overflow-wrap: anywhere; color: #26313d; }
-.resource-list small { overflow-wrap: anywhere; color: #7d8791; }
-.wizard-result > .muted { margin: 0 20px 20px; }
 .menu-mask { display: none; }
 
 @media (max-width: 800px) {

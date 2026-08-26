@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101820" />
+    <title>Wangwang 部署向导</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="wizard">
+      <header><b>W</b><div><strong>Wangwang</strong><small>Cloudflare 部署向导</small></div></header>
+      <section class="hero"><small>BROWSER-ONLY DEPLOYMENT</small><h1>部署到你自己的 Cloudflare</h1><p>这是一个纯静态页面。Token 只在浏览器内存中使用，不会发送到 Wangwang 服务器。</p></section>
+      <section class="panel"><h2>1. 验证 API Token</h2><label>Cloudflare API Token<input id="token" type="password" autocomplete="off" placeholder="粘贴 API Token" /></label><button id="accounts">查询账户</button></section>
+      <section id="resource-panel" class="panel hidden"><h2>2. 创建 Wangwang 资源</h2><label>Account<select id="account"></select></label><label>项目名称<input id="name" value="wangwang" maxlength="28" /></label><button id="provision">创建 D1 / KV / Queue</button></section>
+      <section id="result" class="panel hidden"><h2>资源已创建</h2><pre id="output"></pre><div><button id="copy">复制配置</button><button id="download">下载配置</button></div><p>这些资源属于你自己的 Cloudflare 账户。下一步将配置写入 Wangwang 项目后再部署。</p></section>
+      <p id="error" class="error hidden"></p>
+      <footer>本页面不保存 Token。关闭页面后 Token 即被清除。</footer>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
