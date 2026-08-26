@@ -12,7 +12,7 @@ pnpm dev
 - 前端：`src/`
 - Worker API：`worker/`
 - 健康检查：`GET /healthz`
-- 独立部署向导：`wizard/`（浏览器直连 Cloudflare API，不经过 Wangwang Worker）
+- 独立部署向导：见 `wangwang-wizard` 仓库（浏览器直连 Cloudflare API）
 
 ## D1
 
