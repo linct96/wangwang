@@ -32,7 +32,3 @@ jobs:
           files: |
             .deploy/wangwang-deploy-${{ github.ref_name }}.tar.gz
             .deploy/wangwang-deploy-${{ github.ref_name }}.tar.gz.sha256
-            .deploy/wangwang-${{ github.ref_name }}/worker.js
-            .deploy/wangwang-${{ github.ref_name }}/assets.json
-            .deploy/wangwang-${{ github.ref_name }}/manifest.json
-            .deploy/wangwang-${{ github.ref_name }}/migration.sql
