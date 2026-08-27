@@ -27,20 +27,27 @@ async function collect(dir, prefix = '') {
 }
 await collect(`${stage}/assets`)
 await writeFile(`${stage}/assets.json`, `${JSON.stringify(assets)}\n`)
-await writeFile(`${stage}/manifest.json`, `${JSON.stringify({
-  product: 'wangwang',
-  version,
-  workerFile: 'worker.js',
-  assetsDir: 'assets',
-  assetsFile: 'assets.json',
-  migrationsDir: 'migrations',
-  requiredBindings: {
-    d1: ['DB'],
-    kv: ['KV'],
-    queues: [{ binding: 'JOBS', type: 'producer' }],
-  },
-  requiredVars: [],
-  requiredSecrets: [],
-}, null, 2)}\n`)
+await writeFile(
+  `${stage}/manifest.json`,
+  `${JSON.stringify(
+    {
+      product: 'wangwang',
+      version,
+      workerFile: 'worker.js',
+      assetsDir: 'assets',
+      assetsFile: 'assets.json',
+      migrationsDir: 'migrations',
+      requiredBindings: {
+        d1: ['DB'],
+        kv: ['KV'],
+        queues: [{ binding: 'JOBS', type: 'producer' }],
+      },
+      requiredVars: [],
+      requiredSecrets: [],
+    },
+    null,
+    2,
+  )}\n`,
+)
 await exec('tar', ['-czf', output, '-C', `${root}/.deploy`, `wangwang-${tag}`])
 console.log(output)
