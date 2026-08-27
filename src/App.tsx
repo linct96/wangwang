@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useForm, useStore } from '@tanstack/react-form'
 import { ThemeProvider } from 'next-themes'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -597,30 +598,34 @@ function SourceDialog({
   onClose: () => void
   onSaved: (jobId: string | null) => void
 }) {
-  const [name, setName] = useState(source?.name || '')
-  const [url, setUrl] = useState(source?.url || '')
-  const [interval, setInterval] = useState(source?.refreshIntervalHours ?? 6)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const urlChanged = url.trim() !== (source?.url || '')
+  const form = useForm({
+    defaultValues: {
+      name: source?.name || '',
+      url: source?.url || '',
+      interval: source?.refreshIntervalHours ?? 6,
+    },
+    onSubmit: async ({ value }) => {
+      const urlChanged = value.url.trim() !== (source?.url || '')
+      setError('')
+      try {
+        const result = await api<{ jobId: string | null }>(source ? `/sources/${source.id}` : '/sources', {
+          method: source ? 'PATCH' : 'POST',
+          body: JSON.stringify({
+            name: value.name,
+            url: source ? (urlChanged ? value.url.trim() : undefined) : value.url.trim(),
+            refreshIntervalHours: value.interval,
+          }),
+        })
+        onSaved(result.jobId)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '创建失败')
+      }
+    },
+  })
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      const result = await api<{ jobId: string | null }>(source ? `/sources/${source.id}` : '/sources', {
-        method: source ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          name,
-          url: source ? (urlChanged ? url.trim() : undefined) : url.trim(),
-          refreshIntervalHours: interval,
-        }),
-      })
-      onSaved(result.jobId)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '创建失败')
-      setSaving(false)
-    }
+    await form.handleSubmit()
   }
   return (
     <AppDialog title={source ? '编辑订阅' : '添加订阅'} onClose={onClose}>
@@ -628,42 +633,54 @@ function SourceDialog({
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="source-name">名称</FieldLabel>
-            <Input
-              id="source-name"
-              required
-              maxLength={60}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="例如：主力订阅"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <Input
+                  id="source-name"
+                  required
+                  maxLength={60}
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="例如：主力订阅"
+                />
+              )}
+            </form.Field>
           </Field>
           <Field>
             <FieldLabel htmlFor="source-url">订阅地址</FieldLabel>
-            <Input
-              id="source-url"
-              required
-              type="url"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://example.com/sub"
-            />
+            <form.Field name="url">
+              {(field) => (
+                <Input
+                  id="source-url"
+                  required
+                  type="url"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="https://example.com/sub"
+                />
+              )}
+            </form.Field>
           </Field>
           <Field>
             <FieldLabel>刷新间隔</FieldLabel>
-            <Select value={String(interval)} onValueChange={(value) => setInterval(Number(value))}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="0">关闭</SelectItem>
-                  <SelectItem value="1">1 小时</SelectItem>
-                  <SelectItem value="6">6 小时</SelectItem>
-                  <SelectItem value="12">12 小时</SelectItem>
-                  <SelectItem value="24">24 小时</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <form.Field name="interval">
+              {(field) => (
+                <Select value={String(field.state.value)} onValueChange={(value) => field.handleChange(Number(value))}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="0">关闭</SelectItem>
+                      <SelectItem value="1">1 小时</SelectItem>
+                      <SelectItem value="6">6 小时</SelectItem>
+                      <SelectItem value="12">12 小时</SelectItem>
+                      <SelectItem value="24">24 小时</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              )}
+            </form.Field>
           </Field>
           {error && (
             <Alert variant="destructive">
@@ -675,10 +692,14 @@ function SourceDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button disabled={saving}>
-            {saving && <RefreshCw data-icon="inline-start" className="spin" />}
-            {source ? (urlChanged ? '保存并验证' : '保存') : '添加并刷新'}
-          </Button>
+          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.url]}>
+            {([isSubmitting, currentUrl]) => (
+              <Button disabled={Boolean(isSubmitting)}>
+                {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
+                {source ? (String(currentUrl).trim() !== (source.url || '') ? '保存并验证' : '保存') : '添加并刷新'}
+              </Button>
+            )}
+          </form.Subscribe>
         </footer>
       </form>
     </AppDialog>
@@ -1290,34 +1311,33 @@ function ManualConnectionFields({
 
 function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [mode, setMode] = useState<'link' | 'form'>('link')
-  const [link, setLink] = useState('')
-  const [connection, setConnection] = useState(defaultConnection())
-  const [tags, setTags] = useState('')
-  const [enabled, setEnabled] = useState(true)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const form = useForm({
+    defaultValues: { link: '', connection: defaultConnection(), tags: '', enabled: true },
+    onSubmit: async ({ value }) => {
+      setError('')
+      try {
+        const nextConnection = mode === 'link' ? parseVlessLink(value.link) : value.connection
+        await api('/nodes', {
+          method: 'POST',
+          body: JSON.stringify({
+            connection: nextConnection,
+            tags: value.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+            enabled: value.enabled,
+          }),
+        })
+        onSaved()
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '添加失败')
+      }
+    },
+  })
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      const nextConnection = mode === 'link' ? parseVlessLink(link) : connection
-      await api('/nodes', {
-        method: 'POST',
-        body: JSON.stringify({
-          connection: nextConnection,
-          tags: tags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-          enabled,
-        }),
-      })
-      onSaved()
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '添加失败')
-      setSaving(false)
-    }
+    await form.handleSubmit()
   }
   return (
     <AppDialog title="添加节点" onClose={onClose}>
@@ -1338,34 +1358,48 @@ function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           {mode === 'link' ? (
             <Field data-invalid={Boolean(error)}>
               <FieldLabel htmlFor="manual-link">VLESS 链接</FieldLabel>
-              <Textarea
-                id="manual-link"
-                required
-                aria-invalid={Boolean(error)}
-                rows={5}
-                value={link}
-                onChange={(event) => setLink(event.target.value)}
-                placeholder="vless://uuid@example.com:443?..."
-              />
+              <form.Field name="link">
+                {(field) => (
+                  <Textarea
+                    id="manual-link"
+                    required
+                    aria-invalid={Boolean(error)}
+                    rows={5}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="vless://uuid@example.com:443?..."
+                  />
+                )}
+              </form.Field>
             </Field>
           ) : (
-            <ManualConnectionFields value={connection} onChange={setConnection} />
+            <form.Field name="connection">
+              {(field) => <ManualConnectionFields value={field.state.value} onChange={field.handleChange} />}
+            </form.Field>
           )}
           <Field>
             <FieldLabel htmlFor="manual-tags">标签</FieldLabel>
-            <Input
-              id="manual-tags"
-              value={tags}
-              onChange={(event) => setTags(event.target.value)}
-              placeholder="香港, 高速"
-            />
+            <form.Field name="tags">
+              {(field) => (
+                <Input
+                  id="manual-tags"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="香港, 高速"
+                />
+              )}
+            </form.Field>
           </Field>
           <Field orientation="horizontal">
-            <Checkbox
-              id="manual-enabled"
-              checked={enabled}
-              onCheckedChange={(checked) => setEnabled(checked === true)}
-            />
+            <form.Field name="enabled">
+              {(field) => (
+                <Checkbox
+                  id="manual-enabled"
+                  checked={field.state.value}
+                  onCheckedChange={(checked) => field.handleChange(checked === true)}
+                />
+              )}
+            </form.Field>
             <FieldLabel htmlFor="manual-enabled">启用节点</FieldLabel>
           </Field>
           {error && (
@@ -1378,10 +1412,14 @@ function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button disabled={saving}>
-            {saving && <RefreshCw data-icon="inline-start" className="spin" />}
-            {mode === 'link' ? '解析并添加' : '添加节点'}
-          </Button>
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
+              <Button disabled={Boolean(isSubmitting)}>
+                {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
+                {mode === 'link' ? '解析并添加' : '添加节点'}
+              </Button>
+            )}
+          </form.Subscribe>
         </footer>
       </form>
     </AppDialog>
@@ -1399,40 +1437,46 @@ function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () =>
 }
 
 function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () => void; onSaved: () => void }) {
-  const [alias, setAlias] = useState(node.alias || '')
-  const [tags, setTags] = useState(node.tags.join(', '))
-  const [enabled, setEnabled] = useState(node.enabled)
-  const [connection, setConnection] = useState(node.connection)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const form = useForm({
+    defaultValues: {
+      alias: node.alias || '',
+      tags: node.tags.join(', '),
+      enabled: node.enabled,
+      connection: node.connection,
+    },
+    onSubmit: async ({ value }) => {
+      setError('')
+      try {
+        await api(`/nodes/${node.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            alias: value.alias || null,
+            tags: value.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+            enabled: value.enabled,
+            connection: node.canEditConnection ? value.connection : undefined,
+          }),
+        })
+        onSaved()
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '保存失败')
+      }
+    },
+  })
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      await api(`/nodes/${node.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          alias: alias || null,
-          tags: tags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-          enabled,
-          connection: node.canEditConnection ? connection : undefined,
-        }),
-      })
-      onSaved()
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '保存失败')
-      setSaving(false)
-    }
+    await form.handleSubmit()
   }
   return (
     <form className="form" onSubmit={submit}>
       <FieldGroup>
-        {node.canEditConnection && connection ? (
-          <ManualConnectionFields value={connection} onChange={setConnection} />
+        {node.canEditConnection && form.getFieldValue('connection') ? (
+          <form.Field name="connection">
+            {(field) => <ManualConnectionFields value={field.state.value!} onChange={field.handleChange} />}
+          </form.Field>
         ) : (
           <Alert>
             <AlertDescription>连接参数由外部订阅维护，此处只保存显示名称、标签和启停状态。</AlertDescription>
@@ -1442,8 +1486,8 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
           <FieldLabel htmlFor="node-alias">显示名称</FieldLabel>
           <Input
             id="node-alias"
-            value={alias}
-            onChange={(event) => setAlias(event.target.value)}
+            value={form.getFieldValue('alias')}
+            onChange={(event) => form.setFieldValue('alias', event.target.value)}
             placeholder={node.name}
           />
         </Field>
@@ -1451,13 +1495,21 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
           <FieldLabel htmlFor="node-tags">标签</FieldLabel>
           <Input
             id="node-tags"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
+            value={form.getFieldValue('tags')}
+            onChange={(event) => form.setFieldValue('tags', event.target.value)}
             placeholder="香港, 高速"
           />
         </Field>
         <Field orientation="horizontal">
-          <Checkbox id="node-enabled" checked={enabled} onCheckedChange={(checked) => setEnabled(checked === true)} />
+          <form.Field name="enabled">
+            {(field) => (
+              <Checkbox
+                id="node-enabled"
+                checked={field.state.value}
+                onCheckedChange={(checked) => field.handleChange(checked === true)}
+              />
+            )}
+          </form.Field>
           <FieldLabel htmlFor="node-enabled">启用节点</FieldLabel>
         </Field>
         {error && (
@@ -1470,7 +1522,13 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
         <Button type="button" variant="outline" onClick={onClose}>
           取消
         </Button>
-        <Button disabled={saving}>{saving && <RefreshCw data-icon="inline-start" className="spin" />}保存</Button>
+        <form.Subscribe selector={(state) => [state.isSubmitting]}>
+          {([isSubmitting]) => (
+            <Button disabled={Boolean(isSubmitting)}>
+              {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存
+            </Button>
+          )}
+        </form.Subscribe>
       </footer>
     </form>
   )
@@ -1566,14 +1624,43 @@ function ProfileDialog({
   onClose: () => void
   onSaved: (jobId: string) => void
 }) {
-  const [name, setName] = useState(profile?.name || '')
-  const [sourceIds, setSourceIds] = useState(profile?.sourceIds || [])
-  const [selectedProtocols, setSelectedProtocols] = useState(profile?.protocols || [])
-  const [tags, setTags] = useState(profile?.tags.join(', ') || '')
-  const [dnsMode, setDnsMode] = useState<'fake-ip' | 'redir-host'>(profile?.dnsMode || 'fake-ip')
-  const [rules, setRules] = useState<RuleModule[]>(profile?.ruleModules || ['ads', 'private', 'cn'])
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const form = useForm({
+    defaultValues: {
+      name: profile?.name || '',
+      tags: profile?.tags.join(', ') || '',
+      dnsMode: (profile?.dnsMode || 'fake-ip') as 'fake-ip' | 'redir-host',
+      sourceIds: profile?.sourceIds || [],
+      protocols: profile?.protocols || [],
+      ruleModules: profile?.ruleModules || ['ads', 'private', 'cn'],
+    },
+    onSubmit: async ({ value }) => {
+      setError('')
+      try {
+        const result = await api<{ jobId: string }>(profile ? `/profiles/${profile.id}` : '/profiles', {
+          method: profile ? 'PATCH' : 'POST',
+          body: JSON.stringify({
+            name: value.name,
+            sourceIds: value.sourceIds,
+            protocols: value.protocols,
+            tags: value.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+            dnsMode: value.dnsMode,
+            ruleModules: value.ruleModules,
+            enabled: profile?.enabled ?? true,
+          }),
+        })
+        onSaved(result.jobId)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '保存失败')
+      }
+    },
+  })
+  const sourceIds = useStore(form.store, (state) => state.values.sourceIds)
+  const selectedProtocols = useStore(form.store, (state) => state.values.protocols)
+  const rules = useStore(form.store, (state) => state.values.ruleModules)
   function toggle<T>(items: T[], item: T) {
     return items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
   }
@@ -1582,33 +1669,11 @@ function ProfileDialog({
     const target = index + offset
     if (target < 0 || target >= next.length) return
     ;[next[index], next[target]] = [next[target], next[index]]
-    setRules(next)
+    form.setFieldValue('ruleModules', next)
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      const result = await api<{ jobId: string }>(profile ? `/profiles/${profile.id}` : '/profiles', {
-        method: profile ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          name,
-          sourceIds,
-          protocols: selectedProtocols,
-          tags: tags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-          dnsMode,
-          ruleModules: rules,
-          enabled: profile?.enabled ?? true,
-        }),
-      })
-      onSaved(result.jobId)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '保存失败')
-      setSaving(false)
-    }
+    await form.handleSubmit()
   }
   return (
     <AppDialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
@@ -1616,13 +1681,17 @@ function ProfileDialog({
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="profile-name">名称</FieldLabel>
-            <Input
-              id="profile-name"
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="例如：日常使用"
-            />
+            <form.Field name="name">
+              {(field) => (
+                <Input
+                  id="profile-name"
+                  required
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="例如：日常使用"
+                />
+              )}
+            </form.Field>
           </Field>
           <FieldSet>
             <FieldLegend variant="label">节点源</FieldLegend>
@@ -1632,7 +1701,7 @@ function ProfileDialog({
                   <Checkbox
                     id={`source-${source.id}`}
                     checked={sourceIds.includes(source.id)}
-                    onCheckedChange={() => setSourceIds(toggle(sourceIds, source.id))}
+                    onCheckedChange={() => form.setFieldValue('sourceIds', toggle(sourceIds, source.id))}
                   />
                   <FieldLabel htmlFor={`source-${source.id}`}>{source.name}</FieldLabel>
                   <small>{source.nodeCount}</small>
@@ -1648,7 +1717,7 @@ function ProfileDialog({
                   <Checkbox
                     id={`protocol-${item}`}
                     checked={selectedProtocols.includes(item)}
-                    onCheckedChange={() => setSelectedProtocols(toggle(selectedProtocols, item))}
+                    onCheckedChange={() => form.setFieldValue('protocols', toggle(selectedProtocols, item))}
                   />
                   <FieldLabel htmlFor={`protocol-${item}`}>{item}</FieldLabel>
                 </Field>
@@ -1657,20 +1726,24 @@ function ProfileDialog({
           </FieldSet>
           <Field>
             <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
-            <Input
-              id="profile-tags"
-              value={tags}
-              onChange={(event) => setTags(event.target.value)}
-              placeholder="留空表示全部"
-            />
+            <form.Field name="tags">
+              {(field) => (
+                <Input
+                  id="profile-tags"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="留空表示全部"
+                />
+              )}
+            </form.Field>
           </Field>
           <FieldSet>
             <FieldLegend variant="label">DNS 模式</FieldLegend>
             <ToggleGroup
               type="single"
               variant="outline"
-              value={dnsMode}
-              onValueChange={(value) => value && setDnsMode(value as 'fake-ip' | 'redir-host')}
+              value={form.getFieldValue('dnsMode')}
+              onValueChange={(value) => value && form.setFieldValue('dnsMode', value as 'fake-ip' | 'redir-host')}
             >
               <ToggleGroupItem value="fake-ip">fake-ip</ToggleGroupItem>
               <ToggleGroupItem value="redir-host">redir-host</ToggleGroupItem>
@@ -1682,13 +1755,45 @@ function ProfileDialog({
               {rules.map((rule, index) => (
                 <div key={rule}>
                   <span>{ruleLabels[rule]}</span>
-                  <IconButton label="上移" disabled={index === 0} onClick={() => move(index, -1)}>
+                  <IconButton
+                    label="上移"
+                    disabled={index === 0}
+                    onClick={() => {
+                      move(index, -1)
+                      form.setFieldValue('ruleModules', [
+                        ...rules.slice(0, index - 1),
+                        rule,
+                        rules[index - 1],
+                        ...rules.slice(index + 1),
+                      ])
+                    }}
+                  >
                     <ArrowUp />
                   </IconButton>
-                  <IconButton label="下移" disabled={index === rules.length - 1} onClick={() => move(index, 1)}>
+                  <IconButton
+                    label="下移"
+                    disabled={index === rules.length - 1}
+                    onClick={() => {
+                      move(index, 1)
+                      form.setFieldValue('ruleModules', [
+                        ...rules.slice(0, index),
+                        rules[index + 1],
+                        rule,
+                        ...rules.slice(index + 2),
+                      ])
+                    }}
+                  >
                     <ArrowDown />
                   </IconButton>
-                  <IconButton label="移除" onClick={() => setRules(rules.filter((item) => item !== rule))}>
+                  <IconButton
+                    label="移除"
+                    onClick={() =>
+                      form.setFieldValue(
+                        'ruleModules',
+                        rules.filter((item) => item !== rule),
+                      )
+                    }
+                  >
                     <X />
                   </IconButton>
                 </div>
@@ -1700,7 +1805,7 @@ function ProfileDialog({
                     type="button"
                     variant="outline"
                     key={rule}
-                    onClick={() => setRules([...rules, rule as RuleModule])}
+                    onClick={() => form.setFieldValue('ruleModules', [...rules, rule as RuleModule])}
                   >
                     <Plus data-icon="inline-start" />
                     {ruleLabels[rule as RuleModule]}
@@ -1718,9 +1823,13 @@ function ProfileDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button disabled={saving || !sourceIds.length}>
-            {saving && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
-          </Button>
+          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.sourceIds]}>
+            {([isSubmitting, currentSourceIds]) => (
+              <Button disabled={Boolean(isSubmitting) || !(Array.isArray(currentSourceIds) && currentSourceIds.length)}>
+                {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
+              </Button>
+            )}
+          </form.Subscribe>
         </footer>
       </form>
     </AppDialog>
@@ -1871,112 +1980,80 @@ function ProfileDetailPage() {
 }
 
 function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [initialized, setInitialized] = useState<boolean | null>(null)
+  const form = useForm({
+    defaultValues: { password: '', confirmPassword: '' },
+    onSubmit: async ({ value }) => {
+      const path = initialized ? '/auth/login' : '/auth/init'
+      await api(path, {
+        method: 'POST',
+        body: JSON.stringify({
+          password: value.password,
+          ...(initialized ? {} : { confirmPassword: value.confirmPassword }),
+        }),
+      })
+      window.location.href = '/admin'
+    },
+  })
+  useEffect(() => {
+    api<{ initialized: boolean }>('/auth/status')
+      .then((result) => setInitialized(result.initialized))
+      .catch(() => setInitialized(true))
+  }, [])
   async function submit(event: FormEvent) {
     event.preventDefault()
     try {
-      await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-      window.location.href = '/admin'
+      await form.handleSubmit()
     } catch (reason) {
+      if (reason instanceof Error && reason.message === '管理员账号已初始化') setInitialized(true)
       toast.error(reason instanceof Error ? reason.message : '登录失败')
     }
   }
   return (
     <main className="auth-page">
       <form className="form auth-form" onSubmit={submit}>
-        <h1>Wangwang 登录</h1>
+        <h1>{initialized ? 'Wangwang 登录' : '设置管理员密码'}</h1>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
-            <Input
-              id="login-email"
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </Field>
           <Field>
             <FieldLabel htmlFor="login-password">密码</FieldLabel>
-            <Input
-              id="login-password"
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
+            <form.Field name="password">
+              {(field) => (
+                <Input
+                  id="login-password"
+                  type="password"
+                  required
+                  minLength={initialized ? undefined : 12}
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              )}
+            </form.Field>
           </Field>
-        </FieldGroup>
-        <Button>登录</Button>
-      </form>
-    </main>
-  )
-}
-
-function InitPage() {
-  const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    setError('')
-    setSaving(true)
-    try {
-      await api('/auth/init', { method: 'POST', body: JSON.stringify({ email, password, confirmPassword }) })
-      navigate({ to: '/login' })
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '初始化失败')
-      setSaving(false)
-    }
-  }
-  return (
-    <main className="auth-page">
-      <form className="form auth-form" onSubmit={submit}>
-        <h1>初始化 Wangwang</h1>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="init-email">邮箱</FieldLabel>
-            <Input
-              id="init-email"
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="init-password">密码</FieldLabel>
-            <Input
-              id="init-password"
-              type="password"
-              required
-              minLength={12}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="init-password-confirm">确认密码</FieldLabel>
-            <Input
-              id="init-password-confirm"
-              type="password"
-              required
-              minLength={12}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-            />
-          </Field>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+          {!initialized && (
+            <Field>
+              <FieldLabel htmlFor="login-password-confirm">确认密码</FieldLabel>
+              <form.Field name="confirmPassword">
+                {(field) => (
+                  <Input
+                    id="login-password-confirm"
+                    type="password"
+                    required
+                    minLength={12}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  />
+                )}
+              </form.Field>
+            </Field>
           )}
         </FieldGroup>
-        <Button disabled={saving}>{saving && <RefreshCw data-icon="inline-start" className="spin" />}完成初始化</Button>
+        <form.Subscribe selector={(state) => [state.isSubmitting]}>
+          {([isSubmitting]) => (
+            <Button disabled={Boolean(isSubmitting) || initialized === null}>
+              {initialized ? '登录' : '完成设置'}
+            </Button>
+          )}
+        </form.Subscribe>
       </form>
     </main>
   )
@@ -2001,11 +2078,9 @@ const profileDetailRoute = createRoute({
   path: '/profiles/$id',
   component: ProfileDetailPage,
 })
-const initRoute = createRoute({ getParentRoute: () => rootRoute, path: '/init', component: InitPage })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage })
 const routeTree = rootRoute.addChildren([
   appRoute.addChildren([indexRoute, dashboardRoute, sourcesRoute, nodesRoute, profilesRoute, profileDetailRoute]),
-  initRoute,
   loginRoute,
 ])
 const router = createRouter({
