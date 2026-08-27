@@ -8,6 +8,7 @@ export const sources = sqliteTable(
     name: text('name').notNull(),
     kind: text('kind', { enum: ['url', 'manual'] }).notNull(),
     url: text('url'),
+    pendingUrl: text('pending_url'),
     content: text('content'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),

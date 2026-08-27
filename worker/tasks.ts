@@ -123,12 +123,10 @@ async function replaceSourceNodes(
   statements.push(env.DB.prepare('DELETE FROM source_nodes WHERE source_id = ?').bind(sourceId))
   parsed.nodes.forEach((node, position) => {
     statements.push(
-      env.DB.prepare('INSERT INTO source_nodes (source_id, node_id, original_name, position) VALUES (?, ?, ?, ?)').bind(
-        sourceId,
-        node.fingerprint,
-        node.config.name,
-        position,
-      ),
+      env.DB.prepare(
+        `INSERT INTO source_nodes (source_id, node_id, original_name, position)
+         SELECT ?, id, ?, ? FROM nodes WHERE fingerprint = ?`,
+      ).bind(sourceId, node.config.name, position, node.fingerprint),
     )
   })
   const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
@@ -139,7 +137,7 @@ async function replaceSourceNodes(
       : null
   statements.push(
     env.DB.prepare(
-      `UPDATE sources SET status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
+      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
     ).bind(
       parsed.warnings.join('\n') || null,
       parsed.nodes.length,
@@ -159,12 +157,27 @@ async function replaceSourceNodes(
   await env.DB.batch(statements)
 }
 
-async function enqueueAffectedProfiles(env: Env, sourceId: string) {
+export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
   const affected = await db(env)
     .select({ id: profileSources.profileId })
     .from(profileSources)
     .where(eq(profileSources.sourceId, sourceId))
   for (const profile of affected) await createJob(env, 'compile_profile', profile.id)
+}
+
+export async function enqueueProfilesForNode(env: Env, nodeId: string) {
+  return enqueueProfilesForNodes(env, [nodeId])
+}
+
+export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
+  if (!nodeIds.length) return
+  const affected = await db(env)
+    .select({ id: profileSources.profileId })
+    .from(profileSources)
+    .innerJoin(sourceNodes, eq(sourceNodes.sourceId, profileSources.sourceId))
+    .where(inArray(sourceNodes.nodeId, nodeIds))
+  for (const profileId of new Set(affected.map((profile) => profile.id)))
+    await createJob(env, 'compile_profile', profileId)
 }
 
 export async function refreshSource(env: Env, sourceId: string) {
@@ -176,8 +189,17 @@ export async function refreshSource(env: Env, sourceId: string) {
     .set({ status: 'refreshing', error: null, updatedAt: new Date() })
     .where(eq(sources.id, sourceId))
 
-  const response = source.kind === 'url' ? await fetchSource(source.url!, source.etag, source.lastModified) : null
+  const candidateUrl = source.pendingUrl || source.url
+  const response =
+    source.kind === 'url'
+      ? await fetchSource(
+          candidateUrl!,
+          source.pendingUrl ? null : source.etag,
+          source.pendingUrl ? null : source.lastModified,
+        )
+      : null
   if (response?.notModified) {
+    if (source.pendingUrl) throw new Error('新订阅地址无法验证')
     const now = new Date()
     await database
       .update(sources)
@@ -217,6 +239,7 @@ export async function compileProfile(env: Env, profileId: string) {
       profileSources,
       and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profileId)),
     )
+    .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
     .leftJoin(
       profileNodeExclusions,
       and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profileId)),
@@ -224,6 +247,7 @@ export async function compileProfile(env: Env, profileId: string) {
     .where(
       and(
         eq(nodes.enabled, true),
+        eq(sources.enabled, true),
         isNull(profileNodeExclusions.nodeId),
         profile.protocols.length ? inArray(nodes.protocol, profile.protocols) : undefined,
       ),
@@ -274,7 +298,7 @@ export async function processQueueMessage(env: Env, message: QueueMessage) {
     if (message.type === 'refresh_source') {
       await database
         .update(sources)
-        .set({ status: 'error', error: text, updatedAt: new Date() })
+        .set({ status: 'error', error: text, pendingUrl: null, updatedAt: new Date() })
         .where(eq(sources.id, message.entityId))
     } else {
       await database
