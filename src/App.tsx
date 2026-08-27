@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import { createRootRoute, createRoute, createRouter, Link, Navigate, Outlet, RouterProvider, useNavigate } from '@tanstack/react-router'
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, CircleGauge, Clipboard, Database, FileCode2, Menu, Network, Pencil, Plus, RefreshCw, RotateCcwKey, Search, Server, Settings2, Trash2, X } from 'lucide-react'
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import './App.css'
+import { Button } from '@/components/ui/button'
 
 type Job = { id: string; type: 'refresh_source' | 'compile_profile'; entityId: string; status: 'pending' | 'running' | 'succeeded' | 'failed'; error: string | null; createdAt: string }
 type Source = { id: string; name: string; kind: 'url' | 'manual'; url: string | null; refreshIntervalHours: number; enabled: boolean; status: 'idle' | 'refreshing' | 'ready' | 'error'; warning: string | null; error: string | null; nodeCount: number; lastRefreshedAt: string | null }
@@ -53,7 +53,7 @@ function Status({ value }: { value: string }) {
 }
 
 function IconButton({ label, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; children: ReactNode }) {
-  return <button className="icon-button" type="button" title={label} aria-label={label} {...props}>{children}</button>
+  return <Button className="icon-button" variant="ghost" size="icon" type="button" title={label} aria-label={label} {...props}>{children}</Button>
 }
 
 function Dialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
@@ -70,7 +70,7 @@ const navigation = [{ to: '/', label: '概览', icon: CircleGauge }, { to: '/sou
 
 function Layout() {
   const [menuOpen, setMenuOpen] = useState(false)
-  return <div className="shell"><aside className={menuOpen ? 'sidebar open' : 'sidebar'}><div className="brand"><span>W</span><strong>Wangwang</strong></div><nav>{navigation.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setMenuOpen(false)}><Icon />{label}</NavLink>)}</nav><div className="sidebar-foot"><Activity />Cloudflare Worker</div></aside>{menuOpen && <button type="button" className="menu-mask" aria-label="关闭菜单" onClick={() => setMenuOpen(false)} />}<main><header className="topbar"><IconButton label="菜单" onClick={() => setMenuOpen(true)}><Menu /></IconButton><span>个人订阅管理</span></header><div className="content"><Routes><Route path="/" element={<DashboardPage />} /><Route path="/sources" element={<SourcesPage />} /><Route path="/nodes" element={<NodesPage />} /><Route path="/profiles" element={<ProfilesPage />} /><Route path="/profiles/:id" element={<ProfileDetailPage />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></div></main></div>
+  return <div className="shell"><aside className={menuOpen ? 'sidebar open' : 'sidebar'}><div className="brand"><span>W</span><strong>Wangwang</strong></div><nav>{navigation.map(({ to, label, icon: Icon }) => <Link key={to} to={to} activeOptions={{ exact: to === '/' }} activeProps={{ className: 'active' }} onClick={() => setMenuOpen(false)}><Icon />{label}</Link>)}</nav><div className="sidebar-foot"><Activity />Cloudflare Worker</div></aside>{menuOpen && <button type="button" className="menu-mask" aria-label="关闭菜单" onClick={() => setMenuOpen(false)} />}<main><header className="topbar"><IconButton label="菜单" onClick={() => setMenuOpen(true)}><Menu /></IconButton><span>个人订阅管理</span></header><div className="content"><Outlet /></div></main></div>
 }
 
 function DashboardPage() {
@@ -119,7 +119,7 @@ function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () =>
 function ProfilesPage() {
   const { data: profiles = [], error, loading, reload } = useApi<Profile[]>('/profiles'); const { data: sources = [] } = useApi<Source[]>('/sources'); const [adding, setAdding] = useState(false); const [actionError, setActionError] = useState('')
   async function remove(id: string) { if (!window.confirm('确定删除这个配置？')) return; try { await api(`/profiles/${id}`, { method: 'DELETE' }); await reload() } catch (reason) { setActionError(reason instanceof Error ? reason.message : '删除失败') } }
-  return <><div className="page-heading"><div><h1>配置</h1><p>{profiles.length}/20 个订阅配置</p></div><button className="primary" disabled={!sources.length} onClick={() => setAdding(true)}><Plus />新建</button></div><PageState loading={loading} error={error} />{actionError && <div className="alert error">{actionError}</div>}<section className="profile-list">{profiles.length ? profiles.map((profile) => <article className="profile-row" key={profile.id}><div className="profile-icon"><FileCode2 /></div><div><Link to={`/profiles/${profile.id}`}>{profile.name}</Link><p>{profile.sourceIds.length} 个来源 · revision {profile.revision}</p></div><Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} /><time>{formatDate(profile.compiledAt)}</time><IconButton label="删除" onClick={() => void remove(profile.id)}><Trash2 /></IconButton></article>) : <div className="empty-block"><FileCode2 /><strong>暂无配置</strong></div>}</section>{adding && <ProfileDialog sources={sources} onClose={() => setAdding(false)} onSaved={async (jobId) => { setAdding(false); try { await waitForJob(jobId) } catch (reason) { setActionError(reason instanceof Error ? reason.message : '生成失败') } await reload() }} />}</>
+  return <><div className="page-heading"><div><h1>配置</h1><p>{profiles.length}/20 个订阅配置</p></div><button className="primary" disabled={!sources.length} onClick={() => setAdding(true)}><Plus />新建</button></div><PageState loading={loading} error={error} />{actionError && <div className="alert error">{actionError}</div>}<section className="profile-list">{profiles.length ? profiles.map((profile) => <article className="profile-row" key={profile.id}><div className="profile-icon"><FileCode2 /></div><div><Link to="/profiles/$id" params={{ id: profile.id }}>{profile.name}</Link><p>{profile.sourceIds.length} 个来源 · revision {profile.revision}</p></div><Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} /><time>{formatDate(profile.compiledAt)}</time><IconButton label="删除" onClick={() => void remove(profile.id)}><Trash2 /></IconButton></article>) : <div className="empty-block"><FileCode2 /><strong>暂无配置</strong></div>}</section>{adding && <ProfileDialog sources={sources} onClose={() => setAdding(false)} onSaved={async (jobId) => { setAdding(false); try { await waitForJob(jobId) } catch (reason) { setActionError(reason instanceof Error ? reason.message : '生成失败') } await reload() }} />}</>
 }
 
 const ruleLabels: Record<RuleModule, string> = { ads: '广告拦截', private: '私有网络直连', cn: '中国大陆直连' }
@@ -134,9 +134,9 @@ function ProfileDialog({ sources, profile, onClose, onSaved }: { sources: Source
 }
 
 function ProfileDetailPage() {
-  const { id = '' } = useParams(); const navigate = useNavigate(); const { data: profile, error, loading, reload } = useApi<Profile>(`/profiles/${id}`); const { data: sources = [] } = useApi<Source[]>('/sources'); const [editing, setEditing] = useState(false); const [activeTab, setActiveTab] = useState<'link' | 'preview'>('link'); const [actionError, setActionError] = useState(''); const [busy, setBusy] = useState(false)
+  const { id } = profileDetailRoute.useParams(); const navigate = useNavigate(); const { data: profile, error, loading, reload } = useApi<Profile>(`/profiles/${id}`); const { data: sources = [] } = useApi<Source[]>('/sources'); const [editing, setEditing] = useState(false); const [activeTab, setActiveTab] = useState<'link' | 'preview'>('link'); const [actionError, setActionError] = useState(''); const [busy, setBusy] = useState(false)
   async function run(operation: 'compile' | 'rotate') { setBusy(true); setActionError(''); try { if (operation === 'compile') { const result = await api<{ jobId: string }>(`/profiles/${id}/compile`, { method: 'POST' }); await waitForJob(result.jobId) } else await api(`/profiles/${id}/rotate-token`, { method: 'POST' }); await reload() } catch (reason) { setActionError(reason instanceof Error ? reason.message : '操作失败') } finally { setBusy(false) } }
-  return <><div className="page-heading"><div className="title-with-back"><IconButton label="返回" onClick={() => navigate('/profiles')}><ArrowLeft /></IconButton><div><h1>{profile?.name || '配置详情'}</h1><p>revision {profile?.revision || 0} · {formatDate(profile?.compiledAt || null)}</p></div></div><div className="heading-actions"><button className="secondary" disabled={busy} onClick={() => void run('compile')}><RefreshCw className={busy ? 'spin' : ''} />重新生成</button><button className="primary" onClick={() => setEditing(true)}><Settings2 />编辑</button></div></div><PageState loading={loading} error={error} />{actionError && <div className="alert error">{actionError}</div>}{profile && <><div className="tabs"><button className={activeTab === 'link' ? 'active' : ''} onClick={() => setActiveTab('link')}>订阅链接</button><button className={activeTab === 'preview' ? 'active' : ''} onClick={() => setActiveTab('preview')}>配置预览</button></div>{activeTab === 'link' ? <section className="detail-section"><div className="field-title"><h2>订阅地址</h2><Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} /></div><div className="copy-field"><input readOnly value={profile.subscriptionUrl} /><IconButton label="复制" onClick={() => void navigator.clipboard.writeText(profile.subscriptionUrl)}><Clipboard /></IconButton></div>{profile.error && <div className="alert error">{profile.error}</div>}<button className="danger-link" disabled={busy} onClick={() => void run('rotate')}><RotateCcwKey />轮换令牌</button></section> : <section className="yaml-panel"><pre>{profile.compiledYaml || '# 尚未生成配置'}</pre></section>}{editing && <ProfileDialog sources={sources} profile={profile} onClose={() => setEditing(false)} onSaved={async (jobId) => { setEditing(false); setBusy(true); try { await waitForJob(jobId) } catch (reason) { setActionError(reason instanceof Error ? reason.message : '生成失败') } finally { setBusy(false); await reload() } }} />}</>}</>
+  return <><div className="page-heading"><div className="title-with-back"><IconButton label="返回" onClick={() => navigate({ to: '/profiles' })}><ArrowLeft /></IconButton><div><h1>{profile?.name || '配置详情'}</h1><p>revision {profile?.revision || 0} · {formatDate(profile?.compiledAt || null)}</p></div></div><div className="heading-actions"><button className="secondary" disabled={busy} onClick={() => void run('compile')}><RefreshCw className={busy ? 'spin' : ''} />重新生成</button><button className="primary" onClick={() => setEditing(true)}><Settings2 />编辑</button></div></div><PageState loading={loading} error={error} />{actionError && <div className="alert error">{actionError}</div>}{profile && <><div className="tabs"><button className={activeTab === 'link' ? 'active' : ''} onClick={() => setActiveTab('link')}>订阅链接</button><button className={activeTab === 'preview' ? 'active' : ''} onClick={() => setActiveTab('preview')}>配置预览</button></div>{activeTab === 'link' ? <section className="detail-section"><div className="field-title"><h2>订阅地址</h2><Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} /></div><div className="copy-field"><input readOnly value={profile.subscriptionUrl} /><IconButton label="复制" onClick={() => void navigator.clipboard.writeText(profile.subscriptionUrl)}><Clipboard /></IconButton></div>{profile.error && <div className="alert error">{profile.error}</div>}<button className="danger-link" disabled={busy} onClick={() => void run('rotate')}><RotateCcwKey />轮换令牌</button></section> : <section className="yaml-panel"><pre>{profile.compiledYaml || '# 尚未生成配置'}</pre></section>}{editing && <ProfileDialog sources={sources} profile={profile} onClose={() => setEditing(false)} onSaved={async (jobId) => { setEditing(false); setBusy(true); try { await waitForJob(jobId) } catch (reason) { setActionError(reason instanceof Error ? reason.message : '生成失败') } finally { setBusy(false); await reload() } }} />}</>}</>
 }
 
 function LoginPage() {
@@ -147,11 +147,26 @@ function LoginPage() {
 
 function InitPage() {
   const navigate = useNavigate(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [confirmPassword, setConfirmPassword] = useState(''); const [error, setError] = useState(''); const [saving, setSaving] = useState(false)
-  async function submit(event: FormEvent) { event.preventDefault(); setError(''); setSaving(true); try { await api('/auth/init', { method: 'POST', body: JSON.stringify({ email, password, confirmPassword }) }); navigate('/login') } catch (reason) { setError(reason instanceof Error ? reason.message : '初始化失败'); setSaving(false) } }
+  async function submit(event: FormEvent) { event.preventDefault(); setError(''); setSaving(true); try { await api('/auth/init', { method: 'POST', body: JSON.stringify({ email, password, confirmPassword }) }); navigate({ to: '/login' }) } catch (reason) { setError(reason instanceof Error ? reason.message : '初始化失败'); setSaving(false) } }
   return <main className="auth-page"><form className="form auth-form" onSubmit={submit}><h1>初始化 Wangwang</h1><label>邮箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>密码<input type="password" required minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} /></label><label>确认密码<input type="password" required minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>{error && <div className="alert error">{error}</div>}<button className="primary" disabled={saving}>{saving && <RefreshCw className="spin" />}完成初始化</button></form></main>
 }
 
+const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: () => <Navigate to="/" /> })
+const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Layout })
+const dashboardRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: DashboardPage })
+const sourcesRoute = createRoute({ getParentRoute: () => appRoute, path: '/sources', component: SourcesPage })
+const nodesRoute = createRoute({ getParentRoute: () => appRoute, path: '/nodes', component: NodesPage })
+const profilesRoute = createRoute({ getParentRoute: () => appRoute, path: '/profiles', component: ProfilesPage })
+const profileDetailRoute = createRoute({ getParentRoute: () => appRoute, path: '/profiles/$id', component: ProfileDetailPage })
+const initRoute = createRoute({ getParentRoute: () => rootRoute, path: '/init', component: InitPage })
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage })
+const routeTree = rootRoute.addChildren([appRoute.addChildren([dashboardRoute, sourcesRoute, nodesRoute, profilesRoute, profileDetailRoute]), initRoute, loginRoute])
+const router = createRouter({ routeTree, basepath: window.location.pathname.startsWith('/admin') ? '/admin' : '/', defaultPreload: 'intent' })
+
+declare module '@tanstack/react-router' {
+  interface Register { router: typeof router }
+}
+
 export default function App() {
-  const basename = window.location.pathname.startsWith('/admin') ? '/admin' : undefined
-  return <BrowserRouter basename={basename}><Routes><Route path="/init" element={<InitPage />} /><Route path="/login" element={<LoginPage />} /><Route path="*" element={<Layout />} /></Routes></BrowserRouter>
+  return <RouterProvider router={router} />
 }
