@@ -11,7 +11,7 @@ type RuleModule = 'ads' | 'private' | 'cn'
 type Profile = { id: string; name: string; enabled: boolean; protocols: string[]; tags: string[]; ruleModules: RuleModule[]; dnsMode: 'fake-ip' | 'redir-host'; revision: number; compiledYaml?: string | null; compiledAt: string | null; error: string | null; sourceIds: string[]; excludedNodeIds: string[]; subscriptionUrl: string }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/admin/api${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers })
+  const response = await fetch(`/api${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers })
   if (response.status === 401) { window.location.href = '/admin/login'; throw new Error('请先登录') }
   const payload = (await response.json()) as { data?: T; error?: { message: string } }
   if (!response.ok || payload.data === undefined) throw new Error(payload.error?.message || '请求失败')

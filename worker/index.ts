@@ -127,21 +127,21 @@ async function authenticated(c: AppContext) {
   return Boolean(row)
 }
 
-app.use('/admin/api/*', async (c, next) => {
-  if (c.req.path === '/admin/api/auth/login' || c.req.path === '/admin/api/auth/init') return next()
+app.use('/api/*', async (c, next) => {
+  if (c.req.path === '/api/auth/login' || c.req.path === '/api/auth/init') return next()
   if (!(await authenticated(c))) return fail(c, 401, 'AUTH_REQUIRED', '请先登录')
   if (!validOrigin(c.req.raw)) return fail(c, 403, 'ORIGIN_DENIED', '请求来源无效')
   await next()
 })
 
-app.post('/admin/api/auth/login', async (c) => {
+app.post('/api/auth/login', async (c) => {
   const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(1) }))
   const account = await c.env.DB.prepare('SELECT email,password_hash,password_salt FROM admin_account WHERE id = 1').first<{ email: string; password_hash: string; password_salt: string }>()
   if (!account || account.email !== input.email.trim().toLowerCase() || !(await verifyPassword(input.password, account.password_salt, account.password_hash))) return fail(c, 401, 'LOGIN_FAILED', '邮箱或密码错误')
   const token = newSessionToken(); await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)').bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now()).run()
   return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}` })
 })
-app.post('/admin/api/auth/init', async (c) => {
+app.post('/api/auth/init', async (c) => {
   if (await hasAdmin(c.env)) return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
   const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(12), confirmPassword: z.string() }))
   if (input.password !== input.confirmPassword) return fail(c, 422, 'PASSWORD_MISMATCH', '两次密码输入不一致')
@@ -153,14 +153,14 @@ app.post('/admin/api/auth/init', async (c) => {
   }
   return c.json({ data: { ok: true } })
 })
-app.post('/admin/api/auth/logout', async (c) => { const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]; if (token) await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await sessionHash(token)).run(); return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': 'ww_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }) })
+app.post('/api/auth/logout', async (c) => { const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]; if (token) await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await sessionHash(token)).run(); return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': 'ww_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }) })
 
 app.get('/healthz', async (c) => {
   const result = await db(c.env).get<{ ok: number }>(sql`SELECT 1 AS ok`)
   return c.json({ ok: result?.ok === 1 })
 })
 
-app.get('/admin/api/dashboard', async (c) => {
+app.get('/api/dashboard', async (c) => {
   const database = db(c.env)
   const [[sourceCount], [nodeCount], [profileCount], recentJobs] = await Promise.all([
     database.select({ value: count() }).from(sources),
@@ -171,12 +171,12 @@ app.get('/admin/api/dashboard', async (c) => {
   return ok(c, { sources: sourceCount.value, nodes: nodeCount.value, profiles: profileCount.value, recentJobs })
 })
 
-app.get('/admin/api/sources', async (c) => {
+app.get('/api/sources', async (c) => {
   const result = await db(c.env).select().from(sources).orderBy(desc(sources.createdAt))
   return ok(c, result.map(sourceView))
 })
 
-app.post('/admin/api/sources', async (c) => {
+app.post('/api/sources', async (c) => {
   const input = await body(c, sourceCreateSchema)
   const database = db(c.env)
   const [{ value }] = await database.select({ value: count() }).from(sources)
@@ -200,7 +200,7 @@ app.post('/admin/api/sources', async (c) => {
   return c.json({ data: { sourceId: source.id, jobId: job.id } }, 202)
 })
 
-app.patch('/admin/api/sources/:id', async (c) => {
+app.patch('/api/sources/:id', async (c) => {
   const input = await body(c, sourceUpdateSchema)
   const current = await db(c.env).select().from(sources).where(eq(sources.id, c.req.param('id'))).get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
@@ -214,7 +214,7 @@ app.patch('/admin/api/sources/:id', async (c) => {
   return ok(c, sourceView(updated!))
 })
 
-app.delete('/admin/api/sources/:id', async (c) => {
+app.delete('/api/sources/:id', async (c) => {
   const id = c.req.param('id')
   const current = await db(c.env).select().from(sources).where(eq(sources.id, id)).get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
@@ -225,14 +225,14 @@ app.delete('/admin/api/sources/:id', async (c) => {
   return ok(c, { id })
 })
 
-app.post('/admin/api/sources/:id/refresh', async (c) => {
+app.post('/api/sources/:id/refresh', async (c) => {
   const current = await db(c.env).select({ id: sources.id }).from(sources).where(eq(sources.id, c.req.param('id'))).get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   const job = await createJob(c.env, 'refresh_source', current.id)
   return c.json({ data: { jobId: job.id } }, 202)
 })
 
-app.get('/admin/api/nodes', async (c) => {
+app.get('/api/nodes', async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 50))
   const query = c.req.query('q')?.trim()
@@ -260,14 +260,14 @@ app.get('/admin/api/nodes', async (c) => {
   })
 })
 
-app.patch('/admin/api/nodes/batch', async (c) => {
+app.patch('/api/nodes/batch', async (c) => {
   const input = await body(c, nodeBatchSchema)
   const placeholders = input.ids.map(() => '?').join(',')
   await c.env.DB.prepare(`UPDATE nodes SET enabled = ?, updated_at = ? WHERE id IN (${placeholders})`).bind(input.enabled ? 1 : 0, Date.now(), ...input.ids).run()
   return ok(c, { updated: input.ids.length })
 })
 
-app.patch('/admin/api/nodes/:id', async (c) => {
+app.patch('/api/nodes/:id', async (c) => {
   const input = await body(c, nodeUpdateSchema)
   const id = c.req.param('id')
   const current = await db(c.env).select().from(nodes).where(eq(nodes.id, id)).get()
@@ -282,13 +282,13 @@ app.patch('/admin/api/nodes/:id', async (c) => {
   return ok(c, { ...safe, name: safe.alias || config.name })
 })
 
-app.get('/admin/api/profiles', async (c) => {
+app.get('/api/profiles', async (c) => {
   const rows = await db(c.env).select().from(profiles).orderBy(desc(profiles.createdAt))
   const result = await Promise.all(rows.map((profile) => profileView(c.env, profile, new URL(c.req.url).origin)))
   return ok(c, result)
 })
 
-app.post('/admin/api/profiles', async (c) => {
+app.post('/api/profiles', async (c) => {
   const input = await body(c, profileSchema)
   const database = db(c.env)
   const [{ value }] = await database.select({ value: count() }).from(profiles)
@@ -313,13 +313,13 @@ app.post('/admin/api/profiles', async (c) => {
   return c.json({ data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } }, 202)
 })
 
-app.get('/admin/api/profiles/:id', async (c) => {
+app.get('/api/profiles/:id', async (c) => {
   const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, c.req.param('id'))).get()
   if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   return ok(c, await profileView(c.env, profile, new URL(c.req.url).origin, true))
 })
 
-app.patch('/admin/api/profiles/:id', async (c) => {
+app.patch('/api/profiles/:id', async (c) => {
   const input = await body(c, profileUpdateSchema)
   const id = c.req.param('id')
   const database = db(c.env)
@@ -350,21 +350,21 @@ app.patch('/admin/api/profiles/:id', async (c) => {
   return c.json({ data: { profile: await profileView(c.env, updated!, new URL(c.req.url).origin, true), jobId: job.id } }, 202)
 })
 
-app.delete('/admin/api/profiles/:id', async (c) => {
+app.delete('/api/profiles/:id', async (c) => {
   const id = c.req.param('id')
   const result = await db(c.env).delete(profiles).where(eq(profiles.id, id)).returning({ id: profiles.id })
   if (!result.length) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   return ok(c, { id })
 })
 
-app.post('/admin/api/profiles/:id/compile', async (c) => {
+app.post('/api/profiles/:id/compile', async (c) => {
   const current = await db(c.env).select({ id: profiles.id }).from(profiles).where(eq(profiles.id, c.req.param('id'))).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   const job = await createJob(c.env, 'compile_profile', current.id)
   return c.json({ data: { jobId: job.id } }, 202)
 })
 
-app.post('/admin/api/profiles/:id/rotate-token', async (c) => {
+app.post('/api/profiles/:id/rotate-token', async (c) => {
   const id = c.req.param('id')
   const current = await db(c.env).select().from(profiles).where(eq(profiles.id, id)).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
@@ -374,7 +374,7 @@ app.post('/admin/api/profiles/:id/rotate-token', async (c) => {
   return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${id}/${token}/config.yaml` })
 })
 
-app.get('/admin/api/jobs/:id', async (c) => {
+app.get('/api/jobs/:id', async (c) => {
   const job = await db(c.env).select().from(jobs).where(eq(jobs.id, c.req.param('id'))).get()
   if (!job) return fail(c, 404, 'JOB_NOT_FOUND', '任务不存在')
   return ok(c, job)
@@ -401,7 +401,7 @@ app.get('/s/:profileId/:token/config.yaml', async (c) => {
 
 async function adminAsset(c: AppContext) {
   let response = await c.env.ASSETS.fetch(c.req.raw)
-  if (response.status === 404 && c.req.method === 'GET' && c.req.header('Accept')?.includes('text/html')) {
+  if (response.status === 404 && c.req.method === 'GET') {
     const url = new URL(c.req.url)
     url.pathname = '/admin/index.html'
     response = await c.env.ASSETS.fetch(new Request(url, c.req.raw))
@@ -409,13 +409,9 @@ async function adminAsset(c: AppContext) {
   return response
 }
 
-app.get('/', (c) => c.redirect('/admin'))
-app.get('/init', adminAsset)
-app.get('/login', adminAsset)
-app.get('/admin', adminAsset)
-app.get('/admin/*', adminAsset)
+app.get('*', (c) => c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : adminAsset(c))
 
-app.notFound((c) => (c.req.path.startsWith('/admin/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : c.text('Not found', 404)))
+app.notFound((c) => (c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : c.text('Not found', 404)))
 app.onError((error, c) => fail(c, 500, 'INTERNAL_ERROR', error.message || '服务异常'))
 
 export default {

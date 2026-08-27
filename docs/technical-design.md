@@ -55,7 +55,7 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 
 ## 6. API
 
-管理接口统一位于 `/admin/api`：
+管理接口统一位于 `/api`：
 
 - `GET/POST /sources`，`PATCH/DELETE /sources/:id`。
 - `POST /sources/:id/refresh` 返回 `202` 和 `jobId`。
