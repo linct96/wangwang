@@ -140,7 +140,7 @@ export function SourcesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {source.expireAt == null ? '-' : formatDate(new Date(source.expireAt * 1000).toISOString())}
+                      {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
                     </TableCell>
                     <TableCell>
                       <Status value={isRefreshing ? 'refreshing' : busy === source.id ? 'refreshing' : source.status} />

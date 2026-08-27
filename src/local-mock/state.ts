@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import type { Job, ManualNodeConnection, NodeItem, Profile, Source } from '@/api/types'
 
 export type LocalNode = NodeItem & { sourceIds: string[]; connection?: ManualNodeConnection }
@@ -11,7 +12,7 @@ export type LocalState = {
 
 const storageKey = 'wangwang:dev:v1'
 export function now() {
-  return new Date().toISOString()
+  return dayjs().toISOString()
 }
 
 function seedState(): LocalState {
@@ -73,7 +74,7 @@ function seedState(): LocalState {
       uploadBytes: 1_610_612_736,
       downloadBytes: 8_589_934_592,
       totalBytes: 107_374_182_400,
-      expireAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+      expireAt: dayjs().add(30, 'day').unix(),
       infoRefreshedAt: updatedAt,
       lastRefreshedAt: updatedAt,
     },

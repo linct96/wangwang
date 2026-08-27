@@ -1,7 +1,7 @@
-export function formatDate(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
-    : '-'
+import dayjs from 'dayjs'
+
+export function formatDate(value: string | number | null) {
+  return value == null ? '-' : dayjs(value).format('YYYY/M/D HH:mm')
 }
 
 export function formatBytes(value: number | null) {
