@@ -9,6 +9,14 @@ pnpm install
 pnpm dev
 ```
 
+开发模式默认使用 `localStorage` 模拟 API，存储键为 `wangwang:dev:v1`。需要连接本地 Worker 时使用：
+
+```bash
+VITE_DATA_SOURCE=api pnpm dev
+```
+
+生产构建默认使用 Worker API。
+
 - 前端：`src/`
 - Worker API：`worker/`
 - 健康检查：`GET /healthz`

@@ -23,7 +23,7 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 
 ## 3. 数据模型
 
-- `sources`：来源类型、URL/手动内容、刷新周期、条件请求头、状态与错误。
+- `sources`：外部订阅 URL、待验证 URL、刷新周期、条件请求头、状态与错误；固定的 `system-manual` 记录仅用于手动节点关系。
 - `nodes`：SHA-256 指纹、协议、服务器、端口、完整配置 JSON、别名、标签、启停。
 - `source_nodes`：来源和全局节点的多对多关系，保存原始名称与顺序。
 - `profiles`：选择条件、规则、DNS 模式、令牌版本、编译版本和最后可用 YAML。
@@ -35,7 +35,7 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 
 ## 4. 解析与去重
 
-输入按以下顺序检测：Mihomo YAML `proxies`、Base64 URI 列表、普通 URI 列表。
+外部订阅内容按以下顺序检测：Mihomo YAML `proxies`、Base64 URI 列表、普通 URI 列表。手动节点通过结构化协议表单写入，不经过文本解析。
 
 - YAML 使用 `yaml` 包并限制 alias 数量。
 - URI 解析使用标准 `URL`、`atob`/`btoa` 和 `TextDecoder`。
@@ -57,9 +57,9 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 
 管理接口统一位于 `/api`：
 
-- `GET/POST /sources`，`PATCH/DELETE /sources/:id`。
+- `GET/POST /sources`，`PATCH/DELETE /sources/:id`。来源创建仅接受外部 URL；`includeSystem=1` 用于配置来源选择。
 - `POST /sources/:id/refresh` 返回 `202` 和 `jobId`。
-- `GET /nodes`，`PATCH /nodes/:id`，`PATCH /nodes/batch`。
+- `GET/POST /nodes`，`GET/PATCH/DELETE /nodes/:id`，`PATCH /nodes/batch`。连接参数修改和删除仅允许手动节点。
 - `GET/POST /profiles`，`GET/PATCH/DELETE /profiles/:id`。
 - `POST /profiles/:id/compile`、`POST /profiles/:id/rotate-token`。
 - `GET /jobs/:id`。
@@ -74,6 +74,8 @@ Queue 消息仅包含 `{ jobId, type, entityId }`，类型为 `refresh_source` �
 
 节点源通过手动刷新入队；刷新成功后，将引用该来源的配置依次入队生成。
 
+来源地址修改先写入 `pending_url` 并入队验证。验证成功后提升为正式 URL；失败时清除待验证值并保留旧 URL 和旧节点。来源启停、删除及手动节点增删改都会重新生成受影响配置。
+
 KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1 获取当前版本和令牌版本，再读 KV；KV 未命中时回退 D1 并回填。
 
 ## 8. 安全
@@ -83,7 +85,7 @@ KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1
 - 订阅令牌为 `HMAC-SHA256(profileId:tokenVersion)`，密钥使用 Wrangler Secret。
 - URL 源仅允许 HTTP/HTTPS，禁止用户信息、localhost、`.local` 和私网 IP 字面量。
 - 最多跟随 3 次重定向，每次重新验证 URL；请求超时 15 秒，流式限制 1 MiB。
-- D1 按个人部署约定明文保存来源 URL和节点配置；UI、错误和日志必须脱敏。
+- D1 按个人部署约定明文保存来源 URL 和节点配置；UI、错误和日志必须脱敏。编辑敏感连接参数时，留空表示保持原值。
 
 ## 9. Cloudflare 绑定
 

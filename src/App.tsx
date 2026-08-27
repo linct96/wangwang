@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent, InputHTMLAttributes, ReactNode } from 'react'
 import {
   createRootRoute,
   createRoute,
@@ -34,72 +34,26 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ThemeProvider } from 'next-themes'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Segmented } from '@/components/ui/segmented'
 import { Toaster } from '@/components/ui/sonner'
-
-type Job = {
-  id: string
-  type: 'refresh_source' | 'compile_profile'
-  entityId: string
-  status: 'pending' | 'running' | 'succeeded' | 'failed'
-  error: string | null
-  createdAt: string
-}
-type Source = {
-  id: string
-  name: string
-  kind: 'url' | 'manual'
-  url: string | null
-  refreshIntervalHours: number
-  enabled: boolean
-  status: 'idle' | 'refreshing' | 'ready' | 'error'
-  warning: string | null
-  error: string | null
-  nodeCount: number
-  lastRefreshedAt: string | null
-}
-type NodeItem = {
-  id: string
-  name: string
-  alias: string | null
-  protocol: string
-  server: string
-  port: number
-  tags: string[]
-  enabled: boolean
-  updatedAt: string
-}
-type RuleModule = 'ads' | 'private' | 'cn'
-type Profile = {
-  id: string
-  name: string
-  enabled: boolean
-  protocols: string[]
-  tags: string[]
-  ruleModules: RuleModule[]
-  dnsMode: 'fake-ip' | 'redir-host'
-  revision: number
-  compiledYaml?: string | null
-  compiledAt: string | null
-  error: string | null
-  sourceIds: string[]
-  excludedNodeIds: string[]
-  subscriptionUrl: string
-}
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers,
-  })
-  if (response.status === 401 && path !== '/auth/login') {
-    window.location.href = '/admin/login'
-    throw new Error('请先登录')
-  }
-  const payload = (await response.json()) as { data?: T; error?: { message: string } }
-  if (!response.ok || payload.data === undefined) throw new Error(payload.error?.message || '请求失败')
-  return payload.data
-}
+import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { api } from '@/data-source'
+import type { Job, ManualNodeConnection, NodeDetail, NodeItem, Profile, RuleModule, Source } from '@/data-source'
+import { parseVlessLink } from '@/lib/vless'
 
 function useApi<T>(path: string) {
   const [data, setData] = useState<T>()
@@ -157,7 +111,12 @@ function Status({ value }: { value: string }) {
     succeeded: '已完成',
     failed: '失败',
   }
-  return <span className={`status status-${value}`}>{labels[value] || value}</span>
+  const variant = ['error', 'failed'].includes(value)
+    ? 'destructive'
+    : ['ready', 'succeeded'].includes(value)
+      ? 'default'
+      : 'secondary'
+  return <Badge variant={variant}>{labels[value] || value}</Badge>
 }
 
 function IconButton({
@@ -166,37 +125,22 @@ function IconButton({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; children: ReactNode }) {
   return (
-    <Button
-      className="icon-button"
-      variant="ghost"
-      size="icon"
-      type="button"
-      title={label}
-      aria-label={label}
-      {...props}
-    >
+    <Button variant="ghost" size="icon" type="button" title={label} aria-label={label} {...props}>
       {children}
     </Button>
   )
 }
 
-function Dialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+function AppDialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   return (
-    <div
-      className="dialog-backdrop"
-      role="presentation"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <section className="dialog" role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <h2>{title}</h2>
-          <IconButton label="关闭" onClick={onClose}>
-            <X />
-          </IconButton>
-        </header>
+    <DialogRoot open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
         {children}
-      </section>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   )
 }
 
@@ -208,55 +152,99 @@ function PageState({ loading, error }: { loading: boolean; error: string }) {
         加载中
       </div>
     )
-  if (error) return <div className="alert error">{error}</div>
+  if (error)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
   return null
 }
 
 const navigation = [
-  { to: '/', label: '概览', icon: CircleGauge },
+  { to: '/dashboard', label: '概览', icon: CircleGauge },
   { to: '/sources', label: '节点源', icon: Database },
   { to: '/nodes', label: '节点', icon: Network },
   { to: '/profiles', label: '配置', icon: FileCode2 },
 ]
 
 function Layout() {
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   return (
     <div className="shell">
-      <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
-        <div className="brand">
-          <span>W</span>
-          <strong>Wangwang</strong>
-        </div>
-        <nav>
-          {navigation.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              activeOptions={{ exact: to === '/' }}
-              activeProps={{ className: 'active' }}
-              onClick={() => setMenuOpen(false)}
-            >
-              <Icon />
-              {label}
+      <header className="header">
+        <div className="header-inner">
+          <div className="header-brand">
+            <Link to="/dashboard" className="brand-link" onClick={() => setMobileMenuOpen(false)}>
+              <span className="brand-icon">W</span>
+              <strong className="brand-title">Wangwang</strong>
             </Link>
-          ))}
-        </nav>
-        <div className="sidebar-foot">
-          <Activity />
-          Cloudflare Worker
+          </div>
+
+          <nav className="header-nav">
+            {navigation.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                activeOptions={{ exact: to === '/dashboard' }}
+                activeProps={{ className: 'active' }}
+                className="nav-link"
+              >
+                <Icon />
+                <span>{label}</span>
+              </Link>
+            ))}
+          </nav>
+
+          <div className="header-actions">
+            <div className="worker-status">
+              <span className="status-dot" />
+              <Activity className="status-icon" />
+              <span className="status-text">Cloudflare Worker</span>
+            </div>
+            <ThemeToggle className="theme-toggle-btn" />
+            <IconButton
+              className="mobile-toggle"
+              label={mobileMenuOpen ? '关闭菜单' : '打开菜单'}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X /> : <Menu />}
+            </IconButton>
+          </div>
         </div>
-      </aside>
-      {menuOpen && (
-        <button type="button" className="menu-mask" aria-label="关闭菜单" onClick={() => setMenuOpen(false)} />
+
+        {mobileMenuOpen && (
+          <div className="mobile-nav">
+            <div className="mobile-nav-list">
+              {navigation.map(({ to, label, icon: Icon }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  activeOptions={{ exact: to === '/dashboard' }}
+                  activeProps={{ className: 'active' }}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="mobile-nav-link"
+                >
+                  <Icon />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </div>
+            <div className="mobile-nav-foot">
+              <div className="mobile-nav-foot-status">
+                <span className="status-dot" />
+                <Activity className="status-icon" />
+                <span>Cloudflare Worker</span>
+              </div>
+              <ThemeToggle className="theme-toggle-btn" />
+            </div>
+          </div>
+        )}
+      </header>
+      {mobileMenuOpen && (
+        <button type="button" className="mobile-mask" aria-label="关闭菜单" onClick={() => setMobileMenuOpen(false)} />
       )}
       <main>
-        <header className="topbar">
-          <IconButton label="菜单" onClick={() => setMenuOpen(true)}>
-            <Menu />
-          </IconButton>
-          <span>个人订阅管理</span>
-        </header>
         <div className="content">
           <Outlet />
         </div>
@@ -302,36 +290,36 @@ function DashboardPage() {
               <h2>最近任务</h2>
             </div>
             <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>任务</th>
-                    <th>状态</th>
-                    <th>时间</th>
-                    <th>结果</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>任务</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>时间</TableHead>
+                    <TableHead>结果</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.recentJobs.length ? (
                     data.recentJobs.map((job) => (
-                      <tr key={job.id}>
-                        <td>{job.type === 'refresh_source' ? '刷新节点源' : '生成配置'}</td>
-                        <td>
+                      <TableRow key={job.id}>
+                        <TableCell>{job.type === 'refresh_source' ? '刷新节点源' : '生成配置'}</TableCell>
+                        <TableCell>
                           <Status value={job.status} />
-                        </td>
-                        <td>{formatDate(job.createdAt)}</td>
-                        <td className="muted">{job.error || '-'}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell>{formatDate(job.createdAt)}</TableCell>
+                        <TableCell className="muted">{job.error || '-'}</TableCell>
+                      </TableRow>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan={4} className="empty">
+                    <TableRow>
+                      <TableCell colSpan={4} className="empty">
                         暂无任务
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </section>
         </>
@@ -343,9 +331,10 @@ function DashboardPage() {
 function SourcesPage() {
   const { data = [], error, loading, reload } = useApi<Source[]>('/sources')
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Source>()
+  const [deleting, setDeleting] = useState<Source>()
   const [busy, setBusy] = useState('')
   async function action(id: string, operation: 'refresh' | 'toggle' | 'delete', enabled?: boolean) {
-    if (operation === 'delete' && !window.confirm('确定删除这个节点源？')) return
     setBusy(id)
     try {
       if (operation === 'refresh') {
@@ -353,7 +342,13 @@ function SourcesPage() {
         await waitForJob(result.jobId)
       } else if (operation === 'toggle')
         await api(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })
-      else await api(`/sources/${id}`, { method: 'DELETE' })
+      else {
+        const result = await api<{ detachedProfileCount: number }>(`/sources/${id}`, { method: 'DELETE' })
+        toast.success(
+          result.detachedProfileCount ? `已删除，并解除 ${result.detachedProfileCount} 个配置引用` : '节点源已删除',
+        )
+        setDeleting(undefined)
+      }
       await reload()
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '操作失败')
@@ -366,85 +361,88 @@ function SourcesPage() {
       <div className="page-heading">
         <div>
           <h1>节点源</h1>
-          <p>{data.length}/20 个来源</p>
+          <p>{data.length}/20 个外部订阅</p>
         </div>
-        <button className="primary" onClick={() => setAdding(true)}>
-          <Plus />
-          添加
-        </button>
+        <Button onClick={() => setAdding(true)}>
+          <Plus data-icon="inline-start" />
+          添加订阅
+        </Button>
       </div>
       <PageState loading={loading} error={error} />
       <section className="section table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>类型</th>
-              <th>节点</th>
-              <th>状态</th>
-              <th>上次刷新</th>
-              <th>周期</th>
-              <th className="actions">操作</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>节点</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>上次刷新</TableHead>
+              <TableHead>周期</TableHead>
+              <TableHead className="actions">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {data.length ? (
               data.map((source) => (
-                <tr key={source.id}>
-                  <td>
+                <TableRow key={source.id}>
+                  <TableCell>
                     <div className="cell-main">{source.name}</div>
-                    <div className="cell-sub">{source.url || (source.kind === 'manual' ? '手动导入' : '-')}</div>
-                  </td>
-                  <td>{source.kind === 'url' ? 'URL' : '手动'}</td>
-                  <td>{source.nodeCount}</td>
-                  <td>
+                    <div className="cell-sub">{source.url || '-'}</div>
+                  </TableCell>
+                  <TableCell>{source.nodeCount}</TableCell>
+                  <TableCell>
                     <Status value={busy === source.id ? 'refreshing' : source.status} />
-                  </td>
-                  <td>{formatDate(source.lastRefreshedAt)}</td>
-                  <td>{source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}</td>
-                  <td className="actions">
-                    <label className="switch" title={source.enabled ? '停用' : '启用'}>
-                      <input
-                        type="checkbox"
-                        checked={source.enabled}
-                        onChange={(event) => void action(source.id, 'toggle', event.target.checked)}
-                      />
-                      <span />
-                    </label>
+                    {(source.error || source.warning) && (
+                      <div className="cell-sub source-message" title={source.error || source.warning || ''}>
+                        {source.error || source.warning}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>{formatDate(source.lastRefreshedAt)}</TableCell>
+                  <TableCell>{source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}</TableCell>
+                  <TableCell className="actions">
+                    <Switch
+                      aria-label={source.enabled ? '停用' : '启用'}
+                      checked={source.enabled}
+                      onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
+                    />
                     <IconButton
                       label="刷新"
-                      disabled={busy === source.id}
+                      disabled={busy === source.id || !source.enabled}
                       onClick={() => void action(source.id, 'refresh')}
                     >
                       <RefreshCw className={busy === source.id ? 'spin' : ''} />
                     </IconButton>
-                    <IconButton label="删除" onClick={() => void action(source.id, 'delete')}>
+                    <IconButton label="编辑" onClick={() => setEditing(source)}>
+                      <Pencil />
+                    </IconButton>
+                    <IconButton label="删除" onClick={() => setDeleting(source)}>
                       <Trash2 />
                     </IconButton>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             ) : (
-              <tr>
-                <td colSpan={7} className="empty">
-                  暂无节点源
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={6} className="empty">
+                  暂无外部订阅
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </section>
       {adding && (
         <SourceDialog
           onClose={() => setAdding(false)}
-          onCreated={async (jobId) => {
+          onSaved={async (jobId) => {
             setAdding(false)
             setBusy('new')
             try {
-              await waitForJob(jobId)
-              toast.success('节点源导入成功')
+              if (jobId) await waitForJob(jobId)
+              toast.success('订阅添加成功')
             } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '导入失败')
+              toast.error(reason instanceof Error ? reason.message : '订阅刷新失败')
             } finally {
               setBusy('')
               await reload()
@@ -452,15 +450,67 @@ function SourcesPage() {
           }}
         />
       )}
+      {editing && (
+        <SourceDialog
+          source={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={async (jobId) => {
+            const source = editing
+            setEditing(undefined)
+            setBusy(source.id)
+            try {
+              if (jobId) await waitForJob(jobId)
+              toast.success(jobId ? '新订阅地址验证成功' : '订阅设置已保存')
+            } catch (reason) {
+              toast.error(reason instanceof Error ? reason.message : '新订阅地址验证失败')
+            } finally {
+              setBusy('')
+              await reload()
+            }
+          }}
+        />
+      )}
+      {deleting && (
+        <AppDialog title="删除节点源" onClose={() => setDeleting(undefined)}>
+          <p className="dialog-copy">
+            删除“{deleting.name}”将移除 {deleting.nodeCount} 个来源节点，并从 {deleting.profileCount}{' '}
+            个配置中解除引用。受影响配置会自动重新生成。
+          </p>
+          <Alert variant="destructive">
+            <AlertDescription>配置生成失败时会继续使用上一可用版本。</AlertDescription>
+          </Alert>
+          <footer className="dialog-actions">
+            <Button type="button" variant="outline" onClick={() => setDeleting(undefined)}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy === deleting.id}
+              onClick={() => void action(deleting.id, 'delete')}
+            >
+              删除
+            </Button>
+          </footer>
+        </AppDialog>
+      )}
     </>
   )
 }
 
-function SourceDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (jobId: string) => void }) {
-  const [kind, setKind] = useState<'url' | 'manual'>('url')
-  const [name, setName] = useState('')
-  const [value, setValue] = useState('')
-  const [interval, setInterval] = useState(6)
+function SourceDialog({
+  source,
+  onClose,
+  onSaved,
+}: {
+  source?: Source
+  onClose: () => void
+  onSaved: (jobId: string | null) => void
+}) {
+  const [name, setName] = useState(source?.name || '')
+  const [url, setUrl] = useState('')
+  const [interval, setInterval] = useState(source?.refreshIntervalHours ?? 6)
+  const [enabled, setEnabled] = useState(source?.enabled ?? true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   async function submit(event: FormEvent) {
@@ -468,98 +518,88 @@ function SourceDialog({ onClose, onCreated }: { onClose: () => void; onCreated: 
     setSaving(true)
     setError('')
     try {
-      const result = await api<{ jobId: string }>('/sources', {
-        method: 'POST',
+      const result = await api<{ jobId: string | null }>(source ? `/sources/${source.id}` : '/sources', {
+        method: source ? 'PATCH' : 'POST',
         body: JSON.stringify({
           name,
-          kind,
-          url: kind === 'url' ? value : undefined,
-          content: kind === 'manual' ? value : undefined,
+          url: url || undefined,
           refreshIntervalHours: interval,
+          enabled: source ? enabled : undefined,
         }),
       })
-      onCreated(result.jobId)
+      onSaved(result.jobId)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '创建失败')
       setSaving(false)
     }
   }
   return (
-    <Dialog title="添加节点源" onClose={onClose}>
+    <AppDialog title={source ? '编辑订阅' : '添加订阅'} onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        <div className="segmented">
-          <button type="button" className={kind === 'url' ? 'active' : ''} onClick={() => setKind('url')}>
-            订阅 URL
-          </button>
-          <button type="button" className={kind === 'manual' ? 'active' : ''} onClick={() => setKind('manual')}>
-            文本 / 文件
-          </button>
-        </div>
-        <label>
-          名称
-          <input
-            required
-            maxLength={60}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="例如：主力订阅"
-          />
-        </label>
-        {kind === 'url' ? (
-          <label>
-            订阅地址
-            <input
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="source-name">名称</FieldLabel>
+            <Input
+              id="source-name"
               required
+              maxLength={60}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如：主力订阅"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="source-url">{source ? '新订阅地址' : '订阅地址'}</FieldLabel>
+            <Input
+              id="source-url"
+              required={!source}
               type="url"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="https://example.com/sub"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder={source ? '留空表示不修改' : 'https://example.com/sub'}
             />
-          </label>
-        ) : (
-          <label>
-            节点内容
-            <textarea
-              required
-              rows={9}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder="粘贴 Mihomo YAML 或节点 URI"
-            />
-            <input
-              className="file-input"
-              type="file"
-              accept=".yaml,.yml,.txt"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) void file.text().then(setValue)
-              }}
-            />
-          </label>
-        )}
-        {kind === 'url' && (
-          <label>
-            刷新周期
-            <select value={interval} onChange={(event) => setInterval(Number(event.target.value))}>
-              <option value={0}>关闭</option>
-              <option value={1}>1 小时</option>
-              <option value={6}>6 小时</option>
-              <option value={12}>12 小时</option>
-              <option value={24}>24 小时</option>
-            </select>
-          </label>
-        )}
-        {error && <div className="alert error">{error}</div>}
+            {source && <FieldDescription>当前地址：{source.url}</FieldDescription>}
+          </Field>
+          <Field>
+            <FieldLabel>刷新周期</FieldLabel>
+            <Select value={String(interval)} onValueChange={(value) => setInterval(Number(value))}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="0">关闭</SelectItem>
+                  <SelectItem value="1">1 小时</SelectItem>
+                  <SelectItem value="6">6 小时</SelectItem>
+                  <SelectItem value="12">12 小时</SelectItem>
+                  <SelectItem value="24">24 小时</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          {source && (
+            <Field orientation="horizontal">
+              <Switch id="source-enabled" checked={enabled} onCheckedChange={setEnabled} />
+              <FieldLabel htmlFor="source-enabled">启用订阅</FieldLabel>
+            </Field>
+          )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </FieldGroup>
         <footer>
-          <button type="button" className="secondary" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             取消
-          </button>
-          <button className="primary" disabled={saving}>
-            {saving && <RefreshCw className="spin" />}导入
-          </button>
+          </Button>
+          <Button disabled={saving}>
+            {saving && <RefreshCw data-icon="inline-start" className="spin" />}
+            {source ? (url ? '保存并验证' : '保存') : '添加并刷新'}
+          </Button>
         </footer>
       </form>
-    </Dialog>
+    </AppDialog>
   )
 }
 
@@ -572,7 +612,9 @@ function NodesPage() {
     `/nodes?page=${page}&pageSize=50&q=${encodeURIComponent(query)}&protocol=${protocol}&enabled=${enabled}`,
   )
   const [selected, setSelected] = useState<string[]>([])
+  const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<NodeItem>()
+  const [deleting, setDeleting] = useState<NodeItem>()
   const pages = Math.max(1, Math.ceil((data?.total || 0) / 50))
   async function batch(value: boolean) {
     try {
@@ -591,11 +633,15 @@ function NodesPage() {
           <h1>节点</h1>
           <p>{data?.total || 0}/2000 个节点</p>
         </div>
+        <Button onClick={() => setAdding(true)}>
+          <Plus data-icon="inline-start" />
+          添加节点
+        </Button>
       </div>
       <div className="toolbar">
         <label className="search">
           <Search />
-          <input
+          <Input
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
@@ -604,88 +650,105 @@ function NodesPage() {
             placeholder="搜索名称或服务器"
           />
         </label>
-        <select
-          value={protocol}
-          onChange={(event) => {
-            setProtocol(event.target.value)
+        <Select
+          value={protocol || 'all'}
+          onValueChange={(value) => {
+            setProtocol(value === 'all' ? '' : value)
             setPage(1)
           }}
         >
-          <option value="">全部协议</option>
-          {['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic'].map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-        <select
-          value={enabled}
-          onChange={(event) => {
-            setEnabled(event.target.value)
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部协议</SelectItem>
+              {['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic'].map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select
+          value={enabled || 'all'}
+          onValueChange={(value) => {
+            setEnabled(value === 'all' ? '' : value)
             setPage(1)
           }}
         >
-          <option value="">全部状态</option>
-          <option value="true">已启用</option>
-          <option value="false">已停用</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="true">已启用</SelectItem>
+              <SelectItem value="false">已停用</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         {selected.length > 0 && (
           <div className="batch-actions">
             <span>已选 {selected.length}</span>
-            <button className="secondary small" onClick={() => void batch(true)}>
+            <Button variant="outline" size="sm" onClick={() => void batch(true)}>
               启用
-            </button>
-            <button className="secondary small" onClick={() => void batch(false)}>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void batch(false)}>
               停用
-            </button>
+            </Button>
           </div>
         )}
       </div>
       <PageState loading={loading} error={error} />
       <section className="section table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th className="checkbox">
-                <input
-                  type="checkbox"
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="checkbox">
+                <Checkbox
                   aria-label="全选"
                   checked={Boolean(data?.items.length) && selected.length === data?.items.length}
-                  onChange={(event) =>
-                    setSelected(event.target.checked ? data?.items.map((item) => item.id) || [] : [])
-                  }
+                  onCheckedChange={(checked) => setSelected(checked ? data?.items.map((item) => item.id) || [] : [])}
                 />
-              </th>
-              <th>节点</th>
-              <th>协议</th>
-              <th>服务器</th>
-              <th>标签</th>
-              <th>状态</th>
-              <th className="actions">操作</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+              <TableHead>节点</TableHead>
+              <TableHead>协议</TableHead>
+              <TableHead>服务器</TableHead>
+              <TableHead>标签</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead className="actions">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {data?.items.length ? (
               data.items.map((node) => (
-                <tr key={node.id}>
-                  <td className="checkbox">
-                    <input
-                      type="checkbox"
+                <TableRow key={node.id}>
+                  <TableCell className="checkbox">
+                    <Checkbox
                       aria-label={`选择 ${node.name}`}
                       checked={selected.includes(node.id)}
-                      onChange={(event) =>
-                        setSelected(
-                          event.target.checked ? [...selected, node.id] : selected.filter((id) => id !== node.id),
-                        )
+                      onCheckedChange={(checked) =>
+                        setSelected(checked ? [...selected, node.id] : selected.filter((id) => id !== node.id))
                       }
                     />
-                  </td>
-                  <td className="cell-main">{node.name}</td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
+                    <div className="node-name">
+                      <span className="cell-main">{node.name}</span>
+                      {node.management !== 'subscription' && (
+                        <Badge variant="secondary">{node.management === 'mixed' ? '混合来源' : '手动'}</Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <code className="protocol">{node.protocol}</code>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     {node.server}:{node.port}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="tags">
                       {node.tags.length ? (
                         node.tags.map((tag) => <span key={tag}>{tag}</span>)
@@ -693,37 +756,54 @@ function NodesPage() {
                         <span className="muted">-</span>
                       )}
                     </div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <Status value={node.enabled ? 'ready' : 'idle'} />
-                  </td>
-                  <td className="actions">
+                  </TableCell>
+                  <TableCell className="actions">
                     <IconButton label="编辑" onClick={() => setEditing(node)}>
                       <Pencil />
                     </IconButton>
-                  </td>
-                </tr>
+                    {node.canDelete && (
+                      <IconButton label="删除" onClick={() => setDeleting(node)}>
+                        <Trash2 />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
               ))
             ) : (
-              <tr>
-                <td colSpan={7} className="empty">
+              <TableRow>
+                <TableCell colSpan={7} className="empty">
                   暂无节点
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </section>
       <div className="pagination">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="上一页"
+          disabled={page <= 1}
+          onClick={() => setPage(page - 1)}
+        >
           <ChevronLeft />
-        </button>
+        </Button>
         <span>
           {page} / {pages}
         </span>
-        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="下一页"
+          disabled={page >= pages}
+          onClick={() => setPage(page + 1)}
+        >
           <ChevronRight />
-        </button>
+        </Button>
       </div>
       {editing && (
         <NodeDialog
@@ -736,17 +816,517 @@ function NodesPage() {
           }}
         />
       )}
+      {adding && (
+        <AddNodeDialog
+          onClose={() => setAdding(false)}
+          onSaved={async () => {
+            setAdding(false)
+            await reload()
+            toast.success('节点添加成功，相关配置正在更新')
+          }}
+        />
+      )}
+      {deleting && (
+        <AppDialog title="删除手动节点" onClose={() => setDeleting(undefined)}>
+          <p className="dialog-copy">
+            删除“{deleting.name}”后，引用“手动节点”的配置会自动重新生成。订阅来源仍持有的相同节点不会被删除。
+          </p>
+          <footer className="dialog-actions">
+            <Button type="button" variant="outline" onClick={() => setDeleting(undefined)}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
+                  setDeleting(undefined)
+                  await reload()
+                  toast.success('手动节点已删除')
+                } catch (reason) {
+                  toast.error(reason instanceof Error ? reason.message : '删除失败')
+                }
+              }}
+            >
+              删除
+            </Button>
+          </footer>
+        </AppDialog>
+      )}
     </>
   )
 }
 
+function defaultConnection(protocol: ManualNodeConnection['protocol'] = 'vless'): ManualNodeConnection {
+  return {
+    name: '',
+    protocol,
+    server: '',
+    port: 443,
+    network: 'tcp',
+    security: ['vless', 'trojan'].includes(protocol) ? 'tls' : 'none',
+    wsPath: '/',
+    alterId: 0,
+    cipher: protocol === 'ss' ? 'aes-128-gcm' : 'auto',
+    pluginOptions: {},
+    congestionController: 'bbr',
+    udpRelayMode: 'native',
+    skipCertVerify: false,
+  }
+}
+
+function ConnectionTextField({
+  id,
+  label,
+  value,
+  onChange,
+  ...props
+}: {
+  id: string
+  label: string
+  value: string | number
+  onChange: (value: string) => void
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'value' | 'onChange'>) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input id={id} value={value} onChange={(event) => onChange(event.target.value)} {...props} />
+    </Field>
+  )
+}
+
+function ManualConnectionFields({
+  value,
+  onChange,
+}: {
+  value: ManualNodeConnection
+  onChange: (value: ManualNodeConnection) => void
+}) {
+  const update = (patch: Partial<ManualNodeConnection>) => onChange({ ...value, ...patch })
+  const transportProtocol = ['vmess', 'vless', 'trojan'].includes(value.protocol)
+  const tlsProtocol = ['vmess', 'vless', 'trojan'].includes(value.protocol)
+  const secretPlaceholder = (set?: boolean) => (set ? '已设置，留空保持不变' : '')
+  return (
+    <FieldGroup>
+      <Field>
+        <FieldLabel>协议</FieldLabel>
+        <Select
+          value={value.protocol}
+          onValueChange={(protocol) => {
+            const next = defaultConnection(protocol as ManualNodeConnection['protocol'])
+            onChange({ ...next, name: value.name, server: value.server, port: value.port })
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {protocols.map((protocol) => (
+                <SelectItem key={protocol} value={protocol}>
+                  {protocol}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <div className="form-grid">
+        <ConnectionTextField
+          id="manual-name"
+          label="节点名称"
+          required
+          value={value.name}
+          onChange={(name) => update({ name })}
+        />
+        <ConnectionTextField
+          id="manual-server"
+          label="服务器"
+          required
+          value={value.server}
+          onChange={(server) => update({ server })}
+        />
+        <ConnectionTextField
+          id="manual-port"
+          label="端口"
+          required
+          type="number"
+          min={1}
+          max={65535}
+          value={value.port}
+          onChange={(port) => update({ port: Number(port) })}
+        />
+      </div>
+
+      {value.protocol === 'ss' && (
+        <>
+          <ConnectionTextField
+            id="manual-cipher"
+            label="加密方式"
+            required
+            value={value.cipher || ''}
+            onChange={(cipher) => update({ cipher })}
+          />
+          <ConnectionTextField
+            id="manual-password"
+            label="密码"
+            required={!value.hasPassword}
+            type="password"
+            value={value.password || ''}
+            placeholder={secretPlaceholder(value.hasPassword)}
+            onChange={(password) => update({ password })}
+          />
+          <ConnectionTextField
+            id="manual-plugin"
+            label="插件（可选）"
+            value={value.plugin || ''}
+            onChange={(plugin) => update({ plugin })}
+          />
+          {value.plugin && (
+            <ConnectionTextField
+              id="manual-plugin-options"
+              label="插件参数"
+              value={Object.entries(value.pluginOptions || {})
+                .map(([key, item]) => `${key}=${item}`)
+                .join('; ')}
+              placeholder="mode=websocket; host=example.com"
+              onChange={(text) =>
+                update({
+                  pluginOptions: Object.fromEntries(
+                    text
+                      .split(';')
+                      .map((item) => item.trim().split('=', 2))
+                      .filter(([key, item]) => key && item !== undefined),
+                  ),
+                })
+              }
+            />
+          )}
+        </>
+      )}
+
+      {['vmess', 'vless', 'tuic'].includes(value.protocol) && (
+        <ConnectionTextField
+          id="manual-uuid"
+          label="UUID"
+          required={!value.hasUuid}
+          type="password"
+          value={value.uuid || ''}
+          placeholder={secretPlaceholder(value.hasUuid)}
+          onChange={(uuid) => update({ uuid })}
+        />
+      )}
+      {['trojan', 'hysteria2', 'tuic'].includes(value.protocol) && (
+        <ConnectionTextField
+          id="manual-protocol-password"
+          label="密码"
+          required={!value.hasPassword}
+          type="password"
+          value={value.password || ''}
+          placeholder={secretPlaceholder(value.hasPassword)}
+          onChange={(password) => update({ password })}
+        />
+      )}
+      {value.protocol === 'vmess' && (
+        <div className="form-grid">
+          <ConnectionTextField
+            id="manual-alter-id"
+            label="Alter ID"
+            type="number"
+            min={0}
+            value={value.alterId || 0}
+            onChange={(alterId) => update({ alterId: Number(alterId) })}
+          />
+          <ConnectionTextField
+            id="manual-vmess-cipher"
+            label="加密方式"
+            value={value.cipher || 'auto'}
+            onChange={(cipher) => update({ cipher })}
+          />
+        </div>
+      )}
+      {value.protocol === 'vless' && (
+        <ConnectionTextField
+          id="manual-flow"
+          label="Flow（可选）"
+          value={value.flow || ''}
+          onChange={(flow) => update({ flow })}
+        />
+      )}
+
+      {transportProtocol && (
+        <Field>
+          <FieldLabel>传输方式</FieldLabel>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={value.network || 'tcp'}
+            onValueChange={(network) => network && update({ network: network as 'tcp' | 'ws' | 'grpc' })}
+          >
+            <ToggleGroupItem value="tcp">TCP</ToggleGroupItem>
+            <ToggleGroupItem value="ws">WebSocket</ToggleGroupItem>
+            <ToggleGroupItem value="grpc">gRPC</ToggleGroupItem>
+          </ToggleGroup>
+        </Field>
+      )}
+      {value.network === 'ws' && transportProtocol && (
+        <div className="form-grid">
+          <ConnectionTextField
+            id="manual-ws-path"
+            label="WS Path"
+            value={value.wsPath || '/'}
+            onChange={(wsPath) => update({ wsPath })}
+          />
+          <ConnectionTextField
+            id="manual-ws-host"
+            label="WS Host（可选）"
+            value={value.wsHost || ''}
+            onChange={(wsHost) => update({ wsHost })}
+          />
+        </div>
+      )}
+      {value.network === 'grpc' && transportProtocol && (
+        <ConnectionTextField
+          id="manual-grpc-service"
+          label="gRPC Service Name"
+          value={value.grpcServiceName || ''}
+          onChange={(grpcServiceName) => update({ grpcServiceName })}
+        />
+      )}
+
+      {tlsProtocol && (
+        <Field>
+          <FieldLabel>传输安全</FieldLabel>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={value.security || 'none'}
+            onValueChange={(security) => security && update({ security: security as ManualNodeConnection['security'] })}
+          >
+            <ToggleGroupItem value="none">无</ToggleGroupItem>
+            <ToggleGroupItem value="tls">TLS</ToggleGroupItem>
+            {value.protocol !== 'vmess' && <ToggleGroupItem value="reality">Reality</ToggleGroupItem>}
+          </ToggleGroup>
+        </Field>
+      )}
+      {value.security !== 'none' && tlsProtocol && (
+        <div className="form-grid">
+          <ConnectionTextField
+            id="manual-sni"
+            label="SNI（可选）"
+            value={value.sni || ''}
+            onChange={(sni) => update({ sni })}
+          />
+          <ConnectionTextField
+            id="manual-fingerprint"
+            label="客户端指纹（可选）"
+            value={value.clientFingerprint || ''}
+            onChange={(clientFingerprint) => update({ clientFingerprint })}
+          />
+        </div>
+      )}
+      {value.security === 'reality' && (
+        <div className="form-grid">
+          <ConnectionTextField
+            id="manual-reality-key"
+            label="Reality 公钥"
+            required
+            value={value.realityPublicKey || ''}
+            onChange={(realityPublicKey) => update({ realityPublicKey })}
+          />
+          <ConnectionTextField
+            id="manual-reality-short-id"
+            label="Reality Short ID（可选）"
+            value={value.realityShortId || ''}
+            onChange={(realityShortId) => update({ realityShortId })}
+          />
+        </div>
+      )}
+
+      {value.protocol === 'hysteria2' && (
+        <>
+          <ConnectionTextField
+            id="manual-hy2-sni"
+            label="SNI（可选）"
+            value={value.sni || ''}
+            onChange={(sni) => update({ sni })}
+          />
+          <div className="form-grid">
+            <ConnectionTextField
+              id="manual-obfs"
+              label="混淆类型（可选）"
+              value={value.obfs || ''}
+              onChange={(obfs) => update({ obfs })}
+            />
+            <ConnectionTextField
+              id="manual-obfs-password"
+              label="混淆密码（可选）"
+              type="password"
+              value={value.obfsPassword || ''}
+              placeholder={secretPlaceholder(value.hasObfsPassword)}
+              onChange={(obfsPassword) => update({ obfsPassword })}
+            />
+          </div>
+        </>
+      )}
+      {value.protocol === 'tuic' && (
+        <div className="form-grid">
+          <ConnectionTextField
+            id="manual-tuic-sni"
+            label="SNI（可选）"
+            value={value.sni || ''}
+            onChange={(sni) => update({ sni })}
+          />
+          <ConnectionTextField
+            id="manual-congestion"
+            label="拥塞控制"
+            value={value.congestionController || 'bbr'}
+            onChange={(congestionController) => update({ congestionController })}
+          />
+          <ConnectionTextField
+            id="manual-udp-relay"
+            label="UDP Relay 模式"
+            value={value.udpRelayMode || 'native'}
+            onChange={(udpRelayMode) => update({ udpRelayMode })}
+          />
+        </div>
+      )}
+      {['hysteria2', 'tuic'].includes(value.protocol) && (
+        <Field orientation="horizontal">
+          <Checkbox
+            id="manual-skip-cert"
+            checked={value.skipCertVerify || false}
+            onCheckedChange={(checked) => update({ skipCertVerify: checked === true })}
+          />
+          <FieldLabel htmlFor="manual-skip-cert">跳过证书验证</FieldLabel>
+        </Field>
+      )}
+    </FieldGroup>
+  )
+}
+
+function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [mode, setMode] = useState<'link' | 'form'>('link')
+  const [link, setLink] = useState('')
+  const [connection, setConnection] = useState(defaultConnection())
+  const [tags, setTags] = useState('')
+  const [enabled, setEnabled] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const nextConnection = mode === 'link' ? parseVlessLink(link) : connection
+      await api('/nodes', {
+        method: 'POST',
+        body: JSON.stringify({
+          connection: nextConnection,
+          tags: tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          enabled,
+        }),
+      })
+      onSaved()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '添加失败')
+      setSaving(false)
+    }
+  }
+  return (
+    <AppDialog title="添加节点" onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <FieldGroup>
+          <Segmented
+            block
+            value={mode}
+            options={[
+              { label: '链接导入', value: 'link' },
+              { label: '手动填写', value: 'form' },
+            ]}
+            onChange={(value) => {
+              setMode(value)
+              setError('')
+            }}
+          />
+          {mode === 'link' ? (
+            <Field data-invalid={Boolean(error)}>
+              <FieldLabel htmlFor="manual-link">VLESS 链接</FieldLabel>
+              <Textarea
+                id="manual-link"
+                required
+                aria-invalid={Boolean(error)}
+                rows={5}
+                value={link}
+                onChange={(event) => setLink(event.target.value)}
+                placeholder="vless://uuid@example.com:443?..."
+              />
+            </Field>
+          ) : (
+            <ManualConnectionFields value={connection} onChange={setConnection} />
+          )}
+          <Field>
+            <FieldLabel htmlFor="manual-tags">标签</FieldLabel>
+            <Input
+              id="manual-tags"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              placeholder="香港, 高速"
+            />
+          </Field>
+          <Field orientation="horizontal">
+            <Checkbox
+              id="manual-enabled"
+              checked={enabled}
+              onCheckedChange={(checked) => setEnabled(checked === true)}
+            />
+            <FieldLabel htmlFor="manual-enabled">启用节点</FieldLabel>
+          </Field>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </FieldGroup>
+        <footer>
+          <Button type="button" variant="outline" onClick={onClose}>
+            取消
+          </Button>
+          <Button disabled={saving}>
+            {saving && <RefreshCw data-icon="inline-start" className="spin" />}
+            {mode === 'link' ? '解析并添加' : '添加节点'}
+          </Button>
+        </footer>
+      </form>
+    </AppDialog>
+  )
+}
+
 function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () => void; onSaved: () => void }) {
+  const { data, error, loading } = useApi<NodeDetail>(`/nodes/${node.id}`)
+  return (
+    <AppDialog title="编辑节点" onClose={onClose}>
+      <PageState loading={loading} error={error} />
+      {data && <NodeEditor key={data.updatedAt} node={data} onClose={onClose} onSaved={onSaved} />}
+    </AppDialog>
+  )
+}
+
+function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () => void; onSaved: () => void }) {
   const [alias, setAlias] = useState(node.alias || '')
   const [tags, setTags] = useState(node.tags.join(', '))
   const [enabled, setEnabled] = useState(node.enabled)
+  const [connection, setConnection] = useState(node.connection)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   async function submit(event: FormEvent) {
     event.preventDefault()
+    setSaving(true)
+    setError('')
     try {
       await api(`/nodes/${node.id}`, {
         method: 'PATCH',
@@ -757,43 +1337,66 @@ function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () =>
             .map((tag) => tag.trim())
             .filter(Boolean),
           enabled,
+          connection: node.canEditConnection ? connection : undefined,
         }),
       })
       onSaved()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '保存失败')
+      setSaving(false)
     }
   }
   return (
-    <Dialog title="编辑节点" onClose={onClose}>
-      <form className="form" onSubmit={submit}>
-        <label>
-          显示名称
-          <input value={alias} onChange={(event) => setAlias(event.target.value)} placeholder={node.name} />
-        </label>
-        <label>
-          标签
-          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="香港, 高速" />
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          启用节点
-        </label>
-        {error && <div className="alert error">{error}</div>}
-        <footer>
-          <button type="button" className="secondary" onClick={onClose}>
-            取消
-          </button>
-          <button className="primary">保存</button>
-        </footer>
-      </form>
-    </Dialog>
+    <form className="form" onSubmit={submit}>
+      <FieldGroup>
+        {node.canEditConnection && connection ? (
+          <ManualConnectionFields value={connection} onChange={setConnection} />
+        ) : (
+          <Alert>
+            <AlertDescription>连接参数由外部订阅维护，此处只保存显示名称、标签和启停状态。</AlertDescription>
+          </Alert>
+        )}
+        <Field>
+          <FieldLabel htmlFor="node-alias">显示名称</FieldLabel>
+          <Input
+            id="node-alias"
+            value={alias}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder={node.name}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="node-tags">标签</FieldLabel>
+          <Input
+            id="node-tags"
+            value={tags}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder="香港, 高速"
+          />
+        </Field>
+        <Field orientation="horizontal">
+          <Checkbox id="node-enabled" checked={enabled} onCheckedChange={(checked) => setEnabled(checked === true)} />
+          <FieldLabel htmlFor="node-enabled">启用节点</FieldLabel>
+        </Field>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+      </FieldGroup>
+      <footer>
+        <Button type="button" variant="outline" onClick={onClose}>
+          取消
+        </Button>
+        <Button disabled={saving}>{saving && <RefreshCw data-icon="inline-start" className="spin" />}保存</Button>
+      </footer>
+    </form>
   )
 }
 
 function ProfilesPage() {
   const { data: profiles = [], error, loading, reload } = useApi<Profile[]>('/profiles')
-  const { data: sources = [] } = useApi<Source[]>('/sources')
+  const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const [adding, setAdding] = useState(false)
   async function remove(id: string) {
     if (!window.confirm('确定删除这个配置？')) return
@@ -812,10 +1415,10 @@ function ProfilesPage() {
           <h1>配置</h1>
           <p>{profiles.length}/20 个订阅配置</p>
         </div>
-        <button className="primary" disabled={!sources.length} onClick={() => setAdding(true)}>
-          <Plus />
+        <Button disabled={!sources.length} onClick={() => setAdding(true)}>
+          <Plus data-icon="inline-start" />
           新建
-        </button>
+        </Button>
       </div>
       <PageState loading={loading} error={error} />
       <section className="profile-list">
@@ -926,109 +1529,119 @@ function ProfileDialog({
     }
   }
   return (
-    <Dialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
+    <AppDialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
       <form className="form profile-form" onSubmit={submit}>
-        <label>
-          名称
-          <input required value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：日常使用" />
-        </label>
-        <fieldset>
-          <legend>节点源</legend>
-          <div className="option-grid">
-            {sources.map((source) => (
-              <label key={source.id} className="check-row">
-                <input
-                  type="checkbox"
-                  checked={sourceIds.includes(source.id)}
-                  onChange={() => setSourceIds(toggle(sourceIds, source.id))}
-                />
-                {source.name}
-                <small>{source.nodeCount}</small>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>协议筛选</legend>
-          <div className="option-grid protocols">
-            {protocols.map((item) => (
-              <label key={item} className="check-row">
-                <input
-                  type="checkbox"
-                  checked={selectedProtocols.includes(item)}
-                  onChange={() => setSelectedProtocols(toggle(selectedProtocols, item))}
-                />
-                {item}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <label>
-          标签筛选
-          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="留空表示全部" />
-        </label>
-        <fieldset>
-          <legend>DNS 模式</legend>
-          <div className="segmented">
-            <button
-              type="button"
-              className={dnsMode === 'fake-ip' ? 'active' : ''}
-              onClick={() => setDnsMode('fake-ip')}
-            >
-              fake-ip
-            </button>
-            <button
-              type="button"
-              className={dnsMode === 'redir-host' ? 'active' : ''}
-              onClick={() => setDnsMode('redir-host')}
-            >
-              redir-host
-            </button>
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend>规则顺序</legend>
-          <div className="rule-list">
-            {rules.map((rule, index) => (
-              <div key={rule}>
-                <span>{ruleLabels[rule]}</span>
-                <IconButton label="上移" disabled={index === 0} onClick={() => move(index, -1)}>
-                  <ArrowUp />
-                </IconButton>
-                <IconButton label="下移" disabled={index === rules.length - 1} onClick={() => move(index, 1)}>
-                  <ArrowDown />
-                </IconButton>
-                <IconButton label="移除" onClick={() => setRules(rules.filter((item) => item !== rule))}>
-                  <X />
-                </IconButton>
-              </div>
-            ))}
-            {Object.keys(ruleLabels)
-              .filter((rule) => !rules.includes(rule as RuleModule))
-              .map((rule) => (
-                <button
-                  type="button"
-                  className="add-rule"
-                  key={rule}
-                  onClick={() => setRules([...rules, rule as RuleModule])}
-                >
-                  <Plus />
-                  {ruleLabels[rule as RuleModule]}
-                </button>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="profile-name">名称</FieldLabel>
+            <Input
+              id="profile-name"
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如：日常使用"
+            />
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">节点源</FieldLegend>
+            <div className="option-grid">
+              {sources.map((source) => (
+                <Field key={source.id} orientation="horizontal">
+                  <Checkbox
+                    id={`source-${source.id}`}
+                    checked={sourceIds.includes(source.id)}
+                    onCheckedChange={() => setSourceIds(toggle(sourceIds, source.id))}
+                  />
+                  <FieldLabel htmlFor={`source-${source.id}`}>{source.name}</FieldLabel>
+                  <small>{source.nodeCount}</small>
+                </Field>
               ))}
-          </div>
-        </fieldset>
-        {error && <div className="alert error">{error}</div>}
+            </div>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">协议筛选</FieldLegend>
+            <div className="option-grid protocols">
+              {protocols.map((item) => (
+                <Field key={item} orientation="horizontal">
+                  <Checkbox
+                    id={`protocol-${item}`}
+                    checked={selectedProtocols.includes(item)}
+                    onCheckedChange={() => setSelectedProtocols(toggle(selectedProtocols, item))}
+                  />
+                  <FieldLabel htmlFor={`protocol-${item}`}>{item}</FieldLabel>
+                </Field>
+              ))}
+            </div>
+          </FieldSet>
+          <Field>
+            <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
+            <Input
+              id="profile-tags"
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              placeholder="留空表示全部"
+            />
+          </Field>
+          <FieldSet>
+            <FieldLegend variant="label">DNS 模式</FieldLegend>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={dnsMode}
+              onValueChange={(value) => value && setDnsMode(value as 'fake-ip' | 'redir-host')}
+            >
+              <ToggleGroupItem value="fake-ip">fake-ip</ToggleGroupItem>
+              <ToggleGroupItem value="redir-host">redir-host</ToggleGroupItem>
+            </ToggleGroup>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">规则顺序</FieldLegend>
+            <div className="rule-list">
+              {rules.map((rule, index) => (
+                <div key={rule}>
+                  <span>{ruleLabels[rule]}</span>
+                  <IconButton label="上移" disabled={index === 0} onClick={() => move(index, -1)}>
+                    <ArrowUp />
+                  </IconButton>
+                  <IconButton label="下移" disabled={index === rules.length - 1} onClick={() => move(index, 1)}>
+                    <ArrowDown />
+                  </IconButton>
+                  <IconButton label="移除" onClick={() => setRules(rules.filter((item) => item !== rule))}>
+                    <X />
+                  </IconButton>
+                </div>
+              ))}
+              {Object.keys(ruleLabels)
+                .filter((rule) => !rules.includes(rule as RuleModule))
+                .map((rule) => (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    key={rule}
+                    onClick={() => setRules([...rules, rule as RuleModule])}
+                  >
+                    <Plus data-icon="inline-start" />
+                    {ruleLabels[rule as RuleModule]}
+                  </Button>
+                ))}
+            </div>
+          </FieldSet>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </FieldGroup>
         <footer>
-          <button type="button" className="secondary" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             取消
-          </button>
-          <button className="primary" disabled={saving || !sourceIds.length}>
-            {saving && <RefreshCw className="spin" />}保存并生成
-          </button>
+          </Button>
+          <Button disabled={saving || !sourceIds.length}>
+            {saving && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
+          </Button>
         </footer>
       </form>
-    </Dialog>
+    </AppDialog>
   )
 }
 
@@ -1036,7 +1649,7 @@ function ProfileDetailPage() {
   const { id } = profileDetailRoute.useParams()
   const navigate = useNavigate()
   const { data: profile, error, loading, reload } = useApi<Profile>(`/profiles/${id}`)
-  const { data: sources = [] } = useApi<Source[]>('/sources')
+  const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const [editing, setEditing] = useState(false)
   const [activeTab, setActiveTab] = useState<'link' | 'preview'>('link')
   const [busy, setBusy] = useState(false)
@@ -1073,35 +1686,31 @@ function ProfileDetailPage() {
           </div>
         </div>
         <div className="heading-actions">
-          <button className="secondary" disabled={busy} onClick={() => void run('compile')}>
-            <RefreshCw className={busy ? 'spin' : ''} />
+          <Button variant="outline" disabled={busy} onClick={() => void run('compile')}>
+            <RefreshCw data-icon="inline-start" className={busy ? 'spin' : ''} />
             重新生成
-          </button>
-          <button className="primary" onClick={() => setEditing(true)}>
-            <Settings2 />
+          </Button>
+          <Button onClick={() => setEditing(true)}>
+            <Settings2 data-icon="inline-start" />
             编辑
-          </button>
+          </Button>
         </div>
       </div>
       <PageState loading={loading} error={error} />
       {profile && (
         <>
-          <div className="tabs">
-            <button className={activeTab === 'link' ? 'active' : ''} onClick={() => setActiveTab('link')}>
-              订阅链接
-            </button>
-            <button className={activeTab === 'preview' ? 'active' : ''} onClick={() => setActiveTab('preview')}>
-              配置预览
-            </button>
-          </div>
-          {activeTab === 'link' ? (
-            <section className="detail-section">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'link' | 'preview')}>
+            <TabsList variant="line">
+              <TabsTrigger value="link">订阅链接</TabsTrigger>
+              <TabsTrigger value="preview">配置预览</TabsTrigger>
+            </TabsList>
+            <TabsContent value="link" className="detail-section">
               <div className="field-title">
                 <h2>订阅地址</h2>
                 <Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} />
               </div>
               <div className="copy-field">
-                <input readOnly value={profile.subscriptionUrl} />
+                <Input readOnly value={profile.subscriptionUrl} />
                 <IconButton
                   label="复制"
                   onClick={() =>
@@ -1113,17 +1722,20 @@ function ProfileDetailPage() {
                   <Clipboard />
                 </IconButton>
               </div>
-              {profile.error && <div className="alert error">{profile.error}</div>}
-              <button className="danger-link" disabled={busy} onClick={() => void run('rotate')}>
-                <RotateCcwKey />
+              {profile.error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{profile.error}</AlertDescription>
+                </Alert>
+              )}
+              <Button variant="destructive" disabled={busy} onClick={() => void run('rotate')}>
+                <RotateCcwKey data-icon="inline-start" />
                 轮换令牌
-              </button>
-            </section>
-          ) : (
-            <section className="yaml-panel">
+              </Button>
+            </TabsContent>
+            <TabsContent value="preview" className="yaml-panel">
               <pre>{profile.compiledYaml || '# 尚未生成配置'}</pre>
-            </section>
-          )}
+            </TabsContent>
+          </Tabs>
           {editing && (
             <ProfileDialog
               sources={sources}
@@ -1166,15 +1778,29 @@ function LoginPage() {
     <main className="auth-page">
       <form className="form auth-form" onSubmit={submit}>
         <h1>Wangwang 登录</h1>
-        <label>
-          邮箱
-          <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          密码
-          <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
-        <button className="primary">登录</button>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="login-email">邮箱</FieldLabel>
+            <Input
+              id="login-email"
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="login-password">密码</FieldLabel>
+            <Input
+              id="login-password"
+              type="password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        <Button>登录</Button>
       </form>
     </main>
   )
@@ -1203,42 +1829,62 @@ function InitPage() {
     <main className="auth-page">
       <form className="form auth-form" onSubmit={submit}>
         <h1>初始化 Wangwang</h1>
-        <label>
-          邮箱
-          <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          密码
-          <input
-            type="password"
-            required
-            minLength={12}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </label>
-        <label>
-          确认密码
-          <input
-            type="password"
-            required
-            minLength={12}
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-        </label>
-        {error && <div className="alert error">{error}</div>}
-        <button className="primary" disabled={saving}>
-          {saving && <RefreshCw className="spin" />}完成初始化
-        </button>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="init-email">邮箱</FieldLabel>
+            <Input
+              id="init-email"
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="init-password">密码</FieldLabel>
+            <Input
+              id="init-password"
+              type="password"
+              required
+              minLength={12}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="init-password-confirm">确认密码</FieldLabel>
+            <Input
+              id="init-password-confirm"
+              type="password"
+              required
+              minLength={12}
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </Field>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </FieldGroup>
+        <Button disabled={saving}>{saving && <RefreshCw data-icon="inline-start" className="spin" />}完成初始化</Button>
       </form>
     </main>
   )
 }
 
-const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: () => <Navigate to="/" /> })
+const rootRoute = createRootRoute({
+  component: Outlet,
+  notFoundComponent: () => <Navigate to="/dashboard" replace />,
+})
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Layout })
-const dashboardRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: DashboardPage })
+const indexRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/',
+  component: () => <Navigate to="/dashboard" replace />,
+})
+const dashboardRoute = createRoute({ getParentRoute: () => appRoute, path: '/dashboard', component: DashboardPage })
 const sourcesRoute = createRoute({ getParentRoute: () => appRoute, path: '/sources', component: SourcesPage })
 const nodesRoute = createRoute({ getParentRoute: () => appRoute, path: '/nodes', component: NodesPage })
 const profilesRoute = createRoute({ getParentRoute: () => appRoute, path: '/profiles', component: ProfilesPage })
@@ -1250,7 +1896,7 @@ const profileDetailRoute = createRoute({
 const initRoute = createRoute({ getParentRoute: () => rootRoute, path: '/init', component: InitPage })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage })
 const routeTree = rootRoute.addChildren([
-  appRoute.addChildren([dashboardRoute, sourcesRoute, nodesRoute, profilesRoute, profileDetailRoute]),
+  appRoute.addChildren([indexRoute, dashboardRoute, sourcesRoute, nodesRoute, profilesRoute, profileDetailRoute]),
   initRoute,
   loginRoute,
 ])
@@ -1268,9 +1914,9 @@ declare module '@tanstack/react-router' {
 
 export default function App() {
   return (
-    <>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <RouterProvider router={router} />
       <Toaster />
-    </>
+    </ThemeProvider>
   )
 }
