@@ -88,7 +88,7 @@ KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1
 ## 9. Cloudflare 绑定
 
 - D1：`DB`
-- KV：`CONFIG_CACHE`
+- KV：`KV`
 - Queue producer/consumer：`JOBS`
 - Static Assets：`ASSETS`
 - 变量：无。Worker 允许所有绑定到它的域名访问，管理接口由应用账号保护。

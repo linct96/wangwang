@@ -19,7 +19,7 @@
   ],
   "kv_namespaces": [
     {
-      "binding": "CONFIG_CACHE",
+      "binding": "KV",
       "id": "local"
     }
   ],

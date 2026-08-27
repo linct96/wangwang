@@ -388,10 +388,10 @@ app.get('/s/:profileId/:token/config.yaml', async (c) => {
   const expected = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   if (!constantTimeEqual(expected, c.req.param('token'))) return c.notFound()
   const key = `profile:${profile.id}:revision:${profile.revision}`
-  let yaml = await c.env.CONFIG_CACHE.get(key)
+  let yaml = await c.env.KV.get(key)
   if (!yaml) {
     yaml = profile.compiledYaml
-    c.executionCtx.waitUntil(c.env.CONFIG_CACHE.put(key, yaml))
+    c.executionCtx.waitUntil(c.env.KV.put(key, yaml))
   }
   return c.body(yaml, 200, {
     'Content-Type': 'text/yaml; charset=utf-8',

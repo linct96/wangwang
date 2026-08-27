@@ -36,7 +36,7 @@ await writeFile(`${stage}/manifest.json`, `${JSON.stringify({
   migrationsDir: 'migrations',
   requiredBindings: {
     d1: ['DB'],
-    kv: ['CONFIG_CACHE'],
+    kv: ['KV'],
     queues: [{ binding: 'JOBS', type: 'producer' }],
   },
   requiredVars: [],
