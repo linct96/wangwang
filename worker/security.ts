@@ -34,10 +34,9 @@ function toHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export async function subscriptionToken(secret: string, profileId: string, version: number) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  return toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${profileId}:${version}`)))
-}
+// 手动设置订阅令牌；修改后重新部署 Worker。
+const subscriptionTokenValue = 'change-this-subscription-token'
+export function subscriptionToken() { return subscriptionTokenValue }
 
 export function constantTimeEqual(left: string, right: string) {
   if (left.length !== right.length) return false

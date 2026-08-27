@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { jobs, nodes, profileNodeExclusions, profiles, profileSources, sources } from './db'
 import type { QueueMessage, RuleModule } from './db'
 import { assertRemoteUrl, constantTimeEqual, hashPassword, newSessionToken, SESSION_TTL, sessionHash, subscriptionToken, validOrigin, verifyPassword } from './security'
-import { createJob, db, enqueueDueSources, processQueueMessage } from './tasks'
+import { createJob, db, processQueueMessage } from './tasks'
 
 const sourceCreateSchema = z
   .object({
@@ -106,7 +106,7 @@ async function profileView(env: Env, profile: typeof profiles.$inferSelect, orig
     .select({ id: profileNodeExclusions.nodeId })
     .from(profileNodeExclusions)
     .where(eq(profileNodeExclusions.profileId, profile.id))
-  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
+  const token = subscriptionToken()
   return {
     ...profile,
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
@@ -370,7 +370,7 @@ app.post('/api/profiles/:id/rotate-token', async (c) => {
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   const tokenVersion = current.tokenVersion + 1
   await db(c.env).update(profiles).set({ tokenVersion, updatedAt: new Date() }).where(eq(profiles.id, id))
-  const token = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, id, tokenVersion)
+  const token = subscriptionToken()
   return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${id}/${token}/config.yaml` })
 })
 
@@ -383,7 +383,7 @@ app.get('/api/jobs/:id', async (c) => {
 app.get('/s/:profileId/:token/config.yaml', async (c) => {
   const profile = await db(c.env).select().from(profiles).where(and(eq(profiles.id, c.req.param('profileId')), eq(profiles.enabled, true))).get()
   if (!profile?.compiledYaml) return c.notFound()
-  const expected = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
+  const expected = subscriptionToken()
   if (!constantTimeEqual(expected, c.req.param('token'))) return c.notFound()
   const key = `profile:${profile.id}:revision:${profile.revision}`
   let yaml = await c.env.KV.get(key)
@@ -426,8 +426,5 @@ export default {
   fetch: app.fetch,
   async queue(batch: MessageBatch<QueueMessage>, env: Env) {
     for (const message of batch.messages) await processQueueMessage(env, message.body)
-  },
-  async scheduled(_controller: ScheduledController, env: Env) {
-    await enqueueDueSources(env)
   },
 } satisfies ExportedHandler<Env, QueueMessage>

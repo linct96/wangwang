@@ -5,7 +5,7 @@
 - 前端：React SPA、Vite、React Router、原生 CSS。
 - Worker：Hono、Zod、Cloudflare Workers Static Assets。
 - 数据：D1 + `drizzle-orm/d1`，KV 仅缓存已生成配置。
-- 后台任务：Cloudflare Queue；Cron 每小时扫描到期源。
+- 后台任务：Cloudflare Queue；定时扫描暂不启用。
 - 测试：Vitest + `@cloudflare/vitest-plugin`。
 
 项目保持单仓库、单 Worker，不拆分服务或共享包。
@@ -15,7 +15,7 @@
 ```text
 /admin/*              Cloudflare Access -> SPA / Hono API
 /s/:profile/:token    Hono -> D1 元数据 -> KV/D1 YAML
-Cron                   查询到期节点源 -> Queue
+手动刷新               查询节点源 -> Queue
 Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 ```
 
@@ -72,7 +72,7 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 
 Queue 消息仅包含 `{ jobId, type, entityId }`，类型为 `refresh_source` 或 `compile_profile`。消费逻辑按任务状态幂等，业务错误写入 `jobs` 后确认消息，运行时错误由 Queue 默认重试。
 
-Cron 使用 `0 * * * *`，只负责将到期 URL 源入队。刷新成功后，将引用该来源的配置依次入队生成。
+节点源通过手动刷新入队；刷新成功后，将引用该来源的配置依次入队生成。
 
 KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1 获取当前版本和令牌版本，再读 KV；KV 未命中时回退 D1 并回填。
 
@@ -92,6 +92,6 @@ KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1
 - Queue producer/consumer：`JOBS`
 - Static Assets：`ASSETS`
 - 变量：无。Worker 允许所有绑定到它的域名访问，管理接口由应用账号保护。
-- Secret：`SUBSCRIPTION_TOKEN_SECRET`
+- 订阅令牌：在 `worker/security.ts` 中手动设置。
 
 本地开发使用占位值；生产部署前创建真实 D1、KV、Queue、自定义域名和 Access 应用。
