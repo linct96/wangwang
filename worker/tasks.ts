@@ -120,13 +120,16 @@ async function replaceSourceNodes(
     subscriptionInfo: ReturnType<typeof parseSubscriptionUserinfo>
   },
 ) {
+  const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
+  if (!source) throw new Error('节点源不存在')
+  const nodes = filterNodesByName(parsed.nodes, source.nodeNameFilter)
   await ensureNodeCapacity(
     env,
-    parsed.nodes.map((node) => node.fingerprint),
+    nodes.map((node) => node.fingerprint),
   )
   const now = Date.now()
   const statements: D1PreparedStatement[] = []
-  for (const node of parsed.nodes) {
+  for (const node of nodes) {
     statements.push(
       env.DB.prepare(
         `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
@@ -145,7 +148,7 @@ async function replaceSourceNodes(
     )
   }
   statements.push(env.DB.prepare('DELETE FROM source_nodes WHERE source_id = ?').bind(sourceId))
-  parsed.nodes.forEach((node, position) => {
+  nodes.forEach((node, position) => {
     statements.push(
       env.DB.prepare(
         `INSERT INTO source_nodes (source_id, node_id, original_name, position)
@@ -153,8 +156,6 @@ async function replaceSourceNodes(
       ).bind(sourceId, node.config.name, position, node.fingerprint),
     )
   })
-  const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
-  if (!source) throw new Error('节点源不存在')
   const nextRefresh =
     source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0
       ? now + source.refreshIntervalHours * 3_600_000
@@ -164,7 +165,7 @@ async function replaceSourceNodes(
       `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
     ).bind(
       parsed.warnings.join('\n') || null,
-      parsed.nodes.length,
+      nodes.length,
       responseMeta?.etag ?? source.etag,
       responseMeta?.lastModified ?? source.lastModified,
       responseMeta?.subscriptionInfo?.upload ?? null,
@@ -184,6 +185,12 @@ async function replaceSourceNodes(
     ),
   )
   await env.DB.batch(statements)
+}
+
+export function filterNodesByName<T extends { config: { name: string } }>(nodes: T[], pattern: string | null) {
+  if (!pattern) return nodes
+  const filter = new RegExp(pattern)
+  return nodes.filter((node) => filter.test(node.config.name))
 }
 
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {

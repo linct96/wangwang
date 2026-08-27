@@ -17,6 +17,7 @@ export type Source = {
   name: string
   kind: 'url' | 'manual'
   url: string | null
+  nodeNameFilter: string | null
   pendingUrl: boolean
   profileCount: number
   refreshIntervalHours: number

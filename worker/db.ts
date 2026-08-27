@@ -10,6 +10,7 @@ export const sources = sqliteTable(
     url: text('url'),
     pendingUrl: text('pending_url'),
     content: text('content'),
+    nodeNameFilter: text('node_name_filter'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     etag: text('etag'),

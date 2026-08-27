@@ -62,6 +62,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       name: String(body.name || '').trim(),
       kind: 'url',
       url: displayUrl(rawUrl),
+      nodeNameFilter: String(body.nodeNameFilter || '').trim() || null,
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: Number(body.refreshIntervalHours || 0),
@@ -93,6 +94,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (typeof body.enabled === 'boolean') source.enabled = body.enabled
     if (typeof body.name === 'string') source.name = body.name.trim()
     if (typeof body.refreshIntervalHours === 'number') source.refreshIntervalHours = body.refreshIntervalHours
+    if (typeof body.nodeNameFilter === 'string') source.nodeNameFilter = body.nodeNameFilter.trim() || null
     if (typeof body.url === 'string' && body.url) {
       source.url = displayUrl(body.url)
       source.status = 'ready'

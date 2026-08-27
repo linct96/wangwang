@@ -9,7 +9,7 @@ import type { Source } from '@/api/types'
 import { AppDialog, IconButton, PageState, Status } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -276,10 +276,12 @@ function SourceDialog({
     defaultValues: {
       name: source?.name || '',
       url: source?.url || '',
+      nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
     },
     onSubmit: async ({ value }) => {
       const urlChanged = value.url.trim() !== (source?.url || '')
+      const nodeNameFilter = value.nodeNameFilter.trim()
       setError('')
       try {
         const result = await api<{ jobId: string | null }>(source ? `/sources/${source.id}` : '/sources', {
@@ -288,6 +290,7 @@ function SourceDialog({
             name: value.name,
             url: source ? (urlChanged ? value.url.trim() : undefined) : value.url.trim(),
             refreshIntervalHours: value.interval,
+            nodeNameFilter,
           }),
         })
         onSaved(result.jobId)
@@ -335,6 +338,21 @@ function SourceDialog({
             </form.Field>
           </Field>
           <Field>
+            <FieldLabel htmlFor="source-node-name-filter">节点名称过滤（正则）</FieldLabel>
+            <form.Field name="nodeNameFilter">
+              {(field) => (
+                <Input
+                  id="source-node-name-filter"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="例如：香港|日本"
+                  maxLength={200}
+                />
+              )}
+            </form.Field>
+            <FieldDescription>仅保留名称匹配的节点，留空表示不过滤。</FieldDescription>
+          </Field>
+          <Field>
             <FieldLabel>刷新间隔</FieldLabel>
             <form.Field name="interval">
               {(field) => (
@@ -365,11 +383,16 @@ function SourceDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.url]}>
-            {([isSubmitting, currentUrl]) => (
+          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.url, state.values.nodeNameFilter]}>
+            {([isSubmitting, currentUrl, currentFilter]) => (
               <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
-                {source ? (String(currentUrl).trim() !== (source.url || '') ? '保存并验证' : '保存') : '添加并刷新'}
+                {source
+                  ? String(currentUrl).trim() !== (source.url || '') ||
+                    String(currentFilter).trim() !== (source.nodeNameFilter || '')
+                    ? '保存并验证'
+                    : '保存'
+                  : '完成'}
               </Button>
             )}
           </form.Subscribe>

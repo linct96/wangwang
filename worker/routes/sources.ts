@@ -6,10 +6,17 @@ import { profileSources, sources } from '../db'
 import { createJob, db, enqueueAffectedProfiles } from '../tasks'
 import { assertRemoteUrl } from '../security'
 
+const nodeNameFilterSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
+
 export const sourceCreateSchema = z.object({
   name: z.string().trim().min(1).max(60),
   url: z.string().trim().min(1).max(2048),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
+  nodeNameFilter: nodeNameFilterSchema.optional().default(''),
 })
 
 export const sourceUpdateSchema = z.object({
@@ -17,7 +24,22 @@ export const sourceUpdateSchema = z.object({
   url: z.string().trim().min(1).max(2048).optional(),
   enabled: z.boolean().optional(),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).optional(),
+  nodeNameFilter: nodeNameFilterSchema.optional(),
 })
+
+function safeRegExp(value: string) {
+  try {
+    new RegExp(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function normalizeNodeNameFilter(value: string | undefined) {
+  const normalized = value?.trim() || ''
+  return normalized || null
+}
 
 export function displayUrl(value: string | null) {
   if (!value) return null
@@ -62,12 +84,14 @@ sourcesRouter.post('/', async (c) => {
   const [{ value }] = await database.select({ value: count() }).from(sources).where(eq(sources.kind, 'url'))
   if (Number(value) >= 20) return fail(c, 409, 'SOURCE_LIMIT', '节点源数量已达到 20 个')
   assertRemoteUrl(input.url)
+  const nodeNameFilter = normalizeNodeNameFilter(input.nodeNameFilter)
   const now = new Date()
   const source = {
     id: crypto.randomUUID(),
     name: input.name,
     kind: 'url' as const,
     url: input.url,
+    nodeNameFilter,
     content: null,
     refreshIntervalHours: input.refreshIntervalHours,
     enabled: true,
@@ -90,6 +114,9 @@ sourcesRouter.patch('/:id', async (c) => {
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   if (current.kind !== 'url') return fail(c, 403, 'SYSTEM_SOURCE', '系统节点源不能修改')
   if (input.url) assertRemoteUrl(input.url)
+  const nodeNameFilter =
+    input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
+  const filterChanged = nodeNameFilter !== current.nodeNameFilter
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
   const nextRefreshAt =
     current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
@@ -101,6 +128,7 @@ sourcesRouter.patch('/:id', async (c) => {
       name: input.name,
       enabled: input.enabled,
       refreshIntervalHours: input.refreshIntervalHours,
+      nodeNameFilter,
       pendingUrl: input.url,
       status: input.url ? 'idle' : undefined,
       error: input.url ? null : undefined,
@@ -111,7 +139,7 @@ sourcesRouter.patch('/:id', async (c) => {
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   if (typeof input.enabled === 'boolean' && input.enabled !== current.enabled)
     await enqueueAffectedProfiles(c.env, current.id)
-  if (input.url) {
+  if (input.url || filterChanged) {
     try {
       const job = await createJob(c.env, 'refresh_source', current.id)
       return c.json({ data: { source: sourceView(updated!), jobId: job.id } }, 202)
