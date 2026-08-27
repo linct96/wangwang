@@ -2,6 +2,7 @@ import type { InputHTMLAttributes } from 'react'
 import type { ManualNodeConnection } from '@/api/types'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -31,6 +32,7 @@ export function ConnectionTextField({
   label,
   value,
   onChange,
+  type,
   ...props
 }: {
   id: string
@@ -38,10 +40,11 @@ export function ConnectionTextField({
   value: string | number
   onChange: (value: string) => void
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'value' | 'onChange'>) {
+  const Component = type === 'password' ? PasswordInput : Input
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} value={value} onChange={(event) => onChange(event.target.value)} {...props} />
+      <Component id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} {...props} />
     </Field>
   )
 }
