@@ -377,8 +377,7 @@ function SourcesPage() {
 
     setBusy(id)
     try {
-      if (operation === 'toggle')
-        await api(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })
+      if (operation === 'toggle') await api(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })
       else {
         const result = await api<{ detachedProfileCount: number }>(`/sources/${id}`, { method: 'DELETE' })
         toast.success(
@@ -444,7 +443,13 @@ function SourcesPage() {
                             <div className="traffic-meter">
                               <div className="traffic-meter-label">
                                 <span>{usagePercent.toFixed(1)}%</span>
-                                <div className="traffic-track" role="progressbar" aria-valuenow={usagePercent} aria-valuemin={0} aria-valuemax={100}>
+                                <div
+                                  className="traffic-track"
+                                  role="progressbar"
+                                  aria-valuenow={usagePercent}
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                >
                                   <span style={{ width: `${usagePercent}%` }} />
                                 </div>
                               </div>
@@ -472,7 +477,9 @@ function SourcesPage() {
                       )}
                     </TableCell>
                     <TableCell>{formatDate(source.lastRefreshedAt)}</TableCell>
-                    <TableCell>{source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}</TableCell>
+                    <TableCell>
+                      {source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}
+                    </TableCell>
                     <TableCell className="actions">
                       <IconButton
                         label={status === 'success' ? '刷新成功' : status === 'error' ? '刷新失败' : '刷新'}
@@ -1773,11 +1780,7 @@ function ProfileDetailPage() {
           </div>
         </div>
         <div className="heading-actions">
-          <Button
-            variant="outline"
-            disabled={compileStatus === 'loading' || busy}
-            onClick={() => void run('compile')}
-          >
+          <Button variant="outline" disabled={compileStatus === 'loading' || busy} onClick={() => void run('compile')}>
             {compileStatus === 'loading' ? (
               <RefreshCw data-icon="inline-start" className="spin" />
             ) : compileStatus === 'success' ? (

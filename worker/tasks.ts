@@ -14,7 +14,8 @@ export function parseSubscriptionUserinfo(value: string | null) {
     const [key, raw] = part.trim().split('=', 2)
     if (!['upload', 'download', 'total', 'expire'].includes(key)) continue
     const number = Number(raw)
-    const validExpire = key !== 'expire' || (number <= 8_640_000_000 && Number.isFinite(new Date(number * 1000).getTime()))
+    const validExpire =
+      key !== 'expire' || (number <= 8_640_000_000 && Number.isFinite(new Date(number * 1000).getTime()))
     if (Number.isSafeInteger(number) && number >= 0 && validExpire)
       result[key as 'upload' | 'download' | 'total' | 'expire'] = number
   }
@@ -72,7 +73,10 @@ async function fetchSource(urlValue: string, etag: string | null, lastModified: 
     if (lastModified) headers.set('If-Modified-Since', lastModified)
     const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
     if (response.status === 304)
-      return { notModified: true as const, subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')) }
+      return {
+        notModified: true as const,
+        subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')),
+      }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('Location')
       if (!location || redirect === 3) throw new Error('订阅重定向次数过多')
