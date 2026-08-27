@@ -7,6 +7,20 @@ import { assertRemoteUrl } from './security'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
 
+export function parseSubscriptionUserinfo(value: string | null) {
+  if (!value) return null
+  const result: Partial<Record<'upload' | 'download' | 'total' | 'expire', number>> = {}
+  for (const part of value.split(';')) {
+    const [key, raw] = part.trim().split('=', 2)
+    if (!['upload', 'download', 'total', 'expire'].includes(key)) continue
+    const number = Number(raw)
+    const validExpire = key !== 'expire' || (number <= 8_640_000_000 && Number.isFinite(new Date(number * 1000).getTime()))
+    if (Number.isSafeInteger(number) && number >= 0 && validExpire)
+      result[key as 'upload' | 'download' | 'total' | 'expire'] = number
+  }
+  return Object.keys(result).length ? result : null
+}
+
 export function db(env: Env) {
   return drizzle(env.DB)
 }
@@ -57,7 +71,8 @@ async function fetchSource(urlValue: string, etag: string | null, lastModified: 
     if (etag) headers.set('If-None-Match', etag)
     if (lastModified) headers.set('If-Modified-Since', lastModified)
     const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
-    if (response.status === 304) return { notModified: true as const }
+    if (response.status === 304)
+      return { notModified: true as const, subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')) }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('Location')
       if (!location || redirect === 3) throw new Error('订阅重定向次数过多')
@@ -70,6 +85,7 @@ async function fetchSource(urlValue: string, etag: string | null, lastModified: 
       text: await readResponse(response),
       etag: response.headers.get('ETag'),
       lastModified: response.headers.get('Last-Modified'),
+      subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')),
     }
   }
   throw new Error('订阅获取失败')
@@ -94,7 +110,11 @@ async function replaceSourceNodes(
   env: Env,
   sourceId: string,
   parsed: Awaited<ReturnType<typeof parseProxyText>>,
-  responseMeta?: { etag: string | null; lastModified: string | null },
+  responseMeta?: {
+    etag: string | null
+    lastModified: string | null
+    subscriptionInfo: ReturnType<typeof parseSubscriptionUserinfo>
+  },
 ) {
   await ensureNodeCapacity(
     env,
@@ -137,12 +157,17 @@ async function replaceSourceNodes(
       : null
   statements.push(
     env.DB.prepare(
-      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
+      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
     ).bind(
       parsed.warnings.join('\n') || null,
       parsed.nodes.length,
       responseMeta?.etag ?? source.etag,
       responseMeta?.lastModified ?? source.lastModified,
+      responseMeta?.subscriptionInfo?.upload ?? null,
+      responseMeta?.subscriptionInfo?.download ?? null,
+      responseMeta?.subscriptionInfo?.total ?? null,
+      responseMeta?.subscriptionInfo?.expire ?? null,
+      responseMeta?.subscriptionInfo ? now : null,
       now,
       nextRefresh,
       now,
@@ -206,6 +231,15 @@ export async function refreshSource(env: Env, sourceId: string) {
       .set({
         status: 'ready',
         error: null,
+        ...(response.subscriptionInfo
+          ? {
+              uploadBytes: response.subscriptionInfo.upload ?? null,
+              downloadBytes: response.subscriptionInfo.download ?? null,
+              totalBytes: response.subscriptionInfo.total ?? null,
+              expireAt: response.subscriptionInfo.expire ?? null,
+              infoRefreshedAt: new Date(),
+            }
+          : {}),
         lastRefreshedAt: now,
         nextRefreshAt:
           source.refreshIntervalHours > 0 ? new Date(now.getTime() + source.refreshIntervalHours * 3_600_000) : null,
