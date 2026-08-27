@@ -15,6 +15,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleGauge,
@@ -41,7 +42,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Segmented } from '@/components/ui/segmented'
@@ -51,6 +52,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/data-source'
 import type { Job, ManualNodeConnection, NodeDetail, NodeItem, Profile, RuleModule, Source } from '@/data-source'
 import { parseVlessLink } from '@/lib/vless'
@@ -98,6 +100,19 @@ function formatDate(value: string | null) {
   return value
     ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
     : '-'
+}
+
+function formatBytes(value: number | null) {
+  if (value == null) return '未提供'
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let amount = value
+  let unit = -1
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024
+    unit += 1
+  }
+  return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
 function Status({ value }: { value: string }) {
@@ -334,13 +349,35 @@ function SourcesPage() {
   const [editing, setEditing] = useState<Source>()
   const [deleting, setDeleting] = useState<Source>()
   const [busy, setBusy] = useState('')
+  const [refreshStatus, setRefreshStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
+
   async function action(id: string, operation: 'refresh' | 'toggle' | 'delete', enabled?: boolean) {
-    setBusy(id)
-    try {
-      if (operation === 'refresh') {
+    if (operation === 'refresh') {
+      setRefreshStatus((prev) => ({ ...prev, [id]: 'loading' }))
+      try {
         const result = await api<{ jobId: string }>(`/sources/${id}/refresh`, { method: 'POST' })
         await waitForJob(result.jobId)
-      } else if (operation === 'toggle')
+        setRefreshStatus((prev) => ({ ...prev, [id]: 'success' }))
+        toast.success('节点源刷新成功')
+      } catch (reason) {
+        setRefreshStatus((prev) => ({ ...prev, [id]: 'error' }))
+        toast.error(reason instanceof Error ? reason.message : '刷新失败')
+      } finally {
+        setTimeout(() => {
+          setRefreshStatus((prev) => {
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+        }, 1500)
+        await reload()
+      }
+      return
+    }
+
+    setBusy(id)
+    try {
+      if (operation === 'toggle')
         await api(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) })
       else {
         const result = await api<{ detachedProfileCount: number }>(`/sources/${id}`, { method: 'DELETE' })
@@ -375,56 +412,102 @@ function SourcesPage() {
             <TableRow>
               <TableHead>名称</TableHead>
               <TableHead>节点</TableHead>
+              <TableHead>流量使用</TableHead>
+              <TableHead>到期</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>上次刷新</TableHead>
-              <TableHead>周期</TableHead>
-              <TableHead className="actions">操作</TableHead>
+              <TableHead>刷新间隔</TableHead>
+              <TableHead className="actions text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length ? (
-              data.map((source) => (
-                <TableRow key={source.id}>
-                  <TableCell>
-                    <div className="cell-main">{source.name}</div>
-                    <div className="cell-sub">{source.url || '-'}</div>
-                  </TableCell>
-                  <TableCell>{source.nodeCount}</TableCell>
-                  <TableCell>
-                    <Status value={busy === source.id ? 'refreshing' : source.status} />
-                    {(source.error || source.warning) && (
-                      <div className="cell-sub source-message" title={source.error || source.warning || ''}>
-                        {source.error || source.warning}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>{formatDate(source.lastRefreshedAt)}</TableCell>
-                  <TableCell>{source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}</TableCell>
-                  <TableCell className="actions">
-                    <Switch
-                      aria-label={source.enabled ? '停用' : '启用'}
-                      checked={source.enabled}
-                      onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
-                    />
-                    <IconButton
-                      label="刷新"
-                      disabled={busy === source.id || !source.enabled}
-                      onClick={() => void action(source.id, 'refresh')}
-                    >
-                      <RefreshCw className={busy === source.id ? 'spin' : ''} />
-                    </IconButton>
-                    <IconButton label="编辑" onClick={() => setEditing(source)}>
-                      <Pencil />
-                    </IconButton>
-                    <IconButton label="删除" onClick={() => setDeleting(source)}>
-                      <Trash2 />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
+              data.map((source) => {
+                const status = refreshStatus[source.id]
+                const isRefreshing = status === 'loading'
+                const usedBytes = (source.uploadBytes || 0) + (source.downloadBytes || 0)
+                const totalBytes = source.totalBytes
+                const usagePercent = totalBytes ? Math.min(100, (usedBytes / totalBytes) * 100) : null
+                return (
+                  <TableRow key={source.id}>
+                    <TableCell>
+                      <div className="cell-main">{source.name}</div>
+                      <div className="cell-sub">{source.url || '-'}</div>
+                    </TableCell>
+                    <TableCell>{source.nodeCount}</TableCell>
+                    <TableCell>
+                      {usagePercent == null ? (
+                        '-'
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="traffic-meter">
+                              <div className="traffic-meter-label">
+                                <span>{usagePercent.toFixed(1)}%</span>
+                                <div className="traffic-track" role="progressbar" aria-valuenow={usagePercent} aria-valuemin={0} aria-valuemax={100}>
+                                  <span style={{ width: `${usagePercent}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            上传：{formatBytes(source.uploadBytes)} · 下载：{formatBytes(source.downloadBytes)}
+                            <br />
+                            已用：{formatBytes(usedBytes)} · 总量：{formatBytes(totalBytes)}
+                            <br />
+                            剩余：{formatBytes(Math.max((totalBytes || 0) - usedBytes, 0))}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {source.expireAt == null ? '-' : formatDate(new Date(source.expireAt * 1000).toISOString())}
+                    </TableCell>
+                    <TableCell>
+                      <Status value={isRefreshing ? 'refreshing' : busy === source.id ? 'refreshing' : source.status} />
+                      {(source.error || source.warning) && (
+                        <div className="cell-sub source-message" title={source.error || source.warning || ''}>
+                          {source.error || source.warning}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>{formatDate(source.lastRefreshedAt)}</TableCell>
+                    <TableCell>{source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}</TableCell>
+                    <TableCell className="actions">
+                      <IconButton
+                        label={status === 'success' ? '刷新成功' : status === 'error' ? '刷新失败' : '刷新'}
+                        disabled={isRefreshing || busy === source.id || !source.enabled}
+                        onClick={() => void action(source.id, 'refresh')}
+                      >
+                        {isRefreshing ? (
+                          <RefreshCw className="spin" />
+                        ) : status === 'success' ? (
+                          <Check className="text-emerald-600 dark:text-emerald-400" />
+                        ) : status === 'error' ? (
+                          <X className="text-destructive" />
+                        ) : (
+                          <RefreshCw />
+                        )}
+                      </IconButton>
+                      <IconButton label="编辑" onClick={() => setEditing(source)}>
+                        <Pencil />
+                      </IconButton>
+                      <IconButton label="删除" onClick={() => setDeleting(source)}>
+                        <Trash2 />
+                      </IconButton>
+                      <Switch
+                        className="ml-3.5"
+                        aria-label={source.enabled ? '停用' : '启用'}
+                        checked={source.enabled}
+                        onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="empty">
+                <TableCell colSpan={8} className="empty">
                   暂无外部订阅
                 </TableCell>
               </TableRow>
@@ -508,11 +591,11 @@ function SourceDialog({
   onSaved: (jobId: string | null) => void
 }) {
   const [name, setName] = useState(source?.name || '')
-  const [url, setUrl] = useState('')
+  const [url, setUrl] = useState(source?.url || '')
   const [interval, setInterval] = useState(source?.refreshIntervalHours ?? 6)
-  const [enabled, setEnabled] = useState(source?.enabled ?? true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const urlChanged = url.trim() !== (source?.url || '')
   async function submit(event: FormEvent) {
     event.preventDefault()
     setSaving(true)
@@ -522,9 +605,8 @@ function SourceDialog({
         method: source ? 'PATCH' : 'POST',
         body: JSON.stringify({
           name,
-          url: url || undefined,
+          url: source ? (urlChanged ? url.trim() : undefined) : url.trim(),
           refreshIntervalHours: interval,
-          enabled: source ? enabled : undefined,
         }),
       })
       onSaved(result.jobId)
@@ -549,19 +631,18 @@ function SourceDialog({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="source-url">{source ? '新订阅地址' : '订阅地址'}</FieldLabel>
+            <FieldLabel htmlFor="source-url">订阅地址</FieldLabel>
             <Input
               id="source-url"
-              required={!source}
+              required
               type="url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
-              placeholder={source ? '留空表示不修改' : 'https://example.com/sub'}
+              placeholder="https://example.com/sub"
             />
-            {source && <FieldDescription>当前地址：{source.url}</FieldDescription>}
           </Field>
           <Field>
-            <FieldLabel>刷新周期</FieldLabel>
+            <FieldLabel>刷新间隔</FieldLabel>
             <Select value={String(interval)} onValueChange={(value) => setInterval(Number(value))}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -577,12 +658,6 @@ function SourceDialog({
               </SelectContent>
             </Select>
           </Field>
-          {source && (
-            <Field orientation="horizontal">
-              <Switch id="source-enabled" checked={enabled} onCheckedChange={setEnabled} />
-              <FieldLabel htmlFor="source-enabled">启用订阅</FieldLabel>
-            </Field>
-          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -595,7 +670,7 @@ function SourceDialog({
           </Button>
           <Button disabled={saving}>
             {saving && <RefreshCw data-icon="inline-start" className="spin" />}
-            {source ? (url ? '保存并验证' : '保存') : '添加并刷新'}
+            {source ? (urlChanged ? '保存并验证' : '保存') : '添加并刷新'}
           </Button>
         </footer>
       </form>
@@ -718,7 +793,7 @@ function NodesPage() {
               <TableHead>服务器</TableHead>
               <TableHead>标签</TableHead>
               <TableHead>状态</TableHead>
-              <TableHead className="actions">操作</TableHead>
+              <TableHead className="actions text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1653,17 +1728,29 @@ function ProfileDetailPage() {
   const [editing, setEditing] = useState(false)
   const [activeTab, setActiveTab] = useState<'link' | 'preview'>('link')
   const [busy, setBusy] = useState(false)
+  const [compileStatus, setCompileStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   async function run(operation: 'compile' | 'rotate') {
-    setBusy(true)
-    try {
-      if (operation === 'compile') {
+    if (operation === 'compile') {
+      setCompileStatus('loading')
+      try {
         const result = await api<{ jobId: string }>(`/profiles/${id}/compile`, { method: 'POST' })
         await waitForJob(result.jobId)
+        setCompileStatus('success')
         toast.success('配置重新生成成功')
-      } else {
-        await api(`/profiles/${id}/rotate-token`, { method: 'POST' })
-        toast.success('订阅令牌已轮换')
+      } catch (reason) {
+        setCompileStatus('error')
+        toast.error(reason instanceof Error ? reason.message : '重新生成失败')
+      } finally {
+        setTimeout(() => setCompileStatus('idle'), 1500)
+        await reload()
       }
+      return
+    }
+
+    setBusy(true)
+    try {
+      await api(`/profiles/${id}/rotate-token`, { method: 'POST' })
+      toast.success('订阅令牌已轮换')
       await reload()
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '操作失败')
@@ -1686,9 +1773,27 @@ function ProfileDetailPage() {
           </div>
         </div>
         <div className="heading-actions">
-          <Button variant="outline" disabled={busy} onClick={() => void run('compile')}>
-            <RefreshCw data-icon="inline-start" className={busy ? 'spin' : ''} />
-            重新生成
+          <Button
+            variant="outline"
+            disabled={compileStatus === 'loading' || busy}
+            onClick={() => void run('compile')}
+          >
+            {compileStatus === 'loading' ? (
+              <RefreshCw data-icon="inline-start" className="spin" />
+            ) : compileStatus === 'success' ? (
+              <Check data-icon="inline-start" className="text-emerald-600 dark:text-emerald-400" />
+            ) : compileStatus === 'error' ? (
+              <X data-icon="inline-start" className="text-destructive" />
+            ) : (
+              <RefreshCw data-icon="inline-start" />
+            )}
+            {compileStatus === 'loading'
+              ? '正在生成'
+              : compileStatus === 'success'
+                ? '生成成功'
+                : compileStatus === 'error'
+                  ? '生成失败'
+                  : '重新生成'}
           </Button>
           <Button onClick={() => setEditing(true)}>
             <Settings2 data-icon="inline-start" />

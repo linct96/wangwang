@@ -416,8 +416,15 @@
 }
 
 .actions {
+  width: 172px;
+  min-width: 172px;
+  max-width: 172px;
   text-align: right;
   white-space: nowrap;
+}
+
+th.actions {
+  text-align: center;
 }
 
 .actions > * + * {
@@ -445,6 +452,35 @@
 
 .source-message {
   max-width: 190px;
+}
+
+.traffic-meter {
+  position: relative;
+  width: 128px;
+}
+
+.traffic-meter-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.traffic-track {
+  height: 6px;
+  flex: 1;
+  margin-top: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--muted);
+}
+
+.traffic-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
 }
 
 .node-name {

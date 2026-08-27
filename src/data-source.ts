@@ -21,6 +21,11 @@ export type Source = {
   error: string | null
   nodeCount: number
   lastRefreshedAt: string | null
+  uploadBytes: number | null
+  downloadBytes: number | null
+  totalBytes: number | null
+  expireAt: number | null
+  infoRefreshedAt: string | null
 }
 
 export type NodeItem = {
@@ -124,6 +129,11 @@ function seedState(): LocalState {
       warning: null,
       error: null,
       nodeCount: 6,
+      uploadBytes: null,
+      downloadBytes: null,
+      totalBytes: null,
+      expireAt: null,
+      infoRefreshedAt: null,
       lastRefreshedAt: updatedAt,
     },
     {
@@ -139,6 +149,31 @@ function seedState(): LocalState {
       warning: null,
       error: null,
       nodeCount: 2,
+      uploadBytes: null,
+      downloadBytes: null,
+      totalBytes: null,
+      expireAt: null,
+      infoRefreshedAt: null,
+      lastRefreshedAt: updatedAt,
+    },
+    {
+      id: 'source-test',
+      name: '测试订阅（含流量信息）',
+      kind: 'url',
+      url: 'https://example.com/test-sub?***',
+      pendingUrl: false,
+      profileCount: 0,
+      refreshIntervalHours: 6,
+      enabled: true,
+      status: 'ready',
+      warning: null,
+      error: null,
+      nodeCount: 2,
+      uploadBytes: 1_610_612_736,
+      downloadBytes: 8_589_934_592,
+      totalBytes: 107_374_182_400,
+      expireAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+      infoRefreshedAt: updatedAt,
       lastRefreshedAt: updatedAt,
     },
   ]
@@ -149,6 +184,8 @@ function seedState(): LocalState {
     ['新加坡 01', 'hysteria2', 'sg-01.example.com', 8443, ['新加坡', '低延迟'], 'source-main'],
     ['美国 01', 'tuic', 'us-01.example.com', 443, ['美国'], 'source-main'],
     ['台湾 01', 'ss', 'tw-01.example.com', 8388, ['台湾'], 'source-main'],
+    ['测试节点 01', 'vless', 'test-01.example.com', 443, ['测试'], 'source-test'],
+    ['测试节点 02', 'trojan', 'test-02.example.com', 443, ['测试'], 'source-test'],
     ['备用 01', 'vless', 'backup-01.example.com', 443, ['备用'], 'system-manual'],
     ['备用 02', 'trojan', 'backup-02.example.com', 443, ['备用'], 'system-manual'],
   ] as const
@@ -266,6 +303,11 @@ function readState() {
           warning: null,
           error: null,
           nodeCount: nodes.filter((node) => node.sourceIds.includes('system-manual')).length,
+          uploadBytes: null,
+          downloadBytes: null,
+          totalBytes: null,
+          expireAt: null,
+          infoRefreshedAt: null,
           lastRefreshedAt: null,
         },
       ]
@@ -384,6 +426,11 @@ async function localApi<T>(path: string, init?: RequestInit): Promise<T> {
       warning: null,
       error: null,
       nodeCount: 0,
+      uploadBytes: null,
+      downloadBytes: null,
+      totalBytes: null,
+      expireAt: null,
+      infoRefreshedAt: null,
       lastRefreshedAt: now(),
     }
     state.sources.unshift(source)
