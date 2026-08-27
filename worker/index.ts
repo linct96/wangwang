@@ -400,23 +400,21 @@ async function authenticated(c: AppContext) {
 }
 
 app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/auth/login' || c.req.path === '/api/auth/init') return next()
+  if (c.req.path === '/api/auth/login' || c.req.path === '/api/auth/init' || c.req.path === '/api/auth/status')
+    return next()
   if (!(await authenticated(c))) return fail(c, 401, 'AUTH_REQUIRED', '请先登录')
   if (!validOrigin(c.req.raw)) return fail(c, 403, 'ORIGIN_DENIED', '请求来源无效')
   await next()
 })
 
 app.post('/api/auth/login', async (c) => {
-  const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(1) }))
-  const account = await c.env.DB.prepare(
-    'SELECT email,password_hash,password_salt FROM admin_account WHERE id = 1',
-  ).first<{ email: string; password_hash: string; password_salt: string }>()
-  if (
-    !account ||
-    account.email !== input.email.trim().toLowerCase() ||
-    !(await verifyPassword(input.password, account.password_salt, account.password_hash))
-  )
-    return fail(c, 401, 'LOGIN_FAILED', '邮箱或密码错误')
+  const input = await body(c, z.object({ password: z.string().min(1) }))
+  const account = await c.env.DB.prepare('SELECT password_hash,password_salt FROM admin_account WHERE id = 1').first<{
+    password_hash: string
+    password_salt: string
+  }>()
+  if (!account || !(await verifyPassword(input.password, account.password_salt, account.password_hash)))
+    return fail(c, 401, 'LOGIN_FAILED', '密码错误')
   const token = newSessionToken()
   await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)')
     .bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now())
@@ -425,24 +423,28 @@ app.post('/api/auth/login', async (c) => {
     'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`,
   })
 })
+app.get('/api/auth/status', async (c) => c.json({ data: { initialized: await hasAdmin(c.env) } }))
 app.post('/api/auth/init', async (c) => {
   if (await hasAdmin(c.env)) return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
-  const input = await body(
-    c,
-    z.object({ email: z.string().email(), password: z.string().min(12), confirmPassword: z.string() }),
-  )
+  const input = await body(c, z.object({ password: z.string().min(12), confirmPassword: z.string() }))
   if (input.password !== input.confirmPassword) return fail(c, 422, 'PASSWORD_MISMATCH', '两次密码输入不一致')
   const { hash, salt } = await hashPassword(input.password)
   try {
     await c.env.DB.prepare(
       'INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)',
     )
-      .bind(input.email.trim().toLowerCase(), hash, salt, Date.now())
+      .bind('', hash, salt, Date.now())
       .run()
   } catch {
     return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
   }
-  return c.json({ data: { ok: true } })
+  const token = newSessionToken()
+  await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)')
+    .bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now())
+    .run()
+  return c.json({ data: { ok: true } }, 200, {
+    'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`,
+  })
 })
 app.post('/api/auth/logout', async (c) => {
   const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]

@@ -390,10 +390,13 @@ async function localApi<T>(path: string, init?: RequestInit): Promise<T> {
   const state = readState()
   const body = parseBody(init)
 
+  if (pathname === '/auth/status' && method === 'GET')
+    return { initialized: localStorage.getItem('wangwang:local-admin') === '1' } as T
   if (pathname === '/auth/login' && method === 'POST') return { ok: true } as T
   if (pathname === '/auth/init' && method === 'POST') {
     if (String(body.password || '').length < 12) throw new Error('密码至少需要 12 位')
     if (body.password !== body.confirmPassword) throw new Error('两次密码输入不一致')
+    localStorage.setItem('wangwang:local-admin', '1')
     return { ok: true } as T
   }
   if (pathname === '/auth/logout' && method === 'POST') return { ok: true } as T
