@@ -145,7 +145,13 @@ function LoginPage() {
   return <main className="auth-page"><form className="form auth-form" onSubmit={submit}><h1>Wangwang 登录</h1><label>邮箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>密码<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div className="alert error">{error}</div>}<button className="primary">登录</button></form></main>
 }
 
+function InitPage() {
+  const navigate = useNavigate(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [confirmPassword, setConfirmPassword] = useState(''); const [error, setError] = useState(''); const [saving, setSaving] = useState(false)
+  async function submit(event: FormEvent) { event.preventDefault(); setError(''); setSaving(true); try { await api('/auth/init', { method: 'POST', body: JSON.stringify({ email, password, confirmPassword }) }); navigate('/login') } catch (reason) { setError(reason instanceof Error ? reason.message : '初始化失败'); setSaving(false) } }
+  return <main className="auth-page"><form className="form auth-form" onSubmit={submit}><h1>初始化 Wangwang</h1><label>邮箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>密码<input type="password" required minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} /></label><label>确认密码<input type="password" required minLength={12} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>{error && <div className="alert error">{error}</div>}<button className="primary" disabled={saving}>{saving && <RefreshCw className="spin" />}完成初始化</button></form></main>
+}
+
 export default function App() {
   const basename = window.location.pathname.startsWith('/admin') ? '/admin' : undefined
-  return <BrowserRouter basename={basename}><Routes><Route path="/init" element={<Navigate to="/" replace />} /><Route path="/login" element={<LoginPage />} /><Route path="*" element={<Layout />} /></Routes></BrowserRouter>
+  return <BrowserRouter basename={basename}><Routes><Route path="/init" element={<InitPage />} /><Route path="/login" element={<LoginPage />} /><Route path="*" element={<Layout />} /></Routes></BrowserRouter>
 }

@@ -134,26 +134,24 @@ app.use('/admin/api/*', async (c, next) => {
   await next()
 })
 
-app.get('/init', async (c) => {
-  if (await hasAdmin(c.env)) return c.redirect('/admin/login')
-  return c.html('<!doctype html><meta charset="utf-8"><title>初始化 Wangwang</title><style>body{font:16px system-ui;max-width:420px;margin:12vh auto;padding:24px}label{display:block;margin:14px 0}input{display:block;width:100%;padding:10px;box-sizing:border-box}button{padding:10px 18px}</style><h1>初始化管理员</h1><form method="post" action="/api/init"><label>邮箱<input name="email" type="email" required></label><label>密码<input name="password" type="password" minlength="12" required></label><label>确认密码<input name="confirmPassword" type="password" minlength="12" required></label><button>完成初始化</button></form>')
-})
-app.post('/api/init', async (c) => {
-  if (await hasAdmin(c.env)) return c.redirect('/admin/login')
-  const form = await c.req.parseBody()
-  const email = String(form.email || '').trim().toLowerCase(); const password = String(form.password || ''); const confirm = String(form.confirmPassword || '')
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 12 || password !== confirm) return c.text('邮箱无效、密码至少 12 位且两次必须一致', 400)
-  const { hash, salt } = await hashPassword(password)
-  try { await c.env.DB.prepare('INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)').bind(1, email, hash, salt, Date.now()).run() } catch { return c.redirect('/admin/login') }
-  return c.redirect('/admin/login')
-})
-
 app.post('/admin/api/auth/login', async (c) => {
   const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(1) }))
   const account = await c.env.DB.prepare('SELECT email,password_hash,password_salt FROM admin_account WHERE id = 1').first<{ email: string; password_hash: string; password_salt: string }>()
   if (!account || account.email !== input.email.trim().toLowerCase() || !(await verifyPassword(input.password, account.password_salt, account.password_hash))) return fail(c, 401, 'LOGIN_FAILED', '邮箱或密码错误')
   const token = newSessionToken(); await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)').bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now()).run()
   return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}` })
+})
+app.post('/admin/api/auth/init', async (c) => {
+  if (await hasAdmin(c.env)) return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
+  const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(12), confirmPassword: z.string() }))
+  if (input.password !== input.confirmPassword) return fail(c, 422, 'PASSWORD_MISMATCH', '两次密码输入不一致')
+  const { hash, salt } = await hashPassword(input.password)
+  try {
+    await c.env.DB.prepare('INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)').bind(1, input.email.trim().toLowerCase(), hash, salt, Date.now()).run()
+  } catch {
+    return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
+  }
+  return c.json({ data: { ok: true } })
 })
 app.post('/admin/api/auth/logout', async (c) => { const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]; if (token) await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await sessionHash(token)).run(); return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': 'ww_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }) })
 
@@ -412,6 +410,8 @@ async function adminAsset(c: AppContext) {
 }
 
 app.get('/', (c) => c.redirect('/admin'))
+app.get('/init', adminAsset)
+app.get('/login', adminAsset)
 app.get('/admin', adminAsset)
 app.get('/admin/*', adminAsset)
 

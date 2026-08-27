@@ -87,6 +87,9 @@ td.actions .icon-button, td.actions .switch { display: inline-grid; vertical-ali
 .form textarea { resize: vertical; padding: 10px 11px; line-height: 1.5; }
 .form input:focus, .form select:focus, .form textarea:focus, .copy-field input:focus { border-color: #168460; box-shadow: 0 0 0 3px rgba(22, 132, 96, .12); }
 .form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 4px; }
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: #f4f6f8; }
+.auth-form { width: min(420px, 100%); border: 1px solid #dfe3e8; border-radius: 7px; background: #fff; box-shadow: 0 12px 30px rgba(20, 30, 40, .08); }
+.auth-form h1 { margin: 0; font-size: 21px; }
 .file-input { margin-top: 4px; padding: 7px !important; }
 .segmented { display: inline-flex; width: fit-content; padding: 3px; border-radius: 6px; background: #edf0f2; }
 .segmented button { min-height: 31px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; color: #5f6b76; font-size: 12px; }
