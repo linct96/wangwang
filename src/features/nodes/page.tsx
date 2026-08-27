@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export function NodesPage() {
@@ -111,8 +112,8 @@ export function NodesPage() {
           </div>
         )}
       </div>
-      <PageState loading={loading} error={error} />
-      <section className="section table-wrap">
+      {error && <PageState loading={false} error={error} />}
+      <section className="section table-wrap" aria-busy={loading}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -132,7 +133,15 @@ export function NodesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.items.length ? (
+            {loading && !data ? (
+              Array.from({ length: 8 }, (_, index) => (
+                <TableRow key={index} aria-hidden="true">
+                  <TableCell colSpan={7}>
+                    <Skeleton className="h-8 w-full" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : data?.items.length ? (
               data.items.map((node) => (
                 <TableRow key={node.id}>
                   <TableCell className="checkbox">
