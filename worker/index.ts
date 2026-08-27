@@ -403,7 +403,7 @@ async function adminAsset(c: AppContext) {
   let response = await c.env.ASSETS.fetch(c.req.raw)
   if (response.status === 404 && c.req.method === 'GET') {
     const url = new URL(c.req.url)
-    url.pathname = '/admin/index.html'
+    url.pathname = '/index.html'
     response = await c.env.ASSETS.fetch(new Request(url, c.req.raw))
   }
   return response
