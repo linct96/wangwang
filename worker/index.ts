@@ -4,7 +4,17 @@ import type { Context } from 'hono'
 import { z } from 'zod'
 import { jobs, nodes, profileNodeExclusions, profiles, profileSources, sources } from './db'
 import type { QueueMessage, RuleModule } from './db'
-import { assertRemoteUrl, constantTimeEqual, hashPassword, newSessionToken, SESSION_TTL, sessionHash, subscriptionToken, validOrigin, verifyPassword } from './security'
+import {
+  assertRemoteUrl,
+  constantTimeEqual,
+  hashPassword,
+  newSessionToken,
+  SESSION_TTL,
+  sessionHash,
+  subscriptionToken,
+  validOrigin,
+  verifyPassword,
+} from './security'
 import { createJob, db, processQueueMessage } from './tasks'
 
 const sourceCreateSchema = z
@@ -12,12 +22,17 @@ const sourceCreateSchema = z
     name: z.string().trim().min(1).max(60),
     kind: z.enum(['url', 'manual']),
     url: z.string().trim().max(2048).optional(),
-    content: z.string().max(1024 * 1024).optional(),
+    content: z
+      .string()
+      .max(1024 * 1024)
+      .optional(),
     refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   })
   .superRefine((value, context) => {
-    if (value.kind === 'url' && !value.url) context.addIssue({ code: 'custom', message: 'URL 节点源必须填写地址', path: ['url'] })
-    if (value.kind === 'manual' && !value.content?.trim()) context.addIssue({ code: 'custom', message: '手动节点源必须填写内容', path: ['content'] })
+    if (value.kind === 'url' && !value.url)
+      context.addIssue({ code: 'custom', message: 'URL 节点源必须填写地址', path: ['url'] })
+    if (value.kind === 'manual' && !value.content?.trim())
+      context.addIssue({ code: 'custom', message: '手动节点源必须填写内容', path: ['content'] })
   })
 
 const sourceUpdateSchema = z.object({
@@ -83,7 +98,9 @@ function sourceView(source: typeof sources.$inferSelect) {
 
 async function assertSourceIds(env: Env, ids: string[]) {
   const unique = [...new Set(ids)]
-  const rows = await Promise.all(unique.map((id) => db(env).select({ id: sources.id }).from(sources).where(eq(sources.id, id)).get()))
+  const rows = await Promise.all(
+    unique.map((id) => db(env).select({ id: sources.id }).from(sources).where(eq(sources.id, id)).get()),
+  )
   if (rows.some((row) => !row)) throw new Error('包含不存在的节点源')
   return unique
 }
@@ -93,15 +110,27 @@ async function saveProfileRelations(env: Env, profileId: string, sourceIds: stri
     env.DB.prepare('DELETE FROM profile_sources WHERE profile_id = ?').bind(profileId),
     env.DB.prepare('DELETE FROM profile_node_exclusions WHERE profile_id = ?').bind(profileId),
   ]
-  sourceIds.forEach((sourceId) => statements.push(env.DB.prepare('INSERT INTO profile_sources (profile_id, source_id) VALUES (?, ?)').bind(profileId, sourceId)))
+  sourceIds.forEach((sourceId) =>
+    statements.push(
+      env.DB.prepare('INSERT INTO profile_sources (profile_id, source_id) VALUES (?, ?)').bind(profileId, sourceId),
+    ),
+  )
   ;[...new Set(excludedNodeIds)].forEach((nodeId) =>
-    statements.push(env.DB.prepare('INSERT OR IGNORE INTO profile_node_exclusions (profile_id, node_id) VALUES (?, ?)').bind(profileId, nodeId)),
+    statements.push(
+      env.DB.prepare('INSERT OR IGNORE INTO profile_node_exclusions (profile_id, node_id) VALUES (?, ?)').bind(
+        profileId,
+        nodeId,
+      ),
+    ),
   )
   await env.DB.batch(statements)
 }
 
 async function profileView(env: Env, profile: typeof profiles.$inferSelect, origin: string, includeYaml = false) {
-  const sourceRows = await db(env).select({ id: profileSources.sourceId }).from(profileSources).where(eq(profileSources.profileId, profile.id))
+  const sourceRows = await db(env)
+    .select({ id: profileSources.sourceId })
+    .from(profileSources)
+    .where(eq(profileSources.profileId, profile.id))
   const exclusionRows = await db(env)
     .select({ id: profileNodeExclusions.nodeId })
     .from(profileNodeExclusions)
@@ -118,12 +147,16 @@ async function profileView(env: Env, profile: typeof profiles.$inferSelect, orig
 
 const app = new Hono<{ Bindings: Env }>()
 
-async function hasAdmin(env: Env) { return Boolean(await env.DB.prepare('SELECT id FROM admin_account WHERE id = 1').first()) }
+async function hasAdmin(env: Env) {
+  return Boolean(await env.DB.prepare('SELECT id FROM admin_account WHERE id = 1').first())
+}
 async function authenticated(c: AppContext) {
   const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]
   if (!token) return false
   const hash = await sessionHash(token)
-  const row = await c.env.DB.prepare('SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND expires_at > ?').bind(hash, Date.now()).first()
+  const row = await c.env.DB.prepare('SELECT token_hash FROM admin_sessions WHERE token_hash = ? AND expires_at > ?')
+    .bind(hash, Date.now())
+    .first()
   return Boolean(row)
 }
 
@@ -136,24 +169,52 @@ app.use('/api/*', async (c, next) => {
 
 app.post('/api/auth/login', async (c) => {
   const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(1) }))
-  const account = await c.env.DB.prepare('SELECT email,password_hash,password_salt FROM admin_account WHERE id = 1').first<{ email: string; password_hash: string; password_salt: string }>()
-  if (!account || account.email !== input.email.trim().toLowerCase() || !(await verifyPassword(input.password, account.password_salt, account.password_hash))) return fail(c, 401, 'LOGIN_FAILED', '邮箱或密码错误')
-  const token = newSessionToken(); await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)').bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now()).run()
-  return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}` })
+  const account = await c.env.DB.prepare(
+    'SELECT email,password_hash,password_salt FROM admin_account WHERE id = 1',
+  ).first<{ email: string; password_hash: string; password_salt: string }>()
+  if (
+    !account ||
+    account.email !== input.email.trim().toLowerCase() ||
+    !(await verifyPassword(input.password, account.password_salt, account.password_hash))
+  )
+    return fail(c, 401, 'LOGIN_FAILED', '邮箱或密码错误')
+  const token = newSessionToken()
+  await c.env.DB.prepare('INSERT INTO admin_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)')
+    .bind(await sessionHash(token), Date.now() + SESSION_TTL, Date.now())
+    .run()
+  return c.json({ data: { ok: true } }, 200, {
+    'Set-Cookie': `ww_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`,
+  })
 })
 app.post('/api/auth/init', async (c) => {
   if (await hasAdmin(c.env)) return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
-  const input = await body(c, z.object({ email: z.string().email(), password: z.string().min(12), confirmPassword: z.string() }))
+  const input = await body(
+    c,
+    z.object({ email: z.string().email(), password: z.string().min(12), confirmPassword: z.string() }),
+  )
   if (input.password !== input.confirmPassword) return fail(c, 422, 'PASSWORD_MISMATCH', '两次密码输入不一致')
   const { hash, salt } = await hashPassword(input.password)
   try {
-    await c.env.DB.prepare('INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)').bind(1, input.email.trim().toLowerCase(), hash, salt, Date.now()).run()
+    await c.env.DB.prepare(
+      'INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)',
+    )
+      .bind(input.email.trim().toLowerCase(), hash, salt, Date.now())
+      .run()
   } catch {
     return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')
   }
   return c.json({ data: { ok: true } })
 })
-app.post('/api/auth/logout', async (c) => { const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]; if (token) await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').bind(await sessionHash(token)).run(); return c.json({ data: { ok: true } }, 200, { 'Set-Cookie': 'ww_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }) })
+app.post('/api/auth/logout', async (c) => {
+  const token = c.req.header('Cookie')?.match(/(?:^|;\s*)ww_session=([^;]+)/)?.[1]
+  if (token)
+    await c.env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash = ?')
+      .bind(await sessionHash(token))
+      .run()
+  return c.json({ data: { ok: true } }, 200, {
+    'Set-Cookie': 'ww_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
+  })
+})
 
 app.get('/healthz', async (c) => {
   const result = await db(c.env).get<{ ok: number }>(sql`SELECT 1 AS ok`)
@@ -202,10 +263,17 @@ app.post('/api/sources', async (c) => {
 
 app.patch('/api/sources/:id', async (c) => {
   const input = await body(c, sourceUpdateSchema)
-  const current = await db(c.env).select().from(sources).where(eq(sources.id, c.req.param('id'))).get()
+  const current = await db(c.env)
+    .select()
+    .from(sources)
+    .where(eq(sources.id, c.req.param('id')))
+    .get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
-  const nextRefreshAt = current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0 ? new Date(Date.now() + interval * 3_600_000) : null
+  const nextRefreshAt =
+    current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
+      ? new Date(Date.now() + interval * 3_600_000)
+      : null
   await db(c.env)
     .update(sources)
     .set({ ...input, nextRefreshAt, updatedAt: new Date() })
@@ -218,15 +286,24 @@ app.delete('/api/sources/:id', async (c) => {
   const id = c.req.param('id')
   const current = await db(c.env).select().from(sources).where(eq(sources.id, id)).get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
-  const affected = await db(c.env).select({ id: profileSources.profileId }).from(profileSources).where(eq(profileSources.sourceId, id))
+  const affected = await db(c.env)
+    .select({ id: profileSources.profileId })
+    .from(profileSources)
+    .where(eq(profileSources.sourceId, id))
   await db(c.env).delete(sources).where(eq(sources.id, id))
-  await c.env.DB.prepare('DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)').run()
+  await c.env.DB.prepare(
+    'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)',
+  ).run()
   for (const profile of affected) await createJob(c.env, 'compile_profile', profile.id)
   return ok(c, { id })
 })
 
 app.post('/api/sources/:id/refresh', async (c) => {
-  const current = await db(c.env).select({ id: sources.id }).from(sources).where(eq(sources.id, c.req.param('id'))).get()
+  const current = await db(c.env)
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.id, c.req.param('id')))
+    .get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   const job = await createJob(c.env, 'refresh_source', current.id)
   return c.json({ data: { jobId: job.id } }, 202)
@@ -241,15 +318,25 @@ app.get('/api/nodes', async (c) => {
   const sourceId = c.req.query('sourceId')?.trim()
   const enabled = c.req.query('enabled')
   const filters = and(
-    query ? or(like(nodes.alias, `%${query}%`), like(nodes.server, `%${query}%`), sql`${nodes.config} LIKE ${`%${query}%`}`) : undefined,
+    query
+      ? or(like(nodes.alias, `%${query}%`), like(nodes.server, `%${query}%`), sql`${nodes.config} LIKE ${`%${query}%`}`)
+      : undefined,
     protocol ? eq(nodes.protocol, protocol) : undefined,
     tag ? sql`${nodes.tags} LIKE ${`%"${tag.replaceAll('"', '')}"%`}` : undefined,
     enabled === 'true' ? eq(nodes.enabled, true) : enabled === 'false' ? eq(nodes.enabled, false) : undefined,
-    sourceId ? sql`EXISTS (SELECT 1 FROM source_nodes sn WHERE sn.node_id = ${nodes.id} AND sn.source_id = ${sourceId})` : undefined,
+    sourceId
+      ? sql`EXISTS (SELECT 1 FROM source_nodes sn WHERE sn.node_id = ${nodes.id} AND sn.source_id = ${sourceId})`
+      : undefined,
   )
   const database = db(c.env)
   const [rows, [{ total }]] = await Promise.all([
-    database.select().from(nodes).where(filters).orderBy(asc(nodes.protocol), asc(nodes.server)).limit(pageSize).offset((page - 1) * pageSize),
+    database
+      .select()
+      .from(nodes)
+      .where(filters)
+      .orderBy(asc(nodes.protocol), asc(nodes.server))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
     database.select({ total: count() }).from(nodes).where(filters),
   ])
   return ok(c, {
@@ -263,7 +350,9 @@ app.get('/api/nodes', async (c) => {
 app.patch('/api/nodes/batch', async (c) => {
   const input = await body(c, nodeBatchSchema)
   const placeholders = input.ids.map(() => '?').join(',')
-  await c.env.DB.prepare(`UPDATE nodes SET enabled = ?, updated_at = ? WHERE id IN (${placeholders})`).bind(input.enabled ? 1 : 0, Date.now(), ...input.ids).run()
+  await c.env.DB.prepare(`UPDATE nodes SET enabled = ?, updated_at = ? WHERE id IN (${placeholders})`)
+    .bind(input.enabled ? 1 : 0, Date.now(), ...input.ids)
+    .run()
   return ok(c, { updated: input.ids.length })
 })
 
@@ -310,11 +399,18 @@ app.post('/api/profiles', async (c) => {
   await saveProfileRelations(c.env, profile.id, sourceIds, input.excludedNodeIds)
   const job = await createJob(c.env, 'compile_profile', profile.id)
   const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
-  return c.json({ data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } }, 202)
+  return c.json(
+    { data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } },
+    202,
+  )
 })
 
 app.get('/api/profiles/:id', async (c) => {
-  const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, c.req.param('id'))).get()
+  const profile = await db(c.env)
+    .select()
+    .from(profiles)
+    .where(eq(profiles.id, c.req.param('id')))
+    .get()
   if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   return ok(c, await profileView(c.env, profile, new URL(c.req.url).origin, true))
 })
@@ -338,16 +434,27 @@ app.patch('/api/profiles/:id', async (c) => {
     })
     .where(eq(profiles.id, id))
   if (sourceIds || input.excludedNodeIds) {
-    const oldSources = await database.select({ id: profileSources.sourceId }).from(profileSources).where(eq(profileSources.profileId, id))
+    const oldSources = await database
+      .select({ id: profileSources.sourceId })
+      .from(profileSources)
+      .where(eq(profileSources.profileId, id))
     const oldExclusions = await database
       .select({ id: profileNodeExclusions.nodeId })
       .from(profileNodeExclusions)
       .where(eq(profileNodeExclusions.profileId, id))
-    await saveProfileRelations(c.env, id, sourceIds || oldSources.map((item) => item.id), input.excludedNodeIds || oldExclusions.map((item) => item.id))
+    await saveProfileRelations(
+      c.env,
+      id,
+      sourceIds || oldSources.map((item) => item.id),
+      input.excludedNodeIds || oldExclusions.map((item) => item.id),
+    )
   }
   const job = await createJob(c.env, 'compile_profile', id)
   const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
-  return c.json({ data: { profile: await profileView(c.env, updated!, new URL(c.req.url).origin, true), jobId: job.id } }, 202)
+  return c.json(
+    { data: { profile: await profileView(c.env, updated!, new URL(c.req.url).origin, true), jobId: job.id } },
+    202,
+  )
 })
 
 app.delete('/api/profiles/:id', async (c) => {
@@ -358,7 +465,11 @@ app.delete('/api/profiles/:id', async (c) => {
 })
 
 app.post('/api/profiles/:id/compile', async (c) => {
-  const current = await db(c.env).select({ id: profiles.id }).from(profiles).where(eq(profiles.id, c.req.param('id'))).get()
+  const current = await db(c.env)
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.id, c.req.param('id')))
+    .get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   const job = await createJob(c.env, 'compile_profile', current.id)
   return c.json({ data: { jobId: job.id } }, 202)
@@ -375,13 +486,21 @@ app.post('/api/profiles/:id/rotate-token', async (c) => {
 })
 
 app.get('/api/jobs/:id', async (c) => {
-  const job = await db(c.env).select().from(jobs).where(eq(jobs.id, c.req.param('id'))).get()
+  const job = await db(c.env)
+    .select()
+    .from(jobs)
+    .where(eq(jobs.id, c.req.param('id')))
+    .get()
   if (!job) return fail(c, 404, 'JOB_NOT_FOUND', '任务不存在')
   return ok(c, job)
 })
 
 app.get('/s/:profileId/:token/config.yaml', async (c) => {
-  const profile = await db(c.env).select().from(profiles).where(and(eq(profiles.id, c.req.param('profileId')), eq(profiles.enabled, true))).get()
+  const profile = await db(c.env)
+    .select()
+    .from(profiles)
+    .where(and(eq(profiles.id, c.req.param('profileId')), eq(profiles.enabled, true)))
+    .get()
   if (!profile?.compiledYaml) return c.notFound()
   const expected = subscriptionToken()
   if (!constantTimeEqual(expected, c.req.param('token'))) return c.notFound()
@@ -407,7 +526,15 @@ async function adminAsset(c: AppContext) {
     response = await c.env.ASSETS.fetch(new Request(url, c.req.raw))
   }
   if (!response.headers.has('Content-Type')) {
-    const type = c.req.path.endsWith('.js') ? 'text/javascript; charset=UTF-8' : c.req.path.endsWith('.css') ? 'text/css; charset=UTF-8' : c.req.path.endsWith('.svg') ? 'image/svg+xml' : !/\.[^/]+$/.test(c.req.path) ? 'text/html; charset=UTF-8' : undefined
+    const type = c.req.path.endsWith('.js')
+      ? 'text/javascript; charset=UTF-8'
+      : c.req.path.endsWith('.css')
+        ? 'text/css; charset=UTF-8'
+        : c.req.path.endsWith('.svg')
+          ? 'image/svg+xml'
+          : !/\.[^/]+$/.test(c.req.path)
+            ? 'text/html; charset=UTF-8'
+            : undefined
     if (type) {
       const headers = new Headers(response.headers)
       headers.set('Content-Type', type)
@@ -417,9 +544,11 @@ async function adminAsset(c: AppContext) {
   return response
 }
 
-app.get('*', (c) => c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : adminAsset(c))
+app.get('*', (c) => (c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : adminAsset(c)))
 
-app.notFound((c) => (c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : c.text('Not found', 404)))
+app.notFound((c) =>
+  c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : c.text('Not found', 404),
+)
 app.onError((error, c) => fail(c, 500, 'INTERNAL_ERROR', error.message || '服务异常'))
 
 export default {

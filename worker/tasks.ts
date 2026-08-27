@@ -90,8 +90,16 @@ async function ensureNodeCapacity(env: Env, fingerprints: string[]) {
   if (Number(count) + fingerprints.length - existing > 2000) throw new Error('全局节点数量超过 2000')
 }
 
-async function replaceSourceNodes(env: Env, sourceId: string, parsed: Awaited<ReturnType<typeof parseProxyText>>, responseMeta?: { etag: string | null; lastModified: string | null }) {
-  await ensureNodeCapacity(env, parsed.nodes.map((node) => node.fingerprint))
+async function replaceSourceNodes(
+  env: Env,
+  sourceId: string,
+  parsed: Awaited<ReturnType<typeof parseProxyText>>,
+  responseMeta?: { etag: string | null; lastModified: string | null },
+) {
+  await ensureNodeCapacity(
+    env,
+    parsed.nodes.map((node) => node.fingerprint),
+  )
   const now = Date.now()
   const statements: D1PreparedStatement[] = []
   for (const node of parsed.nodes) {
@@ -100,7 +108,16 @@ async function replaceSourceNodes(env: Env, sourceId: string, parsed: Awaited<Re
         `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
          ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
-      ).bind(node.fingerprint, node.fingerprint, node.config.type, node.config.server, node.config.port, JSON.stringify(node.config), now, now),
+      ).bind(
+        node.fingerprint,
+        node.fingerprint,
+        node.config.type,
+        node.config.server,
+        node.config.port,
+        JSON.stringify(node.config),
+        now,
+        now,
+      ),
     )
   }
   statements.push(env.DB.prepare('DELETE FROM source_nodes WHERE source_id = ?').bind(sourceId))
@@ -116,7 +133,10 @@ async function replaceSourceNodes(env: Env, sourceId: string, parsed: Awaited<Re
   })
   const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
-  const nextRefresh = source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0 ? now + source.refreshIntervalHours * 3_600_000 : null
+  const nextRefresh =
+    source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0
+      ? now + source.refreshIntervalHours * 3_600_000
+      : null
   statements.push(
     env.DB.prepare(
       `UPDATE sources SET status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
@@ -131,12 +151,19 @@ async function replaceSourceNodes(env: Env, sourceId: string, parsed: Awaited<Re
       sourceId,
     ),
   )
-  statements.push(env.DB.prepare('DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)'))
+  statements.push(
+    env.DB.prepare(
+      'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)',
+    ),
+  )
   await env.DB.batch(statements)
 }
 
 async function enqueueAffectedProfiles(env: Env, sourceId: string) {
-  const affected = await db(env).select({ id: profileSources.profileId }).from(profileSources).where(eq(profileSources.sourceId, sourceId))
+  const affected = await db(env)
+    .select({ id: profileSources.profileId })
+    .from(profileSources)
+    .where(eq(profileSources.sourceId, sourceId))
   for (const profile of affected) await createJob(env, 'compile_profile', profile.id)
 }
 
@@ -144,7 +171,10 @@ export async function refreshSource(env: Env, sourceId: string) {
   const database = db(env)
   const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
-  await database.update(sources).set({ status: 'refreshing', error: null, updatedAt: new Date() }).where(eq(sources.id, sourceId))
+  await database
+    .update(sources)
+    .set({ status: 'refreshing', error: null, updatedAt: new Date() })
+    .where(eq(sources.id, sourceId))
 
   const response = source.kind === 'url' ? await fetchSource(source.url!, source.etag, source.lastModified) : null
   if (response?.notModified) {
@@ -155,7 +185,8 @@ export async function refreshSource(env: Env, sourceId: string) {
         status: 'ready',
         error: null,
         lastRefreshedAt: now,
-        nextRefreshAt: source.refreshIntervalHours > 0 ? new Date(now.getTime() + source.refreshIntervalHours * 3_600_000) : null,
+        nextRefreshAt:
+          source.refreshIntervalHours > 0 ? new Date(now.getTime() + source.refreshIntervalHours * 3_600_000) : null,
         updatedAt: now,
       })
       .where(eq(sources.id, sourceId))
@@ -182,8 +213,14 @@ export async function compileProfile(env: Env, profileId: string) {
     })
     .from(nodes)
     .innerJoin(sourceNodes, eq(sourceNodes.nodeId, nodes.id))
-    .innerJoin(profileSources, and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profileId)))
-    .leftJoin(profileNodeExclusions, and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profileId)))
+    .innerJoin(
+      profileSources,
+      and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profileId)),
+    )
+    .leftJoin(
+      profileNodeExclusions,
+      and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profileId)),
+    )
     .where(
       and(
         eq(nodes.enabled, true),
@@ -220,18 +257,30 @@ export async function processQueueMessage(env: Env, message: QueueMessage) {
   const database = db(env)
   const job = await database.select().from(jobs).where(eq(jobs.id, message.jobId)).get()
   if (!job || job.status === 'succeeded' || job.status === 'failed') return
-  await database.update(jobs).set({ status: 'running', startedAt: new Date(), error: null }).where(eq(jobs.id, message.jobId))
+  await database
+    .update(jobs)
+    .set({ status: 'running', startedAt: new Date(), error: null })
+    .where(eq(jobs.id, message.jobId))
   try {
     if (message.type === 'refresh_source') await refreshSource(env, message.entityId)
     else await compileProfile(env, message.entityId)
     await database.update(jobs).set({ status: 'succeeded', finishedAt: new Date() }).where(eq(jobs.id, message.jobId))
   } catch (error) {
     const text = error instanceof Error ? error.message : '任务执行失败'
-    await database.update(jobs).set({ status: 'failed', error: text, finishedAt: new Date() }).where(eq(jobs.id, message.jobId))
+    await database
+      .update(jobs)
+      .set({ status: 'failed', error: text, finishedAt: new Date() })
+      .where(eq(jobs.id, message.jobId))
     if (message.type === 'refresh_source') {
-      await database.update(sources).set({ status: 'error', error: text, updatedAt: new Date() }).where(eq(sources.id, message.entityId))
+      await database
+        .update(sources)
+        .set({ status: 'error', error: text, updatedAt: new Date() })
+        .where(eq(sources.id, message.entityId))
     } else {
-      await database.update(profiles).set({ error: text, updatedAt: new Date() }).where(eq(profiles.id, message.entityId))
+      await database
+        .update(profiles)
+        .set({ error: text, updatedAt: new Date() })
+        .where(eq(profiles.id, message.entityId))
     }
   }
 }
@@ -247,7 +296,13 @@ export async function enqueueDueSources(env: Env, now = new Date()) {
     const active = await database
       .select({ id: jobs.id })
       .from(jobs)
-      .where(and(eq(jobs.type, 'refresh_source'), eq(jobs.entityId, source.id), or(eq(jobs.status, 'pending'), eq(jobs.status, 'running'))))
+      .where(
+        and(
+          eq(jobs.type, 'refresh_source'),
+          eq(jobs.entityId, source.id),
+          or(eq(jobs.status, 'pending'), eq(jobs.status, 'running')),
+        ),
+      )
       .get()
     if (!active) await createJob(env, 'refresh_source', source.id)
   }

@@ -69,28 +69,24 @@ export const sourceNodes = sqliteTable(
 
 export type RuleModule = 'ads' | 'private' | 'cn'
 
-export const profiles = sqliteTable(
-  'profiles',
-  {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
-    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
-    ruleModules: text('rule_modules', { mode: 'json' })
-      .$type<RuleModule[]>()
-      .notNull()
-      .default(['ads', 'private', 'cn']),
-    dnsMode: text('dns_mode', { enum: ['fake-ip', 'redir-host'] }).notNull().default('fake-ip'),
-    tokenVersion: integer('token_version').notNull().default(1),
-    revision: integer('revision').notNull().default(0),
-    compiledYaml: text('compiled_yaml'),
-    compiledAt: integer('compiled_at', { mode: 'timestamp_ms' }),
-    error: text('error'),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-  },
-)
+export const profiles = sqliteTable('profiles', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  ruleModules: text('rule_modules', { mode: 'json' }).$type<RuleModule[]>().notNull().default(['ads', 'private', 'cn']),
+  dnsMode: text('dns_mode', { enum: ['fake-ip', 'redir-host'] })
+    .notNull()
+    .default('fake-ip'),
+  tokenVersion: integer('token_version').notNull().default(1),
+  revision: integer('revision').notNull().default(0),
+  compiledYaml: text('compiled_yaml'),
+  compiledAt: integer('compiled_at', { mode: 'timestamp_ms' }),
+  error: text('error'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+})
 
 export const profileSources = sqliteTable(
   'profile_sources',
@@ -125,7 +121,9 @@ export const jobs = sqliteTable(
   'jobs',
   {
     id: text('id').primaryKey(),
-    type: text('type', { enum: ['refresh_source', 'compile_profile'] }).$type<JobType>().notNull(),
+    type: text('type', { enum: ['refresh_source', 'compile_profile'] })
+      .$type<JobType>()
+      .notNull(),
     entityId: text('entity_id').notNull(),
     status: text('status', { enum: ['pending', 'running', 'succeeded', 'failed'] })
       .$type<JobStatus>()

@@ -197,13 +197,20 @@ export async function fingerprint(config: ProxyConfig) {
 
 function yamlNodes(text: string): ProxyConfig[] | null {
   const document = parse(text, { maxAliasCount: 20 }) as unknown
-  if (!document || typeof document !== 'object' || !Array.isArray((document as { proxies?: unknown }).proxies)) return null
+  if (!document || typeof document !== 'object' || !Array.isArray((document as { proxies?: unknown }).proxies))
+    return null
   return (document as { proxies: unknown[] }).proxies.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('YAML 节点不是对象')
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
     if (!proxy.name || !proxy.type || !proxy.server || !Number.isInteger(port)) throw new Error('YAML 节点必填字段缺失')
-    return { ...proxy, name: String(proxy.name), type: String(proxy.type).toLowerCase(), server: String(proxy.server), port } as ProxyConfig
+    return {
+      ...proxy,
+      name: String(proxy.name),
+      type: String(proxy.type).toLowerCase(),
+      server: String(proxy.server),
+      port,
+    } as ProxyConfig
   })
 }
 
@@ -216,7 +223,8 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
   try {
     configs = yamlNodes(text) || []
   } catch (error) {
-    if (/proxies\s*:/.test(text)) throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
+    if (/proxies\s*:/.test(text))
+      throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
   }
 
   if (!configs.length) {
@@ -234,7 +242,8 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
       try {
         configs.push(parseUri(value))
       } catch (error) {
-        if (warnings.length < 20) warnings.push(`第 ${index + 1} 行：${error instanceof Error ? error.message : '格式错误'}`)
+        if (warnings.length < 20)
+          warnings.push(`第 ${index + 1} 行：${error instanceof Error ? error.message : '格式错误'}`)
       }
     }
   }
