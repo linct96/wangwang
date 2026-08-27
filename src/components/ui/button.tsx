@@ -23,7 +23,13 @@ const buttonVariants = cva(
   },
 )
 
-function Button({ className, variant, size, asChild = false, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+function Button({
+  className,
+  variant,
+  size,
+  asChild = false,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
   const Component = asChild ? Slot : 'button'
   return <Component data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />
 }

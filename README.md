@@ -1,6 +1,6 @@
 # Wangwang
 
-React SPA + TanStack Router + Tailwind CSS + shadcn/ui + Hono + Drizzle ORM，部署到 Cloudflare Workers。
+React SPA + TanStack Router + Tailwind CSS + shadcn/ui + Sonner + Hono + Drizzle ORM，部署到 Cloudflare Workers。
 
 ## 开发
 

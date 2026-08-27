@@ -2,7 +2,7 @@
 
 ## 1. 技术栈
 
-- 前端：React SPA、Vite、TanStack Router、Tailwind CSS、shadcn/ui。
+- 前端：React SPA、Vite、TanStack Router、Tailwind CSS、shadcn/ui、Sonner。
 - Worker：Hono、Zod、Cloudflare Workers Static Assets。
 - 数据：D1 + `drizzle-orm/d1`，KV 仅缓存已生成配置。
 - 后台任务：Cloudflare Queue；定时扫描暂不启用。
