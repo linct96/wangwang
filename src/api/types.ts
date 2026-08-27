@@ -1,3 +1,8 @@
+export type AuthStatus = {
+  initialized: boolean
+  authenticated: boolean
+}
+
 export type Job = {
   id: string
   type: 'refresh_source' | 'compile_profile'

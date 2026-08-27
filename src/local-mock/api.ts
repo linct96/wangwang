@@ -29,8 +29,10 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
   const state = readState()
   const body = parseBody(init)
 
-  if (pathname === '/auth/status' && method === 'GET')
-    return { initialized: localStorage.getItem('wangwang:local-admin') === '1' } as T
+  if (pathname === '/auth/status' && method === 'GET') {
+    const initialized = localStorage.getItem('wangwang:local-admin') === '1'
+    return { initialized, authenticated: initialized } as T
+  }
   if (pathname === '/auth/login' && method === 'POST') return { ok: true } as T
   if (pathname === '/auth/init' && method === 'POST') {
     if (String(body.password || '').length < 12) throw new Error('密码至少需要 12 位')

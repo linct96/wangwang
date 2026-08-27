@@ -1,6 +1,5 @@
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from '@tanstack/react-router'
 import { Layout } from './layout'
-import { LoginPage } from '@/features/auth/page'
 import { DashboardPage } from '@/features/dashboard/page'
 import { SourcesPage } from '@/features/sources/page'
 import { NodesPage } from '@/features/nodes/page'
@@ -23,7 +22,11 @@ const profileDetailRoute = createRoute({
   path: '/profiles/$id',
   component: ProfileDetailPage,
 })
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage })
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  component: () => <Navigate to="/dashboard" replace />,
+})
 const routeTree = rootRoute.addChildren([
   appRoute.addChildren([indexRoute, dashboardRoute, sourcesRoute, nodesRoute, profilesRoute, profileDetailRoute]),
   loginRoute,

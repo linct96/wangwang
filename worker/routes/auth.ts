@@ -37,7 +37,10 @@ authRouter.post('/login', async (c) => {
   })
 })
 
-authRouter.get('/status', async (c) => c.json({ data: { initialized: await hasAdmin(c.env) } }))
+authRouter.get('/status', async (c) => {
+  const [initialized, isAuthenticated] = await Promise.all([hasAdmin(c.env), authenticated(c)])
+  return c.json({ data: { initialized, authenticated: isAuthenticated } })
+})
 
 authRouter.post('/init', async (c) => {
   if (await hasAdmin(c.env)) return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')

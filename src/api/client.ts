@@ -6,7 +6,7 @@ async function httpApi<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers,
   })
   if (response.status === 401 && path !== '/auth/login') {
-    window.location.href = '/admin/login'
+    window.location.reload()
     throw new Error('请先登录')
   }
   const payload = (await response.json()) as { data?: T; error?: { message: string } }
