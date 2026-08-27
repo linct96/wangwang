@@ -78,8 +78,7 @@ KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1
 
 ## 8. 安全
 
-- 管理 API 验证 `Cf-Access-Jwt-Assertion` 的签名、issuer 和 audience。
-- 本地开发通过 Wrangler Access dev identity 模拟登录。
+- 管理 API 使用 D1 中的管理员账号和 HttpOnly Session Cookie 认证。
 - 修改请求校验 `Origin` 与当前 Host 一致，不开放跨域访问。
 - 订阅令牌为 `HMAC-SHA256(profileId:tokenVersion)`，密钥使用 Wrangler Secret。
 - URL 源仅允许 HTTP/HTTPS，禁止用户信息、localhost、`.local` 和私网 IP 字面量。
@@ -92,7 +91,7 @@ KV 使用不可变键 `profile:{id}:revision:{revision}`。订阅请求先从 D1
 - KV：`CONFIG_CACHE`
 - Queue producer/consumer：`JOBS`
 - Static Assets：`ASSETS`
-- 变量：`APP_HOST`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`
+- 变量：无。Worker 允许所有绑定到它的域名访问，管理接口由应用账号保护。
 - Secret：`SUBSCRIPTION_TOKEN_SECRET`
 
 本地开发使用占位值；生产部署前创建真实 D1、KV、Queue、自定义域名和 Access 应用。

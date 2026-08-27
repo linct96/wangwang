@@ -39,7 +39,7 @@ await writeFile(`${stage}/manifest.json`, `${JSON.stringify({
     kv: ['CONFIG_CACHE'],
     queues: [{ binding: 'JOBS', type: 'producer' }],
   },
-  requiredVars: ['APP_HOST', 'ACCESS_TEAM_DOMAIN', 'ACCESS_AUD'],
+  requiredVars: [],
   requiredSecrets: ['SUBSCRIPTION_TOKEN_SECRET'],
 }, null, 2)}\n`)
 await exec('tar', ['-czf', output, '-C', `${root}/.deploy`, `wangwang-${tag}`])

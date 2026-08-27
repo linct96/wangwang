@@ -6,9 +6,6 @@ interface __BaseEnv_Env {
 	DB: D1Database;
 	JOBS: Queue;
 	ASSETS: Fetcher;
-	APP_HOST: "example.com";
-	ACCESS_TEAM_DOMAIN: "example.cloudflareaccess.com";
-	ACCESS_AUD: "local";
 	SUBSCRIPTION_TOKEN_SECRET: string;
 }
 declare namespace Cloudflare {
@@ -22,7 +19,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "APP_HOST" | "ACCESS_TEAM_DOMAIN" | "ACCESS_AUD" | "SUBSCRIPTION_TOKEN_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "SUBSCRIPTION_TOKEN_SECRET">> {}
 }
 
 // Begin runtime types

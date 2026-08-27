@@ -43,8 +43,5 @@
     "crons": ["0 * * * *"]
   },
   "vars": {
-    "APP_HOST": "example.com",
-    "ACCESS_TEAM_DOMAIN": "example.cloudflareaccess.com",
-    "ACCESS_AUD": "local"
   }
 }
