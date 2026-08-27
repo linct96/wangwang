@@ -6,7 +6,7 @@ export function validOrigin(request: Request) {
   return origin === url.origin
 }
 
-const passwordIterations = 120_000
+const passwordIterations = 100_000
 const sessionTtl = 7 * 24 * 60 * 60 * 1000
 
 function bytesToBase64(bytes: Uint8Array) { return btoa(String.fromCharCode(...bytes)) }
