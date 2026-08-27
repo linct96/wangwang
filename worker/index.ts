@@ -406,6 +406,14 @@ async function adminAsset(c: AppContext) {
     url.pathname = '/index.html'
     response = await c.env.ASSETS.fetch(new Request(url, c.req.raw))
   }
+  if (!response.headers.has('Content-Type')) {
+    const type = c.req.path.endsWith('.js') ? 'text/javascript; charset=UTF-8' : c.req.path.endsWith('.css') ? 'text/css; charset=UTF-8' : c.req.path.endsWith('.svg') ? 'image/svg+xml' : !/\.[^/]+$/.test(c.req.path) ? 'text/html; charset=UTF-8' : undefined
+    if (type) {
+      const headers = new Headers(response.headers)
+      headers.set('Content-Type', type)
+      response = new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+    }
+  }
   return response
 }
 
