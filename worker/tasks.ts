@@ -15,7 +15,7 @@ export function parseSubscriptionUserinfo(value: string | null) {
     if (!['upload', 'download', 'total', 'expire'].includes(key)) continue
     const number = Number(raw)
     const validExpire =
-      key !== 'expire' || (number <= 8_640_000_000 && Number.isFinite(new Date(number * 1000).getTime()))
+      key !== 'expire' || (number > 0 && number <= 8_640_000_000 && Number.isFinite(new Date(number * 1000).getTime()))
     if (Number.isSafeInteger(number) && number >= 0 && validExpire)
       result[key as 'upload' | 'download' | 'total' | 'expire'] = number
   }
