@@ -12,6 +12,7 @@ type Profile = { id: string; name: string; enabled: boolean; protocols: string[]
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/admin/api${path}`, { ...init, headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers })
+  if (response.status === 401) { window.location.href = '/admin/login'; throw new Error('请先登录') }
   const payload = (await response.json()) as { data?: T; error?: { message: string } }
   if (!response.ok || payload.data === undefined) throw new Error(payload.error?.message || '请求失败')
   return payload.data
@@ -138,4 +139,13 @@ function ProfileDetailPage() {
   return <><div className="page-heading"><div className="title-with-back"><IconButton label="返回" onClick={() => navigate('/profiles')}><ArrowLeft /></IconButton><div><h1>{profile?.name || '配置详情'}</h1><p>revision {profile?.revision || 0} · {formatDate(profile?.compiledAt || null)}</p></div></div><div className="heading-actions"><button className="secondary" disabled={busy} onClick={() => void run('compile')}><RefreshCw className={busy ? 'spin' : ''} />重新生成</button><button className="primary" onClick={() => setEditing(true)}><Settings2 />编辑</button></div></div><PageState loading={loading} error={error} />{actionError && <div className="alert error">{actionError}</div>}{profile && <><div className="tabs"><button className={activeTab === 'link' ? 'active' : ''} onClick={() => setActiveTab('link')}>订阅链接</button><button className={activeTab === 'preview' ? 'active' : ''} onClick={() => setActiveTab('preview')}>配置预览</button></div>{activeTab === 'link' ? <section className="detail-section"><div className="field-title"><h2>订阅地址</h2><Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} /></div><div className="copy-field"><input readOnly value={profile.subscriptionUrl} /><IconButton label="复制" onClick={() => void navigator.clipboard.writeText(profile.subscriptionUrl)}><Clipboard /></IconButton></div>{profile.error && <div className="alert error">{profile.error}</div>}<button className="danger-link" disabled={busy} onClick={() => void run('rotate')}><RotateCcwKey />轮换令牌</button></section> : <section className="yaml-panel"><pre>{profile.compiledYaml || '# 尚未生成配置'}</pre></section>}{editing && <ProfileDialog sources={sources} profile={profile} onClose={() => setEditing(false)} onSaved={async (jobId) => { setEditing(false); setBusy(true); try { await waitForJob(jobId) } catch (reason) { setActionError(reason instanceof Error ? reason.message : '生成失败') } finally { setBusy(false); await reload() } }} />}</>}</>
 }
 
-export default function App() { return <BrowserRouter basename="/admin"><Layout /></BrowserRouter> }
+function LoginPage() {
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('')
+  async function submit(event: FormEvent) { event.preventDefault(); setError(''); try { await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }); window.location.href = '/admin' } catch (reason) { setError(reason instanceof Error ? reason.message : '登录失败') } }
+  return <main className="auth-page"><form className="form auth-form" onSubmit={submit}><h1>Wangwang 登录</h1><label>邮箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>密码<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <div className="alert error">{error}</div>}<button className="primary">登录</button></form></main>
+}
+
+export default function App() {
+  const basename = window.location.pathname.startsWith('/admin') ? '/admin' : undefined
+  return <BrowserRouter basename={basename}><Routes><Route path="/init" element={<Navigate to="/" replace />} /><Route path="/login" element={<LoginPage />} /><Route path="*" element={<Layout />} /></Routes></BrowserRouter>
+}

@@ -1,34 +1,3 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose'
-
-const jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
-
-function teamDomain(value: string) {
-  return value.replace(/^https?:\/\//, '').replace(/\/$/, '')
-}
-
-export async function verifyAccess(request: Request, env: Env) {
-  const hostname = new URL(request.url).hostname
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true
-  const token = request.headers.get('Cf-Access-Jwt-Assertion')
-  if (!token || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) return false
-
-  const domain = teamDomain(env.ACCESS_TEAM_DOMAIN)
-  let keySet = jwks.get(domain)
-  if (!keySet) {
-    keySet = createRemoteJWKSet(new URL(`https://${domain}/cdn-cgi/access/certs`))
-    jwks.set(domain, keySet)
-  }
-  try {
-    await jwtVerify(token, keySet, {
-      issuer: `https://${domain}`,
-      audience: env.ACCESS_AUD,
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
 export function validOrigin(request: Request) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return true
   const url = new URL(request.url)
@@ -36,6 +5,30 @@ export function validOrigin(request: Request) {
   const origin = request.headers.get('Origin')
   return origin === url.origin
 }
+
+const passwordIterations = 120_000
+const sessionTtl = 7 * 24 * 60 * 60 * 1000
+
+function bytesToBase64(bytes: Uint8Array) { return btoa(String.fromCharCode(...bytes)) }
+function base64ToBytes(value: string) { return Uint8Array.from(atob(value), (char) => char.charCodeAt(0)) }
+
+export async function hashPassword(password: string, salt = crypto.getRandomValues(new Uint8Array(16))) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: passwordIterations, hash: 'SHA-256' }, key, 256)
+  return { salt: bytesToBase64(salt), hash: bytesToBase64(new Uint8Array(bits)) }
+}
+
+export async function verifyPassword(password: string, salt: string, expected: string) {
+  const actual = await hashPassword(password, base64ToBytes(salt))
+  return constantTimeEqual(actual.hash, expected)
+}
+
+export async function sessionHash(token: string) {
+  return toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))
+}
+
+export function newSessionToken() { return bytesToBase64(crypto.getRandomValues(new Uint8Array(32))) }
+export const SESSION_TTL = sessionTtl
 
 function toHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
