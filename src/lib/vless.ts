@@ -1,4 +1,4 @@
-import type { ManualNodeConnection } from '@/data-source'
+import type { ManualNodeConnection } from '@/api/types'
 
 function decode(value: string) {
   try {
