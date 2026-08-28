@@ -6,6 +6,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Checkbox } from '@/components/ui/checkbox'
+import '@/styles/profile-dialog.css'
 
 const protocols = ['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic']
 
@@ -61,7 +62,7 @@ export function ManualConnectionFields({
   const tlsProtocol = ['vmess', 'vless', 'trojan'].includes(value.protocol)
   const secretPlaceholder = (set?: boolean) => (set ? '已设置，留空保持不变' : '')
   return (
-    <FieldGroup>
+    <FieldGroup className="node-form-scope">
       <Field>
         <FieldLabel>协议</FieldLabel>
         <Select

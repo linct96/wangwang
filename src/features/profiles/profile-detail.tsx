@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source } from '@/api/types'
 import { IconButton, PageState, Status } from '@/components/app-primitives'
+import '@/styles/profiles.css'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,7 +53,7 @@ export function ProfileDetailPage() {
     }
   }
   return (
-    <>
+    <div className="profile-detail-page">
       <div className="page-heading">
         <div className="title-with-back">
           <IconButton label="返回" onClick={() => navigate({ to: '/profiles' })}>
@@ -152,6 +153,6 @@ export function ProfileDetailPage() {
           )}
         </>
       )}
-    </>
+    </div>
   )
 }

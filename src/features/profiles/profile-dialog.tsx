@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import type { Profile, RuleModule, Source } from '@/api/types'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import '@/styles/profile-dialog.css'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
@@ -79,7 +80,7 @@ export function ProfileDialog({
   }
   return (
     <AppDialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
-      <form className="form profile-form" onSubmit={submit}>
+      <form className="form profile-form profile-dialog-scope" onSubmit={submit}>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="profile-name">名称</FieldLabel>

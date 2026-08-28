@@ -6,6 +6,7 @@ import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source } from '@/api/types'
 import { IconButton, PageState, Status } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
+import '@/styles/profiles.css'
 import { Link } from '@tanstack/react-router'
 import { formatDate } from '@/lib/format'
 import { ProfileDialog } from './profile-dialog'
@@ -25,7 +26,7 @@ export function ProfilesPage() {
     }
   }
   return (
-    <>
+    <div className="profiles-page">
       <div className="page-heading">
         <div>
           <h1>配置</h1>
@@ -82,6 +83,6 @@ export function ProfilesPage() {
           }}
         />
       )}
-    </>
+    </div>
   )
 }
