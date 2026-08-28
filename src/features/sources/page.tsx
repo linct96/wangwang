@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -105,14 +106,13 @@ export function SourcesPage() {
           </TableHeader>
           <TableBody>
             {initialLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="empty">
-                  <span className="inline-flex items-center gap-2">
-                    <RefreshCw className="spin" />
-                    加载中
-                  </span>
-                </TableCell>
-              </TableRow>
+              Array.from({ length: 8 }, (_, index) => (
+                <TableRow key={index} aria-hidden="true">
+                  <TableCell colSpan={7}>
+                    <Skeleton className="h-8 w-full" />
+                  </TableCell>
+                </TableRow>
+              ))
             ) : error && data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="empty text-destructive">
