@@ -8,6 +8,7 @@ import { authenticated, authRouter } from './routes/auth'
 import { sourcesRouter } from './routes/sources'
 import { nodesRouter } from './routes/nodes'
 import { profilesRouter } from './routes/profiles'
+import { templatesRouter } from './routes/templates'
 import { constantTimeEqual, subscriptionToken, validOrigin } from './security'
 
 export const app = new Hono<{ Bindings: Env }>()
@@ -24,6 +25,7 @@ app.route('/api/auth', authRouter)
 app.route('/api/sources', sourcesRouter)
 app.route('/api/nodes', nodesRouter)
 app.route('/api/profiles', profilesRouter)
+app.route('/api/templates', templatesRouter)
 
 app.get('/healthz', async (c) => {
   const result = await db(c.env).get<{ ok: number }>(sql`SELECT 1 AS ok`)

@@ -1,12 +1,16 @@
 import dayjs from 'dayjs'
-import type { Job, ManualNodeConnection, NodeItem, Profile, Source } from '@/api/types'
+import type { Job, ManualNodeConnection, NodeItem, Profile, Source, TemplateDetail, TemplateId } from '@/api/types'
+import type { ProxyConfig } from '../../worker/db'
+import { builtinTemplates } from '../../worker/templates/builtin'
+import { renderMihomoConfig } from '../../worker/templates/renderer'
 
 export type LocalNode = NodeItem & { sourceIds: string[]; connection?: ManualNodeConnection }
 export type LocalState = {
-  version: 2
+  version: 3
   sources: Source[]
   nodes: LocalNode[]
   profiles: Profile[]
+  templates: TemplateDetail[]
   jobs: Job[]
 }
 
@@ -137,10 +141,13 @@ function seedState(): LocalState {
       enabled: true,
       protocols: [],
       tags: [],
-      ruleModules: ['ads', 'private', 'cn'],
-      dnsMode: 'fake-ip',
+      templateId: 'builtin:minimal',
       revision: 3,
-      compiledYaml: compileYaml('日常使用', nodes),
+      compiledYaml: compileYaml(
+        'builtin:minimal',
+        nodes.filter((node) => node.sourceIds.includes('source-main')),
+        [],
+      ),
       compiledAt: updatedAt,
       error: null,
       sourceIds: ['source-main'],
@@ -149,7 +156,7 @@ function seedState(): LocalState {
     },
   ]
   const jobs: Job[] = [createJob('compile_profile', 'profile-daily', updatedAt)]
-  return { version: 2, sources, nodes, profiles, jobs }
+  return { version: 3, sources, nodes, profiles, templates: [], jobs }
 }
 
 export function readState() {
@@ -159,23 +166,33 @@ export function readState() {
       sources?: Source[]
       nodes?: LocalNode[]
       profiles?: Profile[]
+      templates?: TemplateDetail[]
       jobs?: Job[]
     } | null
     if (
-      (value?.version === 1 || value?.version === 2) &&
+      (value?.version === 1 || value?.version === 2 || value?.version === 3) &&
       Array.isArray(value.sources) &&
       Array.isArray(value.nodes) &&
       Array.isArray(value.profiles) &&
       Array.isArray(value.jobs)
     ) {
-      if (value.version === 2)
-        return {
+      if (value.version === 2 || value.version === 3) {
+        const migrated = {
           ...value,
+          version: 3,
+          templates: value.templates || [],
           sources: value.sources.map((source) => ({
             ...source,
             userAgent: source.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
           })),
+          profiles: value.profiles.map((profile) => ({
+            ...profile,
+            templateId: profile.templateId || 'builtin:minimal',
+          })),
         } as LocalState
+        if (value.version === 2) writeState(migrated)
+        return migrated
+      }
       const manualIds = new Set(value.sources.filter((source) => source.kind === 'manual').map((source) => source.id))
       const rewriteSources = (ids: string[]) => [
         ...new Set(ids.map((id) => (manualIds.has(id) ? 'system-manual' : id))),
@@ -237,10 +254,14 @@ export function readState() {
           lastRefreshedAt: null,
         },
       ]
-      const profiles = value.profiles.map((profile) => ({ ...profile, sourceIds: rewriteSources(profile.sourceIds) }))
+      const profiles = value.profiles.map((profile) => ({
+        ...profile,
+        templateId: 'builtin:minimal' as const,
+        sourceIds: rewriteSources(profile.sourceIds),
+      }))
       for (const source of sources)
         source.profileCount = profiles.filter((profile) => profile.sourceIds.includes(source.id)).length
-      const migrated: LocalState = { version: 2, sources, nodes, profiles, jobs: value.jobs }
+      const migrated: LocalState = { version: 3, sources, nodes, profiles, templates: [], jobs: value.jobs }
       writeState(migrated)
       return migrated
     }
@@ -272,21 +293,34 @@ export function localNodeTags(state: LocalState, node: LocalNode) {
   ]
 }
 
-export function recompileProfiles(state: LocalState, sourceIds: string[], profileIds?: string[]) {
+export function localProfileNodes(
+  state: LocalState,
+  profile: Pick<Profile, 'sourceIds' | 'protocols' | 'tags' | 'excludedNodeIds'>,
+) {
   const enabledSources = new Set(state.sources.filter((source) => source.enabled).map((source) => source.id))
+  return state.nodes
+    .filter((node) => node.enabled)
+    .filter((node) => node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)))
+    .map((node) => ({ ...node, tags: localNodeTags(state, node) }))
+    .filter((node) => !profile.protocols.length || profile.protocols.includes(node.protocol))
+    .filter((node) => !profile.tags.length || profile.tags.some((tag) => node.tags.includes(tag)))
+    .filter((node) => !profile.excludedNodeIds.includes(node.id))
+}
+
+export function recompileProfiles(state: LocalState, sourceIds: string[], profileIds?: string[]) {
   for (const profile of state.profiles.filter((item) =>
     profileIds ? profileIds.includes(item.id) : item.sourceIds.some((id) => sourceIds.includes(id)),
   )) {
-    const available = state.nodes
-      .filter((node) => node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)))
-      .map((node) => ({ ...node, tags: localNodeTags(state, node) }))
-      .filter((node) => !profile.tags.length || profile.tags.some((tag) => node.tags.includes(tag)))
-    if (available.length) {
+    try {
+      const available = localProfileNodes(state, profile)
+      const compiledYaml = compileYaml(profile.templateId, available, state.templates)
       profile.revision += 1
       profile.compiledAt = now()
-      profile.compiledYaml = compileYaml(profile.name, available)
+      profile.compiledYaml = compiledYaml
       profile.error = null
-    } else profile.error = '配置没有可用节点'
+    } catch (error) {
+      profile.error = error instanceof Error ? error.message : '配置编译失败'
+    }
     state.jobs.unshift(createJob('compile_profile', profile.id))
   }
 }
@@ -296,12 +330,33 @@ export function updateProfileCounts(state: LocalState) {
     source.profileCount = state.profiles.filter((profile) => profile.sourceIds.includes(source.id)).length
 }
 
-export function compileYaml(name: string, nodes: NodeItem[]) {
-  const proxies = nodes
-    .slice(0, 4)
-    .map(
-      (node) =>
-        `  - name: ${node.alias || node.name}\n    type: ${node.protocol}\n    server: ${node.server}\n    port: ${node.port}`,
-    )
-  return `# ${name}\nmode: rule\nproxies:\n${proxies.join('\n')}\nrules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY\n`
+export function localTemplate(templates: TemplateDetail[], id: string) {
+  const builtin = builtinTemplates.find((template) => template.id === id)
+  if (builtin)
+    return {
+      ...builtin,
+      kind: 'builtin',
+      readOnly: true,
+      profileCount: 0,
+      createdAt: null,
+      updatedAt: null,
+    } satisfies TemplateDetail
+  return templates.find((template) => template.id === id)
+}
+
+export function compileYaml(templateId: TemplateId, nodes: NodeItem[], templates: TemplateDetail[]) {
+  const template = localTemplate(templates, templateId)
+  if (!template) throw new Error('订阅模板不存在')
+  return renderMihomoConfig({
+    template,
+    nodes: nodes.map((node) => ({
+      name: node.alias || node.name,
+      config: {
+        name: node.alias || node.name,
+        type: node.protocol,
+        server: node.server,
+        port: node.port,
+      } as ProxyConfig,
+    })),
+  })
 }

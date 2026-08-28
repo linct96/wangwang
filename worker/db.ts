@@ -77,25 +77,44 @@ export const sourceNodes = sqliteTable(
 )
 
 export type RuleModule = 'ads' | 'private' | 'cn'
+export type TemplateId = 'builtin:minimal' | 'builtin:full' | `custom:${string}`
 
-export const profiles = sqliteTable('profiles', {
+export const templates = sqliteTable('templates', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
-  tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
-  ruleModules: text('rule_modules', { mode: 'json' }).$type<RuleModule[]>().notNull().default(['ads', 'private', 'cn']),
-  dnsMode: text('dns_mode', { enum: ['fake-ip', 'redir-host'] })
-    .notNull()
-    .default('fake-ip'),
-  tokenVersion: integer('token_version').notNull().default(1),
-  revision: integer('revision').notNull().default(0),
-  compiledYaml: text('compiled_yaml'),
-  compiledAt: integer('compiled_at', { mode: 'timestamp_ms' }),
-  error: text('error'),
+  description: text('description'),
+  yaml: text('yaml').notNull(),
+  revision: integer('revision').notNull().default(1),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
+
+export const profiles = sqliteTable(
+  'profiles',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    ruleModules: text('rule_modules', { mode: 'json' })
+      .$type<RuleModule[]>()
+      .notNull()
+      .default(['ads', 'private', 'cn']),
+    dnsMode: text('dns_mode', { enum: ['fake-ip', 'redir-host'] })
+      .notNull()
+      .default('fake-ip'),
+    templateId: text('template_id').$type<TemplateId>().notNull().default('builtin:minimal'),
+    tokenVersion: integer('token_version').notNull().default(1),
+    revision: integer('revision').notNull().default(0),
+    compiledYaml: text('compiled_yaml'),
+    compiledAt: integer('compiled_at', { mode: 'timestamp_ms' }),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('profiles_template_id_idx').on(table.templateId)],
+)
 
 export const profileSources = sqliteTable(
   'profile_sources',

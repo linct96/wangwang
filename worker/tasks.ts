@@ -1,9 +1,11 @@
 import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { jobs, nodes, profileNodeExclusions, profiles, profileSources, sourceNodes, sources } from './db'
-import type { JobType, QueueMessage } from './db'
-import { generateMihomoConfig, parseProxyText } from './proxy'
+import type { JobType, QueueMessage, TemplateId } from './db'
+import { parseProxyText } from './proxy'
 import { assertRemoteUrl } from './security'
+import { renderMihomoConfig } from './templates/renderer'
+import { resolveTemplate } from './templates/resolver'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
 
@@ -257,6 +259,16 @@ export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
     await createJob(env, 'compile_profile', profileId)
 }
 
+export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
+  const affected = await db(env)
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.templateId, templateId as TemplateId))
+  const jobs = []
+  for (const profile of affected) jobs.push(await createJob(env, 'compile_profile', profile.id))
+  return jobs
+}
+
 export async function refreshSource(env: Env, sourceId: string) {
   const database = db(env)
   const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
@@ -308,12 +320,8 @@ export async function refreshSource(env: Env, sourceId: string) {
   await enqueueAffectedProfiles(env, sourceId)
 }
 
-export async function compileProfile(env: Env, profileId: string) {
-  const database = db(env)
-  const profile = await database.select().from(profiles).where(eq(profiles.id, profileId)).get()
-  if (!profile) throw new Error('配置不存在')
-
-  const selected = await database
+export async function selectProfileNodes(env: Env, profile: typeof profiles.$inferSelect) {
+  const selected = await db(env)
     .select({
       id: nodes.id,
       config: nodes.config,
@@ -326,12 +334,12 @@ export async function compileProfile(env: Env, profileId: string) {
     .innerJoin(sourceNodes, eq(sourceNodes.nodeId, nodes.id))
     .innerJoin(
       profileSources,
-      and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profileId)),
+      and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profile.id)),
     )
     .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
     .leftJoin(
       profileNodeExclusions,
-      and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profileId)),
+      and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profile.id)),
     )
     .where(
       and(
@@ -349,11 +357,17 @@ export async function compileProfile(env: Env, profileId: string) {
     if (profile.tags.length && !profile.tags.some((tag) => tags.includes(tag))) continue
     if (!unique.has(node.id)) unique.set(node.id, node)
   }
+  return [...unique.values()].map((node) => ({ config: node.config, name: node.alias || node.originalName }))
+}
 
-  const yaml = generateMihomoConfig(
-    [...unique.values()].map((node) => ({ config: node.config, name: node.alias || node.originalName })),
-    { dnsMode: profile.dnsMode, ruleModules: profile.ruleModules },
-  )
+export async function compileProfile(env: Env, profileId: string) {
+  const database = db(env)
+  const profile = await database.select().from(profiles).where(eq(profiles.id, profileId)).get()
+  if (!profile) throw new Error('配置不存在')
+  const template = await resolveTemplate(env, profile.templateId)
+  if (!template) throw new Error('订阅模板不存在')
+
+  const yaml = renderMihomoConfig({ nodes: await selectProfileNodes(env, profile), template })
   const revision = profile.revision + 1
   const now = new Date()
   await database

@@ -1,42 +1,52 @@
-import type { FormEvent } from 'react'
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Plus, RefreshCw, X } from 'lucide-react'
+import type { FormEvent } from 'react'
 import { useForm, useStore } from '@tanstack/react-form'
+import { RefreshCw } from 'lucide-react'
 import { z } from 'zod'
 import { api } from '@/api/client'
-import type { Profile, RuleModule, Source } from '@/api/types'
-import { AppDialog, IconButton } from '@/components/app-primitives'
+import { useApi } from '@/api/use-api'
+import type { Profile, Source, TemplateId, TemplateSummary } from '@/api/types'
+import { AppDialog } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import '@/styles/profile-dialog.css'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import '@/styles/profile-dialog.css'
 
-const ruleLabels: Record<RuleModule, string> = { ads: '广告拦截', private: '私有网络直连', cn: '中国大陆直连' }
 const protocols = ['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic']
 
 export function ProfileDialog({
   sources,
   profile,
+  initialTemplateId,
   onClose,
   onSaved,
 }: {
   sources: Source[]
   profile?: Profile
+  initialTemplateId?: TemplateId
   onClose: () => void
-  onSaved: (jobId: string) => void
+  onSaved: (jobId: string, profileId: string) => void
 }) {
   const [error, setError] = useState('')
+  const { data: templates = [], error: templateError } = useApi<TemplateSummary[]>('/templates')
   const form = useForm({
     defaultValues: {
       name: profile?.name || '',
       tags: profile?.tags.join(', ') || '',
-      dnsMode: (profile?.dnsMode || 'fake-ip') as 'fake-ip' | 'redir-host',
       sourceIds: profile?.sourceIds || [],
       protocols: profile?.protocols || [],
-      ruleModules: profile?.ruleModules || ['ads', 'private', 'cn'],
+      templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {
       onSubmit: z.object({
@@ -50,52 +60,48 @@ export function ProfileDialog({
           if (tags.some((tag) => tag.length > 24))
             context.addIssue({ code: 'custom', message: '单个标签不能超过 24 个字符' })
         }),
-        dnsMode: z.enum(['fake-ip', 'redir-host']),
         sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源').max(20, '节点源不能超过 20 个'),
         protocols: z.array(z.string()).max(20),
-        ruleModules: z.array(z.enum(['ads', 'private', 'cn'])).max(3),
+        templateId: z.custom<TemplateId>((val) => typeof val === 'string' && val.length > 0, '请选择订阅模板'),
       }),
     },
     onSubmit: async ({ value }) => {
       setError('')
       try {
-        const result = await api<{ jobId: string }>(profile ? `/profiles/${profile.id}` : '/profiles', {
-          method: profile ? 'PATCH' : 'POST',
-          body: JSON.stringify({
-            name: value.name,
-            sourceIds: value.sourceIds,
-            protocols: value.protocols,
-            tags: value.tags
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
-            dnsMode: value.dnsMode,
-            ruleModules: value.ruleModules,
-            enabled: profile?.enabled ?? true,
-          }),
-        })
-        onSaved(result.jobId)
+        const result = await api<{ profile: Profile; jobId: string }>(
+          profile ? `/profiles/${profile.id}` : '/profiles',
+          {
+            method: profile ? 'PATCH' : 'POST',
+            body: JSON.stringify({
+              name: value.name,
+              sourceIds: value.sourceIds,
+              protocols: value.protocols,
+              tags: value.tags
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter(Boolean),
+              templateId: value.templateId,
+              enabled: profile?.enabled ?? true,
+            }),
+          },
+        )
+        onSaved(result.jobId, result.profile.id)
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '保存失败')
       }
     },
   })
   const selectedProtocols = useStore(form.store, (state) => state.values.protocols)
-  const rules = useStore(form.store, (state) => state.values.ruleModules)
+  const builtin = templates.filter((template) => template.kind === 'builtin')
+  const custom = templates.filter((template) => template.kind === 'custom')
   function toggle<T>(items: T[], item: T) {
     return items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
-  }
-  function move(index: number, offset: number) {
-    const next = [...rules]
-    const target = index + offset
-    if (target < 0 || target >= next.length) return
-    ;[next[index], next[target]] = [next[target], next[index]]
-    form.setFieldValue('ruleModules', next)
   }
   async function submit(event: FormEvent) {
     event.preventDefault()
     await form.handleSubmit()
   }
+
   return (
     <AppDialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
       <form className="form profile-form profile-dialog-scope" onSubmit={submit} noValidate>
@@ -118,6 +124,39 @@ export function ProfileDialog({
                 </Field>
               )
             }}
+          </form.Field>
+          <form.Field name="templateId">
+            {(field) => (
+              <Field data-invalid={Boolean(templateError)}>
+                <FieldLabel htmlFor="profile-template">订阅模板</FieldLabel>
+                <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as TemplateId)}>
+                  <SelectTrigger id="profile-template" className="w-full" aria-invalid={Boolean(templateError)}>
+                    <SelectValue placeholder="选择订阅模板" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>内置模板</SelectLabel>
+                      {builtin.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    {custom.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>我的模板</SelectLabel>
+                        {custom.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                  </SelectContent>
+                </Select>
+                {templateError && <FieldError>{templateError}</FieldError>}
+              </Field>
+            )}
           </form.Field>
           <form.Field name="sourceIds">
             {(field) => {
@@ -178,82 +217,6 @@ export function ProfileDialog({
               )
             }}
           </form.Field>
-          <FieldSet>
-            <FieldLegend variant="label">DNS 模式</FieldLegend>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={form.getFieldValue('dnsMode')}
-              onValueChange={(value) => value && form.setFieldValue('dnsMode', value as 'fake-ip' | 'redir-host')}
-            >
-              <ToggleGroupItem value="fake-ip">fake-ip</ToggleGroupItem>
-              <ToggleGroupItem value="redir-host">redir-host</ToggleGroupItem>
-            </ToggleGroup>
-          </FieldSet>
-          <FieldSet>
-            <FieldLegend variant="label">规则顺序</FieldLegend>
-            <div className="rule-list">
-              {rules.map((rule, index) => (
-                <div key={rule}>
-                  <span>{ruleLabels[rule]}</span>
-                  <IconButton
-                    label="上移"
-                    disabled={index === 0}
-                    onClick={() => {
-                      move(index, -1)
-                      form.setFieldValue('ruleModules', [
-                        ...rules.slice(0, index - 1),
-                        rule,
-                        rules[index - 1],
-                        ...rules.slice(index + 1),
-                      ])
-                    }}
-                  >
-                    <ArrowUp />
-                  </IconButton>
-                  <IconButton
-                    label="下移"
-                    disabled={index === rules.length - 1}
-                    onClick={() => {
-                      move(index, 1)
-                      form.setFieldValue('ruleModules', [
-                        ...rules.slice(0, index),
-                        rules[index + 1],
-                        rule,
-                        ...rules.slice(index + 2),
-                      ])
-                    }}
-                  >
-                    <ArrowDown />
-                  </IconButton>
-                  <IconButton
-                    label="移除"
-                    onClick={() =>
-                      form.setFieldValue(
-                        'ruleModules',
-                        rules.filter((item) => item !== rule),
-                      )
-                    }
-                  >
-                    <X />
-                  </IconButton>
-                </div>
-              ))}
-              {Object.keys(ruleLabels)
-                .filter((rule) => !rules.includes(rule as RuleModule))
-                .map((rule) => (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    key={rule}
-                    onClick={() => form.setFieldValue('ruleModules', [...rules, rule as RuleModule])}
-                  >
-                    <Plus data-icon="inline-start" />
-                    {ruleLabels[rule as RuleModule]}
-                  </Button>
-                ))}
-            </div>
-          </FieldSet>
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -266,7 +229,7 @@ export function ProfileDialog({
           </Button>
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => (
-              <Button disabled={Boolean(isSubmitting)}>
+              <Button disabled={Boolean(isSubmitting) || Boolean(templateError)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
               </Button>
             )}

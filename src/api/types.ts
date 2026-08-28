@@ -53,7 +53,7 @@ export type NodeItem = {
 
 export type ManualNodeConnection = {
   name: string
-  protocol: 'ss' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'tuic'
+  protocol: 'ss' | 'vmess' | 'vless' | 'trojan' | 'hysteria2' | 'tuic' | 'anytls'
   server: string
   port: number
   cipher?: string
@@ -90,7 +90,22 @@ export type NodeImportResult = {
   warnings: string[]
 }
 
-export type RuleModule = 'ads' | 'private' | 'cn'
+export type TemplateId = 'builtin:minimal' | 'builtin:full' | `custom:${string}`
+
+export type TemplateSummary = {
+  id: TemplateId
+  name: string
+  description: string | null
+  revision: number
+  kind: 'builtin' | 'custom'
+  readOnly: boolean
+  profileCount: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type TemplateDetail = TemplateSummary & { yaml: string }
+export type TemplatePreview = { yaml: string; nodeCount: number }
 
 export type Profile = {
   id: string
@@ -98,8 +113,7 @@ export type Profile = {
   enabled: boolean
   protocols: string[]
   tags: string[]
-  ruleModules: RuleModule[]
-  dnsMode: 'fake-ip' | 'redir-host'
+  templateId: TemplateId
   revision: number
   compiledYaml?: string | null
   compiledAt: string | null

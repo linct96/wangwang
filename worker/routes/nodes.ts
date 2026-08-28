@@ -18,7 +18,7 @@ import {
 } from '../node-config'
 
 export const nodesRouter = new Hono<{ Bindings: Env }>()
-const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic'])
+const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic', 'anytls'])
 
 nodesRouter.post('/', async (c) => {
   const input = await body(c, nodeCreateSchema)

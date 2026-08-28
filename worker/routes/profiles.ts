@@ -3,11 +3,14 @@ import { count, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileNodeExclusions, profiles, profileSources, sources } from '../db'
-import type { RuleModule } from '../db'
+import type { TemplateId } from '../db'
 import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
+import { resolveTemplate } from '../templates/resolver'
 
-const ruleModuleSchema = z.enum(['ads', 'private', 'cn'])
+const templateIdSchema = z.string().refine((value) => /^(builtin:(minimal|full)|custom:[0-9a-f-]{36})$/.test(value), {
+  message: '订阅模板 ID 无效',
+})
 
 export const profileSchema = z.object({
   name: z.string().trim().min(1).max(60),
@@ -16,8 +19,7 @@ export const profileSchema = z.object({
   protocols: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
   tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
   excludedNodeIds: z.array(z.string()).max(1000).default([]),
-  ruleModules: z.array(ruleModuleSchema).max(3).default(['ads', 'private', 'cn']),
-  dnsMode: z.enum(['fake-ip', 'redir-host']).default('fake-ip'),
+  templateId: templateIdSchema.default('builtin:minimal'),
 })
 
 export const profileUpdateSchema = profileSchema.partial()
@@ -72,8 +74,9 @@ export async function profileView(
     .from(profileNodeExclusions)
     .where(eq(profileNodeExclusions.profileId, profile.id))
   const token = subscriptionToken()
+  const { ruleModules: _ruleModules, dnsMode: _dnsMode, ...view } = profile
   return {
-    ...profile,
+    ...view,
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     sourceIds: sourceRows.map((item) => item.id),
     excludedNodeIds: exclusionRows.map((item) => item.id),
@@ -95,6 +98,7 @@ profilesRouter.post('/', async (c) => {
   const [{ value }] = await database.select({ value: count() }).from(profiles)
   if (Number(value) >= 20) return fail(c, 409, 'PROFILE_LIMIT', '配置数量已达到 20 个')
   const sourceIds = await assertSourceIds(c.env, input.sourceIds)
+  if (!(await resolveTemplate(c.env, input.templateId))) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const now = new Date()
   const profile = {
     id: crypto.randomUUID(),
@@ -102,8 +106,7 @@ profilesRouter.post('/', async (c) => {
     enabled: input.enabled,
     protocols: [...new Set(input.protocols)],
     tags: [...new Set(input.tags)],
-    ruleModules: [...new Set(input.ruleModules)] as RuleModule[],
-    dnsMode: input.dnsMode,
+    templateId: input.templateId as TemplateId,
     createdAt: now,
     updatedAt: now,
   }
@@ -133,6 +136,8 @@ profilesRouter.patch('/:id', async (c) => {
   const database = db(c.env)
   const current = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
+  if (input.templateId && !(await resolveTemplate(c.env, input.templateId)))
+    return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const sourceIds = input.sourceIds ? await assertSourceIds(c.env, input.sourceIds) : null
   const { sourceIds: _sourceIds, excludedNodeIds: _excluded, ...values } = input
   await database
@@ -141,7 +146,7 @@ profilesRouter.patch('/:id', async (c) => {
       ...values,
       protocols: values.protocols ? [...new Set(values.protocols)] : undefined,
       tags: values.tags ? [...new Set(values.tags)] : undefined,
-      ruleModules: values.ruleModules ? ([...new Set(values.ruleModules)] as RuleModule[]) : undefined,
+      templateId: values.templateId as TemplateId | undefined,
       updatedAt: new Date(),
     })
     .where(eq(profiles.id, id))

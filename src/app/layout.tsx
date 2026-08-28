@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, CircleGauge, Database, FileCode2, Menu, Network, X } from 'lucide-react'
+import { Activity, CircleGauge, Database, FileCode2, Library, Menu, Network, X } from 'lucide-react'
 import { Link, Outlet } from '@tanstack/react-router'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { IconButton } from '@/components/app-primitives'
@@ -9,6 +9,7 @@ const navigation = [
   { to: '/sources', label: '节点源', icon: Database },
   { to: '/nodes', label: '节点', icon: Network },
   { to: '/profiles', label: '配置', icon: FileCode2 },
+  { to: '/templates', label: '模板库', icon: Library },
 ]
 
 export function Layout() {

@@ -1,8 +1,8 @@
 import { parse, stringify } from 'yaml'
-import type { ProxyConfig, RuleModule } from './db'
+import type { ProxyConfig } from './db'
 
 const MAX_TEXT_BYTES = 1024 * 1024
-const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hysteria2:', 'hy2:', 'tuic:'])
+const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hysteria2:', 'hy2:', 'tuic:', 'anytls:'])
 const SECRET_FIELDS = ['password', 'uuid', 'obfs-password'] as const
 
 export type ParsedNode = {
@@ -166,6 +166,10 @@ function parseStandardUrl(input: string): ProxyConfig {
     base['congestion-controller'] = url.searchParams.get('congestion_control') || 'bbr'
     base['udp-relay-mode'] = url.searchParams.get('udp_relay_mode') || 'native'
     base['skip-cert-verify'] = bool(url.searchParams.get('allow_insecure'))
+  } else if (type === 'anytls') {
+    base.password = decodeURIComponent(url.username)
+    base.sni = url.searchParams.get('sni') || url.hostname
+    base['skip-cert-verify'] = bool(url.searchParams.get('insecure'))
   }
 
   return base
@@ -198,8 +202,13 @@ export async function fingerprint(config: ProxyConfig) {
 
 function yamlNodes(text: string): ProxyConfig[] | null {
   const document = parse(text, { maxAliasCount: 20 }) as unknown
-  if (!Array.isArray(document)) return null
-  return document.map((item) => {
+  const items = Array.isArray(document)
+    ? document
+    : document && typeof document === 'object' && Array.isArray((document as { proxies?: unknown }).proxies)
+      ? (document as { proxies: unknown[] }).proxies
+      : null
+  if (!items) return null
+  return items.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('YAML 节点不是对象')
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
@@ -223,7 +232,8 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
   try {
     configs = yamlNodes(text) || []
   } catch (error) {
-    if (/^\s*-\s+/m.test(text)) throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
+    if (/^\s*-\s+/m.test(text) || /(?:^|\n)\s*proxies\s*:/m.test(text))
+      throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
   }
 
   if (!configs.length) {
@@ -276,65 +286,10 @@ export function proxyConfigError(config: ProxyConfig) {
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) return '端口必须是 1 到 65535 的整数'
   if (config.type === 'ss' && (!config.cipher || !config.password)) return 'SS 节点缺少加密方式或密码'
   if ((config.type === 'vmess' || config.type === 'vless') && !config.uuid) return `${config.type} 节点缺少 UUID`
-  if ((config.type === 'trojan' || config.type === 'hysteria2') && !config.password)
+  if ((config.type === 'trojan' || config.type === 'hysteria2' || config.type === 'anytls') && !config.password)
     return `${config.type} 节点缺少密码`
   if (config.type === 'tuic' && (!config.uuid || !config.password)) return 'TUIC 节点缺少 UUID 或密码'
   const reality = config['reality-opts'] as { 'public-key'?: unknown } | undefined
   if (reality && !reality['public-key']) return 'Reality 节点缺少公钥'
   return null
-}
-
-const RULES: Record<RuleModule, string[]> = {
-  ads: ['GEOSITE,category-ads-all,REJECT'],
-  private: ['GEOSITE,private,DIRECT', 'GEOIP,private,DIRECT,no-resolve'],
-  cn: ['GEOSITE,cn,DIRECT', 'GEOIP,CN,DIRECT,no-resolve'],
-}
-
-export function generateMihomoConfig(
-  inputNodes: Array<{ config: ProxyConfig; name: string }>,
-  options: { dnsMode: 'fake-ip' | 'redir-host'; ruleModules: RuleModule[] },
-) {
-  if (!inputNodes.length) throw new Error('配置没有可用节点')
-  if (inputNodes.length > 1000) throw new Error('单个配置最多包含 1000 个节点')
-
-  const seen = new Map<string, number>()
-  const proxies = inputNodes.map(({ config, name }) => {
-    const base = name.trim() || `${config.server}:${config.port}`
-    const count = (seen.get(base) || 0) + 1
-    seen.set(base, count)
-    return { ...config, name: count === 1 ? base : `${base}-${count}` }
-  })
-  const names = proxies.map((proxy) => proxy.name)
-  const url = 'https://www.gstatic.com/generate_204'
-  const rules = options.ruleModules.flatMap((module) => RULES[module] || [])
-  rules.push('MATCH,节点选择')
-
-  const output = stringify(
-    {
-      'mixed-port': 7890,
-      'allow-lan': false,
-      mode: 'rule',
-      'log-level': 'info',
-      ipv6: false,
-      'unified-delay': true,
-      dns: {
-        enable: true,
-        ipv6: false,
-        'enhanced-mode': options.dnsMode,
-        'fake-ip-range': '198.18.0.1/16',
-        'default-nameserver': ['223.5.5.5', '1.1.1.1'],
-        nameserver: ['https://dns.alidns.com/dns-query', 'https://1.1.1.1/dns-query'],
-      },
-      proxies,
-      'proxy-groups': [
-        { name: '节点选择', type: 'select', proxies: ['自动选择', '故障转移', ...names, 'DIRECT'] },
-        { name: '自动选择', type: 'url-test', url, interval: 300, tolerance: 50, proxies: names },
-        { name: '故障转移', type: 'fallback', url, interval: 300, proxies: names },
-      ],
-      rules,
-    },
-    { lineWidth: 0 },
-  )
-  if (new TextEncoder().encode(output).byteLength > MAX_TEXT_BYTES) throw new Error('生成配置超过 1 MiB')
-  return output
 }

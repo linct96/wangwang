@@ -1,9 +1,14 @@
-import type { ManualNodeConnection, Profile, RuleModule, Source } from '@/api/types'
+import type { ManualNodeConnection, Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
 import { editableProxyYaml, parseProxyText, proxyConfigError, restoreProxySecrets } from '../../worker/proxy'
+import { builtinTemplates } from '../../worker/templates/builtin'
+import { renderMihomoConfig } from '../../worker/templates/renderer'
+import { parseTemplateYaml } from '../../worker/templates/validator'
 import {
   compileYaml,
   createJob,
   localNodeTags,
+  localProfileNodes,
+  localTemplate,
   now,
   readState,
   recompileProfiles,
@@ -471,16 +476,150 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     return { id: node.id, affectedProfileCount: manualSource.profileCount } as T
   }
 
+  if (pathname === '/templates' && method === 'GET') {
+    const profileCount = (id: string) => state.profiles.filter((profile) => profile.templateId === id).length
+    return [
+      ...builtinTemplates.map((template) => ({
+        ...template,
+        kind: 'builtin' as const,
+        readOnly: true,
+        profileCount: profileCount(template.id),
+        createdAt: null,
+        updatedAt: null,
+      })),
+      ...state.templates.map((template) => ({ ...template, profileCount: profileCount(template.id) })),
+    ] satisfies TemplateSummary[] as T
+  }
+  if (pathname === '/templates' && method === 'POST') {
+    if (state.templates.length >= 20) throw new Error('自定义模板数量已达到 20 个')
+    const yaml = String(body.yaml || '')
+    parseTemplateYaml(yaml)
+    const createdAt = now()
+    const template: TemplateDetail = {
+      id: `custom:${crypto.randomUUID()}`,
+      name: String(body.name || '').trim(),
+      description: String(body.description || '').trim() || null,
+      yaml,
+      revision: 1,
+      kind: 'custom',
+      readOnly: false,
+      profileCount: 0,
+      createdAt,
+      updatedAt: createdAt,
+    }
+    if (!template.name) throw new Error('请输入模板名称')
+    state.templates.unshift(template)
+    writeState(state)
+    return template as T
+  }
+  if (pathname === '/templates/validate' && method === 'POST') {
+    parseTemplateYaml(String(body.yaml || ''))
+    return { valid: true } as T
+  }
+  if (pathname === '/templates/preview' && method === 'POST') {
+    const template = body.yaml
+      ? { yaml: String(body.yaml) }
+      : localTemplate(state.templates, String(body.templateId || ''))
+    if (!template) throw new Error('订阅模板不存在')
+    const profile = body.profileId
+      ? requireItem(
+          state.profiles.find((item) => item.id === body.profileId),
+          '配置不存在',
+        )
+      : null
+    const previewNodes = profile
+      ? localProfileNodes(state, profile)
+      : [
+          { name: '香港示例', alias: null, protocol: 'ss', server: 'hk.example.com', port: 8388 },
+          { name: '日本示例', alias: null, protocol: 'ss', server: 'jp.example.com', port: 8388 },
+        ]
+    const yaml = renderMihomoConfig({
+      template,
+      nodes: previewNodes.map((node) => ({
+        name: node.alias || node.name,
+        config: { name: node.alias || node.name, type: node.protocol, server: node.server, port: node.port },
+      })),
+    })
+    return { yaml, nodeCount: previewNodes.length } as T
+  }
+
+  const duplicateTemplateMatch = pathname.match(/^\/templates\/([^/]+)\/duplicate$/)
+  if (duplicateTemplateMatch && method === 'POST') {
+    if (state.templates.length >= 20) throw new Error('自定义模板数量已达到 20 个')
+    const source = requireItem(
+      localTemplate(state.templates, decodeURIComponent(duplicateTemplateMatch[1])),
+      '订阅模板不存在',
+    )
+    const createdAt = now()
+    const template: TemplateDetail = {
+      ...source,
+      id: `custom:${crypto.randomUUID()}`,
+      name: `${source.name} 副本`,
+      revision: 1,
+      kind: 'custom',
+      readOnly: false,
+      profileCount: 0,
+      createdAt,
+      updatedAt: createdAt,
+    }
+    state.templates.unshift(template)
+    writeState(state)
+    return template as T
+  }
+
+  const templateMatch = pathname.match(/^\/templates\/([^/]+)$/)
+  if (templateMatch && method === 'GET') {
+    const template = requireItem(localTemplate(state.templates, decodeURIComponent(templateMatch[1])), '订阅模板不存在')
+    return {
+      ...template,
+      profileCount: state.profiles.filter((profile) => profile.templateId === template.id).length,
+    } as T
+  }
+  if (templateMatch && method === 'PATCH') {
+    const id = decodeURIComponent(templateMatch[1])
+    const template = requireItem(
+      state.templates.find((item) => item.id === id),
+      '内置模板不能修改',
+    )
+    if (typeof body.yaml === 'string') parseTemplateYaml(body.yaml)
+    if (typeof body.name === 'string') template.name = body.name.trim()
+    if (!template.name) throw new Error('请输入模板名称')
+    if (body.description === null || typeof body.description === 'string')
+      template.description = String(body.description || '').trim() || null
+    if (typeof body.yaml === 'string') template.yaml = body.yaml
+    template.revision += 1
+    template.updatedAt = now()
+    const affected = state.profiles.filter((profile) => profile.templateId === id).map((profile) => profile.id)
+    recompileProfiles(state, [], affected)
+    writeState(state)
+    return {
+      template: { ...template, profileCount: affected.length },
+      jobIds: state.jobs.slice(0, affected.length).map((job) => job.id),
+    } as T
+  }
+  if (templateMatch && method === 'DELETE') {
+    const id = decodeURIComponent(templateMatch[1])
+    if (id.startsWith('builtin:')) throw new Error('内置模板不能删除')
+    if (state.profiles.some((profile) => profile.templateId === id)) throw new Error('模板正在被配置使用')
+    requireItem(
+      state.templates.find((item) => item.id === id),
+      '订阅模板不存在',
+    )
+    state.templates = state.templates.filter((item) => item.id !== id)
+    writeState(state)
+    return { id } as T
+  }
+
   if (pathname === '/profiles' && method === 'GET') return state.profiles as T
   if (pathname === '/profiles' && method === 'POST') {
     if (state.profiles.length >= 20) throw new Error('配置数量已达到 20 个')
-    const profile = buildProfile(body, state.nodes, state.sources)
+    const profile = buildProfile(body, state)
     state.profiles.unshift(profile)
     updateProfileCounts(state)
     const job = createJob('compile_profile', profile.id)
     state.jobs.unshift(job)
     writeState(state)
-    return { profileId: profile.id, jobId: job.id } as T
+    return { profile, jobId: job.id } as T
   }
 
   const compileMatch = pathname.match(/^\/profiles\/([^/]+)\/compile$/)
@@ -491,7 +630,8 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     )
     profile.revision += 1
     profile.compiledAt = now()
-    profile.compiledYaml = compileYaml(profile.name, state.nodes)
+    profile.compiledYaml = compileYaml(profile.templateId, localProfileNodes(state, profile), state.templates)
+    profile.error = null
     const job = createJob('compile_profile', profile.id)
     state.jobs.unshift(job)
     writeState(state)
@@ -521,12 +661,12 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       state.profiles.find((item) => item.id === profileMatch[1]),
       '配置不存在',
     )
-    Object.assign(profile, buildProfile(body, state.nodes, state.sources, profile))
+    Object.assign(profile, buildProfile(body, state, profile))
     updateProfileCounts(state)
     const job = createJob('compile_profile', profile.id)
     state.jobs.unshift(job)
     writeState(state)
-    return { profileId: profile.id, jobId: job.id } as T
+    return { profile, jobId: job.id } as T
   }
   if (profileMatch && method === 'DELETE') {
     requireItem(
@@ -552,31 +692,29 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
 
 export function buildProfile(
   body: Record<string, unknown>,
-  nodes: LocalNode[],
-  sources: Source[],
+  state: ReturnType<typeof readState>,
   current?: Profile,
 ): Profile {
   const id = current?.id || crypto.randomUUID()
   const name = typeof body.name === 'string' ? body.name.trim() : current?.name || '未命名配置'
   const sourceIds = Array.isArray(body.sourceIds) ? body.sourceIds.map(String) : current?.sourceIds || []
-  const enabledSources = new Set(sources.filter((source) => source.enabled).map((source) => source.id))
-  const availableNodes = nodes.filter((node) =>
-    node.sourceIds.some((sourceId) => sourceIds.includes(sourceId) && enabledSources.has(sourceId)),
-  )
-  return {
+  const profile: Profile = {
     id,
     name,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : (current?.enabled ?? true),
     protocols: Array.isArray(body.protocols) ? body.protocols.map(String) : current?.protocols || [],
     tags: Array.isArray(body.tags) ? body.tags.map(String) : current?.tags || [],
-    ruleModules: Array.isArray(body.ruleModules) ? (body.ruleModules as RuleModule[]) : current?.ruleModules || [],
-    dnsMode: body.dnsMode === 'redir-host' ? 'redir-host' : current?.dnsMode || 'fake-ip',
+    templateId: (typeof body.templateId === 'string'
+      ? body.templateId
+      : current?.templateId || 'builtin:minimal') as TemplateId,
     revision: (current?.revision || 0) + 1,
-    compiledYaml: compileYaml(name, availableNodes),
+    compiledYaml: current?.compiledYaml || null,
     compiledAt: now(),
     error: null,
     sourceIds,
     excludedNodeIds: current?.excludedNodeIds || [],
     subscriptionUrl: current?.subscriptionUrl || `/s/${id}/local-token/config.yaml`,
   }
+  profile.compiledYaml = compileYaml(profile.templateId, localProfileNodes(state, profile), state.templates)
+  return profile
 }
