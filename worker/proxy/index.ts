@@ -35,6 +35,13 @@ function decodeBase64(value: string) {
   return textDecoder.decode(bytes)
 }
 
+function decodeSubscription(text: string) {
+  const format = detectFormat(text)
+  if (format !== 'base64') return { content: text, format }
+  const content = decodeBase64(text)
+  return { content, format: detectFormat(content) }
+}
+
 function nameFromUrl(url: URL, fallback: string) {
   return decodeURIComponent(url.hash.slice(1)).trim() || fallback
 }
@@ -142,23 +149,24 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
 
   let configs: ProxyConfig[] = []
   const warnings: string[] = []
-  const format = detectFormat(text)
+  let content = text.trim()
+  let format = detectFormat(content)
+  if (format === 'base64' && !content.includes('://')) {
+    try {
+      const decoded = decodeSubscription(content)
+      content = decoded.content
+      format = decoded.format
+    } catch {
+      throw new Error('未识别到 Mihomo YAML 或节点 URI')
+    }
+  }
   try {
-    configs = yamlNodes(text) || []
+    configs = yamlNodes(content) || []
   } catch (error) {
-    if (/^\s*-\s+/m.test(text) || /(?:^|\n)\s*proxies\s*:/m.test(text))
-      throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
+    if (format === 'yaml') throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
   }
 
   if (!configs.length) {
-    let content = text.trim()
-    if (format === 'base64' && !content.includes('://')) {
-      try {
-        content = decodeBase64(content)
-      } catch {
-        throw new Error('未识别到 Mihomo YAML 或节点 URI')
-      }
-    }
     for (const [index, line] of content.split(/\r?\n/).entries()) {
       const value = line.trim()
       if (!value) continue
