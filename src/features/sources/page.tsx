@@ -68,7 +68,7 @@ export function SourcesPage() {
     }
   }
   return (
-    <>
+    <div className="sources-page">
       <div className="page-heading">
         <div>
           <h1>节点源</h1>
@@ -252,7 +252,7 @@ export function SourcesPage() {
           </footer>
         </AppDialog>
       )}
-    </>
+    </div>
   )
 }
 
