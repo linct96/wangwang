@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
 import { yaml } from '@codemirror/lang-yaml'
 import { linter, lintGutter } from '@codemirror/lint'
@@ -348,7 +348,23 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
               return (
                 <Field className="min-h-0 flex-1" data-invalid={invalid}>
-                  <FieldLabel id="node-yaml-label">YAML 内容</FieldLabel>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel id="node-yaml-label">YAML 内容</FieldLabel>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      title="格式化 YAML"
+                      aria-label="格式化 YAML"
+                      onClick={() => {
+                        const document = parseDocument(field.state.value)
+                        if (document.errors.length) return
+                        field.handleChange(document.toString({ lineWidth: 0 }))
+                      }}
+                    >
+                      <WandSparkles />
+                    </Button>
+                  </div>
                   <CodeMirror
                     id="node-yaml"
                     className="min-h-0 flex-1 overflow-hidden rounded-md border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
