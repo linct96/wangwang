@@ -25,7 +25,7 @@ export const sourceCreateSchema = z.object({
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
   nodeTag: nodeTagSchema.optional().default(''),
-  userAgent: userAgentSchema.optional().default('FlClash/v0.8.96 clash-verge Platform/windows'),
+  userAgent: userAgentSchema.optional().default('mihomo'),
 })
 
 export const sourceUpdateSchema = z.object({

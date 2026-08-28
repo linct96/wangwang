@@ -29,7 +29,7 @@ function seedState(): LocalState {
       url: 'https://example.com/sub?token=demo',
       nodeNameFilter: null,
       nodeTag: null,
-      userAgent: 'FlClash/v0.8.96 clash-verge Platform/windows',
+      userAgent: 'mihomo',
       pendingUrl: false,
       profileCount: 1,
       refreshIntervalHours: 6,
@@ -183,7 +183,7 @@ export function readState() {
           templates: value.templates || [],
           sources: value.sources.map((source) => ({
             ...source,
-            userAgent: source.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
+            userAgent: source.userAgent || 'mihomo',
           })),
           profiles: value.profiles.map((profile) => ({
             ...profile,
@@ -226,7 +226,7 @@ export function readState() {
           .filter((source) => source.kind === 'url')
           .map((source) => ({
             ...source,
-            userAgent: source.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
+            userAgent: source.userAgent || 'mihomo',
             pendingUrl: false,
             profileCount: 0,
           })),

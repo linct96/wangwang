@@ -295,7 +295,7 @@ function SourceDialog({
   onSaved: (jobId: string | null) => void
 }) {
   const [error, setError] = useState('')
-  const initialUserAgent = source?.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows'
+  const initialUserAgent = source?.userAgent || 'mihomo'
   const [userAgentOption, setUserAgentOption] = useState(
     userAgentPresets.some(({ value }) => value === initialUserAgent) ? initialUserAgent : customUserAgent,
   )
@@ -303,7 +303,7 @@ function SourceDialog({
     defaultValues: {
       name: source?.name || '',
       url: source?.url || '',
-      userAgent: source?.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
+      userAgent: source?.userAgent || 'mihomo',
       nodeTag: source?.nodeTag || '',
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
@@ -421,7 +421,7 @@ function SourceDialog({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="FlClash/v0.8.96 clash-verge Platform/windows"
+                      placeholder="mihomo"
                       readOnly={userAgentOption !== customUserAgent}
                       aria-readonly={userAgentOption !== customUserAgent}
                       aria-invalid={invalid}

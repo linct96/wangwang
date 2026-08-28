@@ -12,7 +12,7 @@ export const sources = sqliteTable(
     content: text('content'),
     nodeNameFilter: text('node_name_filter'),
     nodeTag: text('node_tag'),
-    userAgent: text('user_agent').notNull().default('FlClash/v0.8.96 clash-verge Platform/windows'),
+    userAgent: text('user_agent').notNull().default('mihomo'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     etag: text('etag'),

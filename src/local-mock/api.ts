@@ -156,7 +156,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       url: rawUrl,
       nodeNameFilter: String(body.nodeNameFilter || '').trim() || null,
       nodeTag: String(body.nodeTag || '').trim() || null,
-      userAgent: String(body.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows').trim(),
+      userAgent: String(body.userAgent || 'mihomo').trim(),
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: Number(body.refreshIntervalHours || 0),
