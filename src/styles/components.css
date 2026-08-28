@@ -51,6 +51,9 @@
 .cell-main {
   color: var(--foreground);
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cell-sub {
   max-width: 300px;
