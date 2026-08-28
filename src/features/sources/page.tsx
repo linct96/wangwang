@@ -241,19 +241,13 @@ export function SourcesPage() {
         <SourceDialog
           source={editing}
           onClose={() => setEditing(undefined)}
-          onSaved={async (jobId) => {
+          onSaved={async () => {
             const source = editing
             setEditing(undefined)
             setBusy(source.id)
-            try {
-              if (jobId) await waitForJob(jobId)
-              toast.success(jobId ? '新订阅地址验证成功' : '订阅设置已保存')
-            } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '新订阅地址验证失败')
-            } finally {
-              setBusy('')
-              await reload()
-            }
+            toast.success('订阅设置已保存')
+            setBusy('')
+            await reload()
           }}
         />
       )}
@@ -521,24 +515,11 @@ function SourceDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <form.Subscribe
-            selector={(state) => [
-              state.isSubmitting,
-              state.values.url,
-              state.values.userAgent,
-              state.values.nodeNameFilter,
-            ]}
-          >
-            {([isSubmitting, currentUrl, currentUserAgent, currentFilter]) => (
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
               <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
-                {source
-                  ? String(currentUrl).trim() !== (source.url || '') ||
-                    String(currentUserAgent).trim() !== source.userAgent ||
-                    String(currentFilter).trim() !== (source.nodeNameFilter || '')
-                    ? '保存并验证'
-                    : '保存'
-                  : '完成'}
+                {source ? '保存' : '完成'}
               </Button>
             )}
           </form.Subscribe>

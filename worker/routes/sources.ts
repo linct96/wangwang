@@ -120,7 +120,6 @@ sourcesRouter.patch('/:id', async (c) => {
   if (input.url) assertRemoteUrl(input.url)
   const nodeNameFilter =
     input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
-  const filterChanged = nodeNameFilter !== current.nodeNameFilter
   const nodeTag = input.nodeTag === undefined ? current.nodeTag : input.nodeTag || null
   const nodeTagChanged = nodeTag !== current.nodeTag
   const userAgent = input.userAgent ?? current.userAgent
@@ -151,15 +150,6 @@ sourcesRouter.patch('/:id', async (c) => {
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagChanged)
     await enqueueAffectedProfiles(c.env, current.id)
-  if (input.url || filterChanged || userAgentChanged) {
-    try {
-      const job = await createJob(c.env, 'refresh_source', current.id)
-      return c.json({ data: { source: sourceView(updated!), jobId: job.id } }, 202)
-    } catch (error) {
-      await db(c.env).update(sources).set({ pendingUrl: null }).where(eq(sources.id, current.id))
-      throw error
-    }
-  }
   return ok(c, { source: sourceView(updated!), jobId: null })
 })
 
