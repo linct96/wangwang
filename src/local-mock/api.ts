@@ -59,7 +59,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (!rawUrl) throw new Error('订阅地址不能为空')
     const source: Source = {
       id: crypto.randomUUID(),
-      name: String(body.name || '').trim(),
+      name: String(body.name || '').trim() || new URL(rawUrl).hostname,
       kind: 'url',
       url: displayUrl(rawUrl),
       nodeNameFilter: String(body.nodeNameFilter || '').trim() || null,

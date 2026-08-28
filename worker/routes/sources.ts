@@ -13,7 +13,7 @@ const nodeNameFilterSchema = z
   .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
 
 export const sourceCreateSchema = z.object({
-  name: z.string().trim().min(1).max(60),
+  name: z.string().trim().max(60).optional().default(''),
   url: z.string().trim().min(1).max(2048),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
@@ -84,11 +84,12 @@ sourcesRouter.post('/', async (c) => {
   const [{ value }] = await database.select({ value: count() }).from(sources).where(eq(sources.kind, 'url'))
   if (Number(value) >= 20) return fail(c, 409, 'SOURCE_LIMIT', '节点源数量已达到 20 个')
   assertRemoteUrl(input.url)
+  const name = input.name || new URL(input.url).hostname
   const nodeNameFilter = normalizeNodeNameFilter(input.nodeNameFilter)
   const now = new Date()
   const source = {
     id: crypto.randomUUID(),
-    name: input.name,
+    name,
     kind: 'url' as const,
     url: input.url,
     nodeNameFilter,
