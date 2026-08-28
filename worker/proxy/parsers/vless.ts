@@ -1,20 +1,15 @@
 import type { ProxyConfig } from '../../db'
+import { parseTransport } from './transport'
 export function parseVless(url: URL, config: ProxyConfig) {
   config.uuid = decodeURIComponent(url.username)
   if (url.searchParams.get('flow')) config.flow = url.searchParams.get('flow')
   const network = url.searchParams.get('type') || url.searchParams.get('network') || 'tcp'
-  if (network !== 'tcp') config.network = network
-  if (network === 'ws')
-    config['ws-opts'] = {
-      path: url.searchParams.get('path') || '/',
-      headers: url.searchParams.get('host') ? { Host: url.searchParams.get('host') } : undefined,
-    }
-  if (network === 'grpc') config['grpc-opts'] = { 'grpc-service-name': url.searchParams.get('serviceName') || '' }
-  if (network === 'http' || network === 'h2')
-    config['http-opts'] = {
-      path: url.searchParams.get('path') || '/',
-      headers: url.searchParams.get('host') ? { Host: [url.searchParams.get('host')] } : undefined,
-    }
+  parseTransport(config, {
+    network,
+    path: url.searchParams.get('path') || undefined,
+    host: url.searchParams.get('host') || undefined,
+    serviceName: url.searchParams.get('serviceName') || undefined,
+  })
   if (network === 'xhttp') {
     config['xhttp-opts'] = {
       path: url.searchParams.get('path') || '/',
