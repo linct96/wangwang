@@ -31,4 +31,59 @@ describe('parseProxyText', () => {
     })
     expect(proxyConfigError(restored)).toBeNull()
   })
+
+  it('支持解析 SS SIP002 插件配置', async () => {
+    const ssUri =
+      'ss://YWVzLTEyOC1nY206c2VjcmV0@example.com:8388?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dexample.com#SS节点'
+    const result = await parseProxyText(ssUri)
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0]?.config).toMatchObject({
+      type: 'ss',
+      server: 'example.com',
+      port: 8388,
+      cipher: 'aes-128-gcm',
+      password: 'secret',
+      plugin: 'obfs-local',
+      'plugin-opts': {
+        obfs: 'http',
+        'obfs-host': 'example.com',
+      },
+    })
+  })
+
+  it('支持解析 Hysteria2 额外参数 (pin-sha256, ech)', async () => {
+    const hy2Uri = 'hysteria2://secret@hy2.example.com:443?pinSHA256=abcdef&ech=true#Hy2'
+    const result = await parseProxyText(hy2Uri)
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0]?.config).toMatchObject({
+      type: 'hysteria2',
+      server: 'hy2.example.com',
+      port: 443,
+      password: 'secret',
+      'pin-sha256': 'abcdef',
+      ech: 'true',
+    })
+  })
+
+  it('支持解析 VLESS 传输层与 Reality 参数', async () => {
+    const vlessReality =
+      'vless://00000000-0000-0000-0000-000000000001@example.com:443?security=reality&sni=sni.example.com&fp=chrome&pbk=pubkey123&sid=sid456&type=ws&path=%2Fws#VLESS-Reality'
+    const result = await parseProxyText(vlessReality)
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0]?.config).toMatchObject({
+      type: 'vless',
+      server: 'example.com',
+      port: 443,
+      uuid: '00000000-0000-0000-0000-000000000001',
+      network: 'ws',
+      'ws-opts': { path: '/ws' },
+      tls: true,
+      servername: 'sni.example.com',
+      'client-fingerprint': 'chrome',
+      'reality-opts': {
+        'public-key': 'pubkey123',
+        'short-id': 'sid456',
+      },
+    })
+  })
 })
