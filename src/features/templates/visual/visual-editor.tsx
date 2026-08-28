@@ -41,6 +41,7 @@ import type {
   RuleTargetDraft,
   StructuredProxyGroupDraft,
   StructuredRuleDraft,
+  SupportedLoadBalanceStrategy,
   SupportedProxyGroupType,
   SupportedRuleType,
   VisualIssue,
@@ -292,7 +293,7 @@ function GroupCard({
             </div>
           ) : (
             <div className="template-group-nodes-section">
-              {(group.type !== 'select' || group.url || group.interval || group.tolerance) && (
+              {(group.type !== 'select' || group.url || group.interval || group.tolerance || group.strategy) && (
                 <div className="template-group-params">
                   {group.url && (
                     <span className="template-group-param-item">
@@ -307,6 +308,11 @@ function GroupCard({
                   {group.tolerance !== undefined && (
                     <span className="template-group-param-item">
                       容差: <code>{group.tolerance}ms</code>
+                    </span>
+                  )}
+                  {group.strategy && (
+                    <span className="template-group-param-item">
+                      策略: <code>{group.strategy}</code>
                     </span>
                   )}
                 </div>
@@ -367,10 +373,12 @@ function GroupDialog({
 }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups))
+
   function show() {
     setForm(value || newGroup('select', groups))
     setOpen(true)
   }
+
   function save() {
     if (!form.name.trim() || groups.some((group) => group.id !== value?.id && group.name === form.name.trim())) {
       toast.error('代理组名称不能为空且不能重复')
@@ -414,9 +422,12 @@ function GroupDialog({
                       ...form,
                       type,
                       ...(type === 'select'
-                        ? { url: undefined, interval: undefined, tolerance: undefined }
+                        ? { url: undefined, interval: undefined, tolerance: undefined, strategy: undefined }
                         : { url: form.url || 'https://www.gstatic.com/generate_204', interval: form.interval || 300 }),
                       ...(type !== 'url-test' ? { tolerance: undefined } : { tolerance: form.tolerance ?? 50 }),
+                      ...(type !== 'load-balance'
+                        ? { strategy: undefined }
+                        : { strategy: form.strategy || 'consistent-hashing' }),
                     })
                   }
                 >
@@ -427,13 +438,14 @@ function GroupDialog({
                     <SelectItem value="select">select (手动选择)</SelectItem>
                     <SelectItem value="url-test">url-test (自动测速)</SelectItem>
                     <SelectItem value="fallback">fallback (故障转移)</SelectItem>
+                    <SelectItem value="load-balance">load-balance (负载均衡)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
             </div>
             {form.type !== 'select' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field className={cn(form.type === 'url-test' ? 'sm:col-span-2' : '')}>
+                <Field className={cn(form.type === 'url-test' || form.type === 'load-balance' ? 'sm:col-span-2' : '')}>
                   <FieldLabel>测试 URL</FieldLabel>
                   <Input
                     value={form.url || ''}
@@ -459,6 +471,26 @@ function GroupDialog({
                       value={form.tolerance ?? 50}
                       onChange={(event) => setForm({ ...form, tolerance: Number(event.target.value) })}
                     />
+                  </Field>
+                )}
+                {form.type === 'load-balance' && (
+                  <Field>
+                    <FieldLabel>均衡策略 (strategy)</FieldLabel>
+                    <Select
+                      value={form.strategy || 'consistent-hashing'}
+                      onValueChange={(strategy: SupportedLoadBalanceStrategy) =>
+                        setForm({ ...form, strategy })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="consistent-hashing">consistent-hashing (一致性哈希)</SelectItem>
+                        <SelectItem value="round-robin">round-robin (轮询)</SelectItem>
+                        <SelectItem value="sticky-sessions">sticky-sessions (会话保持)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </Field>
                 )}
               </div>
