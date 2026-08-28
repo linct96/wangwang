@@ -145,12 +145,13 @@ vless://uuid@example.com:443#香港节点
 trojan://password@example.net:443#日本节点
 
 或粘贴 YAML 节点列表：
-- name: 新加坡节点
-  type: ss
-  server: sg.example.com
-  port: 8388
-  cipher: aes-128-gcm
-  password: your-password`}
+proxies:
+  - name: 新加坡节点
+    type: ss
+    server: sg.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: your-password`}
                       aria-invalid={invalid}
                     />
                     {invalid && <FieldError errors={field.state.meta.errors} />}

@@ -175,11 +175,43 @@ function parseStandardUrl(input: string): ProxyConfig {
   return base
 }
 
+function parseHysteria2(input: string): ProxyConfig {
+  // URL 标准解析器不接受 Hysteria2 的多端口语法，先单独拆出 authority。
+  const match = input.match(/^(?:hysteria2|hy2):\/\/(?:([^@/?#]*)@)?(\[[^\]]+\]|[^:/?#]+)(?::([^/?#]+))?(.*)$/i)
+  if (!match) throw new Error('Hysteria2 链接格式无效')
+  const [, auth, host, portText, suffix] = match
+  if (portText && !/^(?:\d+|\d+-\d+|\d+(?:,\d+|,\d+-\d+)+)$/.test(portText)) throw new Error('端口无效')
+  const port = portText ? Number(portText.split(/[,-]/, 1)[0]) : 443
+  const validPorts =
+    !portText ||
+    portText.split(',').every((part) => {
+      const [start, end = start] = part.split('-').map(Number)
+      return Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end <= 65535 && start <= end
+    })
+  if (!validPorts) throw new Error('端口无效')
+  const url = new URL(`hysteria2://${auth ? `${auth}@` : ''}${host}${suffix}`)
+  const config: ProxyConfig = {
+    name: nameFromUrl(url, `${url.hostname}:${port}`),
+    type: 'hysteria2',
+    server: url.hostname,
+    port,
+    udp: true,
+    password: auth ? decodeURIComponent(auth) : url.searchParams.get('auth') || '',
+    sni: url.searchParams.get('sni') || url.hostname,
+    'skip-cert-verify': bool(url.searchParams.get('insecure')),
+  }
+  if (portText && !/^\d+$/.test(portText)) config.ports = portText
+  if (url.searchParams.get('obfs')) config.obfs = url.searchParams.get('obfs')
+  if (url.searchParams.get('obfs-password')) config['obfs-password'] = url.searchParams.get('obfs-password')
+  return config
+}
+
 function parseUri(input: string) {
   const scheme = input.slice(0, input.indexOf(':') + 1).toLowerCase()
   if (!SUPPORTED_SCHEMES.has(scheme)) throw new Error('协议不支持')
   if (scheme === 'ss:') return parseSs(input)
   if (scheme === 'vmess:') return parseVmess(input)
+  if (scheme === 'hysteria2:' || scheme === 'hy2:') return parseHysteria2(input)
   return parseStandardUrl(input)
 }
 
@@ -202,11 +234,11 @@ export async function fingerprint(config: ProxyConfig) {
 
 function yamlNodes(text: string): ProxyConfig[] | null {
   const document = parse(text, { maxAliasCount: 20 }) as unknown
-  const items = Array.isArray(document)
-    ? document
-    : document && typeof document === 'object' && Array.isArray((document as { proxies?: unknown }).proxies)
+  const items = document && typeof document === 'object' && Array.isArray((document as { proxies?: unknown }).proxies)
       ? (document as { proxies: unknown[] }).proxies
-      : null
+      : Array.isArray(document)
+        ? document
+        : null
   if (!items) return null
   return items.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('YAML 节点不是对象')
@@ -269,7 +301,7 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
 export function editableProxyYaml(config: ProxyConfig) {
   const editable = { ...config }
   for (const field of SECRET_FIELDS) if (field in editable) editable[field] = ''
-  return stringify([editable], { lineWidth: 0 })
+  return stringify({ proxies: [editable] }, { lineWidth: 0 })
 }
 
 export function restoreProxySecrets(config: ProxyConfig, current: ProxyConfig) {
