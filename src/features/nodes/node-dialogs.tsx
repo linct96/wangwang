@@ -2,11 +2,8 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
-import { yaml } from '@codemirror/lang-yaml'
-import { linter, lintGutter } from '@codemirror/lint'
 import CodeMirror from '@uiw/react-codemirror'
 import { useTheme } from 'next-themes'
-import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
@@ -19,20 +16,8 @@ import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Textarea } from '@/components/ui/textarea'
+import { formatYaml, yamlEditorExtensions } from '@/lib/yaml-editor'
 import { defaultConnection, ManualConnectionFields } from './node-form'
-
-const yamlEditorExtensions = [
-  yaml(),
-  linter((view) =>
-    parseDocument(view.state.doc.toString()).errors.map((error) => ({
-      from: error.pos[0],
-      to: error.pos[1],
-      severity: 'error',
-      message: error.message,
-    })),
-  ),
-  lintGutter(),
-]
 
 const tagsSchema = z.string().superRefine((value, context) => {
   const tags = value
@@ -357,9 +342,8 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
                       title="格式化 YAML"
                       aria-label="格式化 YAML"
                       onClick={() => {
-                        const document = parseDocument(field.state.value)
-                        if (document.errors.length) return
-                        field.handleChange(document.toString({ lineWidth: 0 }))
+                        const formatted = formatYaml(field.state.value)
+                        if (formatted) field.handleChange(formatted)
                       }}
                     >
                       <WandSparkles />
