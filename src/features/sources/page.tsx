@@ -6,7 +6,7 @@ import { useForm } from '@tanstack/react-form'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Source } from '@/api/types'
-import { AppDialog, IconButton, PageState, Status } from '@/components/app-primitives'
+import { AppDialog, IconButton, Status } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -25,6 +25,8 @@ export function SourcesPage() {
   const [deleting, setDeleting] = useState<Source>()
   const [busy, setBusy] = useState('')
   const [refreshStatus, setRefreshStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
+  const initialLoading = loading && data.length === 0
+  const refreshing = loading && data.length > 0
 
   async function action(id: string, operation: 'refresh' | 'toggle' | 'delete', enabled?: boolean) {
     if (operation === 'refresh') {
@@ -79,8 +81,7 @@ export function SourcesPage() {
           添加订阅
         </Button>
       </div>
-      <PageState loading={loading} error={error} />
-      <section className="section table-wrap">
+      <section className="section table-wrap relative" aria-busy={loading}>
         <Table className="table-fixed">
           <colgroup>
             <col className="w-[28%]" />
@@ -103,7 +104,22 @@ export function SourcesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.length ? (
+            {initialLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="empty">
+                  <span className="inline-flex items-center gap-2">
+                    <RefreshCw className="spin" />
+                    加载中
+                  </span>
+                </TableCell>
+              </TableRow>
+            ) : error && data.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="empty text-destructive">
+                  {error}
+                </TableCell>
+              </TableRow>
+            ) : data.length ? (
               data.map((source) => {
                 const status = refreshStatus[source.id]
                 const isRefreshing = status === 'loading'
@@ -189,6 +205,12 @@ export function SourcesPage() {
             )}
           </TableBody>
         </Table>
+        {refreshing && (
+          <RefreshCw
+            className="table-refresh absolute top-4 right-4 size-4 text-muted-foreground spin"
+            aria-label="刷新中"
+          />
+        )}
       </section>
       {adding && (
         <SourceDialog
