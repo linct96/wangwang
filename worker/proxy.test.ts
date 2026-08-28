@@ -87,6 +87,17 @@ describe('parseProxyText', () => {
     })
   })
 
+  it('为 VLESS H2 使用 h2-opts', async () => {
+    const result = await parseProxyText(
+      'vless://00000000-0000-0000-0000-000000000001@example.com:443?type=h2&path=%2Fh2&host=cdn.example.com#VLESS-H2',
+    )
+    expect(result.nodes[0]?.config).toMatchObject({
+      network: 'h2',
+      'h2-opts': { path: '/h2', host: ['cdn.example.com'] },
+    })
+    expect(result.nodes[0]?.config).not.toHaveProperty('http-opts')
+  })
+
   it('支持解析 Trojan 传输层参数', async () => {
     const result = await parseProxyText(
       'trojan://password@example.com:443?type=ws&path=%2Ftrojan&host=cdn.example.com#Trojan',
