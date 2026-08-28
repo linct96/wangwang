@@ -3,6 +3,7 @@ import type { ProxyConfig, RuleModule } from './db'
 
 const MAX_TEXT_BYTES = 1024 * 1024
 const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hysteria2:', 'hy2:', 'tuic:'])
+const SECRET_FIELDS = ['password', 'uuid', 'obfs-password'] as const
 
 export type ParsedNode = {
   config: ProxyConfig
@@ -197,9 +198,8 @@ export async function fingerprint(config: ProxyConfig) {
 
 function yamlNodes(text: string): ProxyConfig[] | null {
   const document = parse(text, { maxAliasCount: 20 }) as unknown
-  if (!document || typeof document !== 'object' || !Array.isArray((document as { proxies?: unknown }).proxies))
-    return null
-  return (document as { proxies: unknown[] }).proxies.map((item) => {
+  if (!Array.isArray(document)) return null
+  return document.map((item) => {
     if (!item || typeof item !== 'object') throw new Error('YAML 节点不是对象')
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
@@ -223,8 +223,7 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
   try {
     configs = yamlNodes(text) || []
   } catch (error) {
-    if (/proxies\s*:/.test(text))
-      throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
+    if (/^\s*-\s+/m.test(text)) throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
   }
 
   if (!configs.length) {
@@ -255,6 +254,34 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
   }
   if (!deduplicated.size) throw new Error(warnings[0] || '没有可用节点')
   return { nodes: [...deduplicated.values()], warnings }
+}
+
+export function editableProxyYaml(config: ProxyConfig) {
+  const editable = { ...config }
+  for (const field of SECRET_FIELDS) if (field in editable) editable[field] = ''
+  return stringify([editable], { lineWidth: 0 })
+}
+
+export function restoreProxySecrets(config: ProxyConfig, current: ProxyConfig) {
+  const restored = { ...config }
+  if (restored.type !== current.type) return restored
+  for (const field of SECRET_FIELDS)
+    if ((restored[field] === '' || restored[field] === undefined) && current[field] !== undefined)
+      restored[field] = current[field]
+  return restored
+}
+
+export function proxyConfigError(config: ProxyConfig) {
+  if (!config.name || !config.server) return '节点名称或服务器不能为空'
+  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) return '端口必须是 1 到 65535 的整数'
+  if (config.type === 'ss' && (!config.cipher || !config.password)) return 'SS 节点缺少加密方式或密码'
+  if ((config.type === 'vmess' || config.type === 'vless') && !config.uuid) return `${config.type} 节点缺少 UUID`
+  if ((config.type === 'trojan' || config.type === 'hysteria2') && !config.password)
+    return `${config.type} 节点缺少密码`
+  if (config.type === 'tuic' && (!config.uuid || !config.password)) return 'TUIC 节点缺少 UUID 或密码'
+  const reality = config['reality-opts'] as { 'public-key'?: unknown } | undefined
+  if (reality && !reality['public-key']) return 'Reality 节点缺少公钥'
+  return null
 }
 
 const RULES: Record<RuleModule, string[]> = {
