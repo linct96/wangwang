@@ -8,6 +8,7 @@ import { LoginPage } from '@/features/auth/page'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import '@/styles/auth.css'
 import { Toaster } from '@/components/ui/sonner'
 
 let authStatusRequest: Promise<AuthStatus> | undefined

@@ -1,0 +1,21 @@
+@scope (.auth-page) {
+  .auth-page {
+    min-height: 100vh;
+    padding: 20px;
+    display: grid;
+    place-items: center;
+    background: var(--muted);
+  }
+  .auth-form {
+    width: min(400px, 100%);
+    padding: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 30px oklch(0 0 0 / 8%);
+  }
+  .auth-form h1 {
+    margin: 0;
+    font-size: 21px;
+  }
+}

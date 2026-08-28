@@ -33,7 +33,7 @@ export function LoginPage({ initialized, onAuthenticated }: { initialized: boole
     }
   }
   return (
-    <main className="auth-page">
+    <main className="auth-page auth-login-page">
       <form className="form auth-form" onSubmit={submit}>
         <h1>{loginMode ? 'Wangwang 登录' : '设置管理员密码'}</h1>
         <FieldGroup>
