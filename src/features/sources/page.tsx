@@ -11,11 +11,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatBytes, formatDate } from '@/lib/format'
+import { formatBytes, formatDate, formatRelativeTime } from '@/lib/format'
 
 export function SourcesPage() {
   const { data = [], error, loading, reload } = useApi<Source[]>('/sources')
@@ -80,16 +81,24 @@ export function SourcesPage() {
       </div>
       <PageState loading={loading} error={error} />
       <section className="section table-wrap">
-        <Table>
+        <Table className="table-fixed">
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[8%]" />
+            <col className="w-[17%]" />
+            <col className="w-[20%]" />
+            <col className="w-[13.5%]" />
+            <col className="w-[13.5%]" />
+            <col className="w-[172px]" />
+          </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead>名称</TableHead>
               <TableHead>节点</TableHead>
               <TableHead>流量使用</TableHead>
-              <TableHead>到期</TableHead>
-              <TableHead>状态</TableHead>
+              <TableHead>到期时间</TableHead>
               <TableHead>上次刷新</TableHead>
-              <TableHead>刷新间隔</TableHead>
+              <TableHead>状态</TableHead>
               <TableHead className="actions text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -114,27 +123,20 @@ export function SourcesPage() {
                       ) : (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="traffic-meter">
-                              <div className="traffic-meter-label">
+                            <div className="flex min-w-0 max-w-32 flex-col gap-1">
+                              <div className="flex items-center justify-between gap-2 text-xs font-semibold">
                                 <span>{usagePercent.toFixed(1)}%</span>
-                                <div
-                                  className="traffic-track"
-                                  role="progressbar"
-                                  aria-valuenow={usagePercent}
-                                  aria-valuemin={0}
-                                  aria-valuemax={100}
-                                >
-                                  <span style={{ width: `${usagePercent}%` }} />
-                                </div>
                               </div>
+                              <Progress value={usagePercent} aria-label={`流量使用 ${usagePercent.toFixed(1)}%`} />
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
-                            上传：{formatBytes(source.uploadBytes)} · 下载：{formatBytes(source.downloadBytes)}
-                            <br />
-                            已用：{formatBytes(usedBytes)} · 总量：{formatBytes(totalBytes)}
-                            <br />
-                            剩余：{formatBytes(Math.max((totalBytes || 0) - usedBytes, 0))}
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                              <span>上传：{formatBytes(source.uploadBytes)}</span>
+                              <span>下载：{formatBytes(source.downloadBytes)}</span>
+                              <span>总量：{formatBytes(totalBytes)}</span>
+                              <span>剩余：{formatBytes(Math.max((totalBytes || 0) - usedBytes, 0))}</span>
+                            </div>
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -142,17 +144,9 @@ export function SourcesPage() {
                     <TableCell>
                       {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
                     </TableCell>
+                    <TableCell>{formatRelativeTime(source.lastRefreshedAt)}</TableCell>
                     <TableCell>
                       <Status value={isRefreshing ? 'refreshing' : busy === source.id ? 'refreshing' : source.status} />
-                      {(source.error || source.warning) && (
-                        <div className="cell-sub source-message" title={source.error || source.warning || ''}>
-                          {source.error || source.warning}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{formatDate(source.lastRefreshedAt)}</TableCell>
-                    <TableCell>
-                      {source.refreshIntervalHours ? `${source.refreshIntervalHours} 小时` : '关闭'}
                     </TableCell>
                     <TableCell className="actions">
                       <IconButton
@@ -177,7 +171,7 @@ export function SourcesPage() {
                         <Trash2 />
                       </IconButton>
                       <Switch
-                        className="ml-3.5"
+                        className="ml-3.5 mr-2"
                         aria-label={source.enabled ? '停用' : '启用'}
                         checked={source.enabled}
                         onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
@@ -188,7 +182,7 @@ export function SourcesPage() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={8} className="empty">
+                <TableCell colSpan={7} className="empty">
                   暂无外部订阅
                 </TableCell>
               </TableRow>

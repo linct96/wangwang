@@ -1,4 +1,8 @@
 @media (max-width: 800px) {
+  [data-slot='table'].table-fixed {
+    min-width: 900px;
+  }
+
   .content {
     padding: 20px 16px 44px;
   }
