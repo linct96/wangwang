@@ -448,7 +448,7 @@ function SourceDialog({
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={source ? '例如：机场订阅' : '可留空，默认使用域名'}
+                    placeholder={source ? '例如：机场订阅' : '默认自动获取，可留空'}
                     aria-invalid={invalid}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
