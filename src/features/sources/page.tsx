@@ -6,7 +6,7 @@ import { useForm } from '@tanstack/react-form'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Source } from '@/api/types'
-import { AppDialog, IconButton, Status } from '@/components/app-primitives'
+import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -84,22 +84,22 @@ export function SourcesPage() {
       <section className="section table-wrap relative" aria-busy={loading}>
         <Table className="table-fixed">
           <colgroup>
-            <col className="w-[28%]" />
+            <col className="w-[18%]" />
+            <col className="w-[22%]" />
             <col className="w-[8%]" />
             <col className="w-[17%]" />
             <col className="w-[20%]" />
-            <col className="w-[13.5%]" />
             <col className="w-[13.5%]" />
             <col className="w-[172px]" />
           </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead>名称</TableHead>
+              <TableHead>订阅链接</TableHead>
               <TableHead>节点</TableHead>
               <TableHead>流量使用</TableHead>
               <TableHead>到期时间</TableHead>
               <TableHead>上次刷新</TableHead>
-              <TableHead>状态</TableHead>
               <TableHead className="actions text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -130,6 +130,8 @@ export function SourcesPage() {
                   <TableRow key={source.id}>
                     <TableCell>
                       <div className="cell-main">{source.name}</div>
+                    </TableCell>
+                    <TableCell>
                       <div className="cell-sub">{source.url || '-'}</div>
                     </TableCell>
                     <TableCell>{source.nodeCount}</TableCell>
@@ -161,9 +163,6 @@ export function SourcesPage() {
                       {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
                     </TableCell>
                     <TableCell>{formatRelativeTime(source.lastRefreshedAt)}</TableCell>
-                    <TableCell>
-                      <Status value={isRefreshing ? 'refreshing' : busy === source.id ? 'refreshing' : source.status} />
-                    </TableCell>
                     <TableCell className="actions">
                       <IconButton
                         label={status === 'success' ? '刷新成功' : status === 'error' ? '刷新失败' : '刷新'}
