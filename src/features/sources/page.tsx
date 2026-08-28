@@ -3,13 +3,14 @@ import type { FormEvent } from 'react'
 import { Check, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from '@tanstack/react-form'
+import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Source } from '@/api/types'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -294,6 +295,28 @@ function SourceDialog({
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
     },
+    validators: {
+      onSubmit: z.object({
+        name: source
+          ? z.string().trim().min(1, '请输入订阅名称').max(60, '订阅名称不能超过 60 个字符')
+          : z.string().trim().max(60, '订阅名称不能超过 60 个字符'),
+        url: z.url('请输入有效的订阅地址').max(2048, '订阅地址不能超过 2048 个字符'),
+        nodeNameFilter: z
+          .string()
+          .trim()
+          .max(200, '过滤规则不能超过 200 个字符')
+          .refine((value) => {
+            if (!value) return true
+            try {
+              new RegExp(value)
+              return true
+            } catch {
+              return false
+            }
+          }, '节点名称过滤正则无效'),
+        interval: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]),
+      }),
+    },
     onSubmit: async ({ value }) => {
       const urlChanged = value.url.trim() !== (source?.url || '')
       const nodeNameFilter = value.nodeNameFilter.trim()
@@ -320,53 +343,67 @@ function SourceDialog({
   }
   return (
     <AppDialog title={source ? '编辑订阅' : '添加订阅'} onClose={onClose}>
-      <form className="form" onSubmit={submit}>
+      <form className="form" onSubmit={submit} noValidate>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="source-url">订阅地址</FieldLabel>
-            <form.Field name="url">
-              {(field) => (
-                <Input
-                  id="source-url"
-                  required
-                  type="url"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="https://example.com/sub"
-                />
-              )}
-            </form.Field>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="source-name">订阅名称</FieldLabel>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  id="source-name"
-                  required={!source}
-                  maxLength={60}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="可留空，默认使用域名"
-                />
-              )}
-            </form.Field>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="source-node-name-filter">节点名称过滤</FieldLabel>
-            <form.Field name="nodeNameFilter">
-              {(field) => (
-                <Input
-                  id="source-node-name-filter"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="例如：广告|测试"
-                  maxLength={200}
-                />
-              )}
-            </form.Field>
-            <FieldDescription>使用正则表达式，排除名称匹配的节点，留空表示不过滤。</FieldDescription>
-          </Field>
+          <form.Field name="url">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="source-url">订阅地址</FieldLabel>
+                  <Input
+                    id="source-url"
+                    type="url"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="https://example.com/sub"
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
+          <form.Field name="name">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="source-name">订阅名称</FieldLabel>
+                  <Input
+                    id="source-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder={source ? '例如：机场订阅' : '可留空，默认使用域名'}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
+          <form.Field name="nodeNameFilter">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="source-node-name-filter">节点名称过滤</FieldLabel>
+                  <Input
+                    id="source-node-name-filter"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="例如：广告|测试"
+                    aria-invalid={invalid}
+                  />
+                  <FieldDescription>使用正则表达式，排除名称匹配的节点，留空表示不过滤。</FieldDescription>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
           <Field>
             <FieldLabel>刷新间隔</FieldLabel>
             <form.Field name="interval">
