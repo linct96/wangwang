@@ -9,7 +9,6 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
-    "test": "vitest run",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy",
     "package:deploy": "pnpm build && node scripts/package-deploy.mjs",
@@ -46,7 +45,6 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.53.1",
-    "@cloudflare/vitest-plugin": "^1.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
@@ -58,7 +56,6 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11",
     "wrangler": "^4.125.0"
   }
 }

@@ -6,7 +6,6 @@
 - Worker：Hono、Zod、Cloudflare Workers Static Assets。
 - 数据：D1 + `drizzle-orm/d1`，KV 仅缓存已生成配置。
 - 后台任务：Cloudflare Queue；定时扫描暂不启用。
-- 测试：Vitest + `@cloudflare/vitest-plugin`。
 
 项目保持单仓库、单 Worker，不拆分服务或共享包。
 
