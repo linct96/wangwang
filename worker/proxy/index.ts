@@ -1,5 +1,14 @@
 import { parse, stringify } from 'yaml'
-import type { ProxyConfig } from './db'
+import type { ProxyConfig } from '../db'
+import { parseAnytls } from './parsers/anytls'
+import { parseHysteria2 as parseHysteria2Uri } from './parsers/hysteria2'
+import { parseTuic } from './parsers/tuic'
+import { parseTrojan } from './parsers/trojan'
+import { parseVless } from './parsers/vless'
+import { normalize } from './normalize'
+import { fingerprint as fingerprintNode } from './fingerprint'
+import { validate } from './validate'
+import { detectFormat } from './subscription'
 
 const MAX_TEXT_BYTES = 1024 * 1024
 const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hysteria2:', 'hy2:', 'tuic:', 'anytls:'])
@@ -144,66 +153,16 @@ function parseStandardUrl(input: string): ProxyConfig {
     udp: true,
   }
 
-  if (type === 'vless') {
-    base.uuid = decodeURIComponent(url.username)
-    if (url.searchParams.get('flow')) base.flow = url.searchParams.get('flow')
+  if (type === 'vless') parseVless(url, base)
+  else if (type === 'trojan') parseTrojan(url, base)
+  else if (type === 'tuic') parseTuic(url, base)
+  else if (type === 'anytls') parseAnytls(url, base)
+  if (type === 'vless' || type === 'trojan') {
     networkOptions(url, base)
     tlsOptions(url, base)
-  } else if (type === 'trojan') {
-    base.password = decodeURIComponent(url.username)
-    networkOptions(url, base)
-    tlsOptions(url, base)
-  } else if (type === 'hysteria2') {
-    base.password = decodeURIComponent(url.username || url.searchParams.get('auth') || '')
-    base.sni = url.searchParams.get('sni') || url.hostname
-    base['skip-cert-verify'] = bool(url.searchParams.get('insecure'))
-    if (url.searchParams.get('obfs')) base.obfs = url.searchParams.get('obfs')
-    if (url.searchParams.get('obfs-password')) base['obfs-password'] = url.searchParams.get('obfs-password')
-  } else if (type === 'tuic') {
-    base.uuid = decodeURIComponent(url.username)
-    base.password = decodeURIComponent(url.password)
-    base.sni = url.searchParams.get('sni') || url.hostname
-    base['congestion-controller'] = url.searchParams.get('congestion_control') || 'bbr'
-    base['udp-relay-mode'] = url.searchParams.get('udp_relay_mode') || 'native'
-    base['skip-cert-verify'] = bool(url.searchParams.get('allow_insecure'))
-  } else if (type === 'anytls') {
-    base.password = decodeURIComponent(url.username)
-    base.sni = url.searchParams.get('sni') || url.hostname
-    base['skip-cert-verify'] = bool(url.searchParams.get('insecure'))
   }
 
   return base
-}
-
-function parseHysteria2(input: string): ProxyConfig {
-  // URL 标准解析器不接受 Hysteria2 的多端口语法，先单独拆出 authority。
-  const match = input.match(/^(?:hysteria2|hy2):\/\/(?:([^@/?#]*)@)?(\[[^\]]+\]|[^:/?#]+)(?::([^/?#]+))?(.*)$/i)
-  if (!match) throw new Error('Hysteria2 链接格式无效')
-  const [, auth, host, portText, suffix] = match
-  if (portText && !/^(?:\d+|\d+-\d+|\d+(?:,\d+|,\d+-\d+)+)$/.test(portText)) throw new Error('端口无效')
-  const port = portText ? Number(portText.split(/[,-]/, 1)[0]) : 443
-  const validPorts =
-    !portText ||
-    portText.split(',').every((part) => {
-      const [start, end = start] = part.split('-').map(Number)
-      return Number.isInteger(start) && Number.isInteger(end) && start >= 1 && end <= 65535 && start <= end
-    })
-  if (!validPorts) throw new Error('端口无效')
-  const url = new URL(`hysteria2://${auth ? `${auth}@` : ''}${host}${suffix}`)
-  const config: ProxyConfig = {
-    name: nameFromUrl(url, `${url.hostname}:${port}`),
-    type: 'hysteria2',
-    server: url.hostname,
-    port,
-    udp: true,
-    password: auth ? decodeURIComponent(auth) : url.searchParams.get('auth') || '',
-    sni: url.searchParams.get('sni') || url.hostname,
-    'skip-cert-verify': bool(url.searchParams.get('insecure')),
-  }
-  if (portText && !/^\d+$/.test(portText)) config.ports = portText
-  if (url.searchParams.get('obfs')) config.obfs = url.searchParams.get('obfs')
-  if (url.searchParams.get('obfs-password')) config['obfs-password'] = url.searchParams.get('obfs-password')
-  return config
 }
 
 function parseUri(input: string) {
@@ -211,30 +170,18 @@ function parseUri(input: string) {
   if (!SUPPORTED_SCHEMES.has(scheme)) throw new Error('协议不支持')
   if (scheme === 'ss:') return parseSs(input)
   if (scheme === 'vmess:') return parseVmess(input)
-  if (scheme === 'hysteria2:' || scheme === 'hy2:') return parseHysteria2(input)
+  if (scheme === 'hysteria2:' || scheme === 'hy2:') return parseHysteria2Uri(input)
   return parseStandardUrl(input)
 }
 
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([key, item]) => key !== 'name' && item !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
 export async function fingerprint(config: ProxyConfig) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(config)))
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return fingerprintNode(config)
 }
 
 function yamlNodes(text: string): ProxyConfig[] | null {
   const document = parse(text, { maxAliasCount: 20 }) as unknown
-  const items = document && typeof document === 'object' && Array.isArray((document as { proxies?: unknown }).proxies)
+  const items =
+    document && typeof document === 'object' && Array.isArray((document as { proxies?: unknown }).proxies)
       ? (document as { proxies: unknown[] }).proxies
       : Array.isArray(document)
         ? document
@@ -245,13 +192,13 @@ function yamlNodes(text: string): ProxyConfig[] | null {
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
     if (!proxy.name || !proxy.type || !proxy.server || !Number.isInteger(port)) throw new Error('YAML 节点必填字段缺失')
-    return {
+    return normalize({
       ...proxy,
       name: String(proxy.name),
       type: String(proxy.type).toLowerCase(),
       server: String(proxy.server),
       port,
-    } as ProxyConfig
+    } as ProxyConfig)
   })
 }
 
@@ -261,6 +208,7 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
 
   let configs: ProxyConfig[] = []
   const warnings: string[] = []
+  const format = detectFormat(text)
   try {
     configs = yamlNodes(text) || []
   } catch (error) {
@@ -270,7 +218,7 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
 
   if (!configs.length) {
     let content = text.trim()
-    if (!content.includes('://')) {
+    if (format === 'base64' && !content.includes('://')) {
       try {
         content = decodeBase64(content)
       } catch {
@@ -281,7 +229,7 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
       const value = line.trim()
       if (!value) continue
       try {
-        configs.push(parseUri(value))
+        configs.push(normalize(parseUri(value)))
       } catch (error) {
         if (warnings.length < 20)
           warnings.push(`第 ${index + 1} 行：${error instanceof Error ? error.message : '格式错误'}`)
@@ -314,14 +262,5 @@ export function restoreProxySecrets(config: ProxyConfig, current: ProxyConfig) {
 }
 
 export function proxyConfigError(config: ProxyConfig) {
-  if (!config.name || !config.server) return '节点名称或服务器不能为空'
-  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) return '端口必须是 1 到 65535 的整数'
-  if (config.type === 'ss' && (!config.cipher || !config.password)) return 'SS 节点缺少加密方式或密码'
-  if ((config.type === 'vmess' || config.type === 'vless') && !config.uuid) return `${config.type} 节点缺少 UUID`
-  if ((config.type === 'trojan' || config.type === 'hysteria2' || config.type === 'anytls') && !config.password)
-    return `${config.type} 节点缺少密码`
-  if (config.type === 'tuic' && (!config.uuid || !config.password)) return 'TUIC 节点缺少 UUID 或密码'
-  const reality = config['reality-opts'] as { 'public-key'?: unknown } | undefined
-  if (reality && !reality['public-key']) return 'Reality 节点缺少公钥'
-  return null
+  return validate(config)
 }
