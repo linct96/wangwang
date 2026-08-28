@@ -5,6 +5,8 @@ import { parseHysteria2 as parseHysteria2Uri } from './parsers/hysteria2'
 import { parseTuic } from './parsers/tuic'
 import { parseTrojan } from './parsers/trojan'
 import { parseVless } from './parsers/vless'
+import { parseSs } from './parsers/ss'
+import { parseVmess } from './parsers/vmess'
 import { normalize } from './normalize'
 import { fingerprint as fingerprintNode } from './fingerprint'
 import { validate } from './validate'
@@ -37,29 +39,15 @@ function nameFromUrl(url: URL, fallback: string) {
   return decodeURIComponent(url.hash.slice(1)).trim() || fallback
 }
 
-function requiredPort(url: URL) {
+function requiredPort(url: URL, fallback?: number) {
   const port = Number(url.port)
+  if (!url.port && fallback) return fallback
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('端口无效')
   return port
 }
 
 function bool(value: string | null) {
   return value === '1' || value === 'true'
-}
-
-function networkOptions(url: URL, config: ProxyConfig) {
-  const network = url.searchParams.get('type') || url.searchParams.get('network')
-  if (!network || network === 'tcp') return
-  config.network = network
-  if (network === 'ws') {
-    config['ws-opts'] = {
-      path: url.searchParams.get('path') || '/',
-      headers: url.searchParams.get('host') ? { Host: url.searchParams.get('host') } : undefined,
-    }
-  }
-  if (network === 'grpc') {
-    config['grpc-opts'] = { 'grpc-service-name': url.searchParams.get('serviceName') || '' }
-  }
 }
 
 function tlsOptions(url: URL, config: ProxyConfig) {
@@ -77,71 +65,6 @@ function tlsOptions(url: URL, config: ProxyConfig) {
   }
 }
 
-function parseSs(input: string): ProxyConfig {
-  let url: URL
-  try {
-    url = new URL(input)
-  } catch {
-    throw new Error('SS 链接格式无效')
-  }
-
-  if (!url.hostname) {
-    const [payload, fragment = ''] = input.slice(5).split('#', 2)
-    url = new URL(`ss://${decodeBase64(payload)}#${fragment}`)
-  }
-
-  let credentials = decodeURIComponent(url.username)
-  if (!credentials.includes(':')) credentials = decodeBase64(credentials)
-  const separator = credentials.indexOf(':')
-  if (separator < 1) throw new Error('SS 认证信息无效')
-
-  const config: ProxyConfig = {
-    name: nameFromUrl(url, `${url.hostname}:${url.port}`),
-    type: 'ss',
-    server: url.hostname,
-    port: requiredPort(url),
-    cipher: credentials.slice(0, separator),
-    password: credentials.slice(separator + 1),
-    udp: true,
-  }
-  const plugin = url.searchParams.get('plugin')
-  if (plugin) {
-    const [pluginName, ...options] = plugin.split(';')
-    config.plugin = pluginName
-    config['plugin-opts'] = Object.fromEntries(options.map((item) => item.split('=', 2)))
-  }
-  return config
-}
-
-function parseVmess(input: string): ProxyConfig {
-  const raw = JSON.parse(decodeBase64(input.slice('vmess://'.length))) as Record<string, unknown>
-  const server = String(raw.add || '')
-  const port = Number(raw.port)
-  if (!server || !Number.isInteger(port) || !raw.id) throw new Error('VMess 必填字段缺失')
-  const config: ProxyConfig = {
-    name: String(raw.ps || `${server}:${port}`),
-    type: 'vmess',
-    server,
-    port,
-    uuid: String(raw.id),
-    alterId: Number(raw.aid || 0),
-    cipher: String(raw.scy || 'auto'),
-    udp: true,
-  }
-  const network = String(raw.net || 'tcp')
-  if (network !== 'tcp') config.network = network
-  if (network === 'ws') {
-    config['ws-opts'] = { path: String(raw.path || '/'), headers: raw.host ? { Host: String(raw.host) } : undefined }
-  }
-  if (network === 'grpc') config['grpc-opts'] = { 'grpc-service-name': String(raw.path || '') }
-  if (String(raw.tls || '') === 'tls') {
-    config.tls = true
-    config.servername = String(raw.sni || raw.host || server)
-    if (raw.fp) config['client-fingerprint'] = String(raw.fp)
-  }
-  return config
-}
-
 function parseStandardUrl(input: string): ProxyConfig {
   const url = new URL(input)
   const type = url.protocol.slice(0, -1) === 'hy2' ? 'hysteria2' : url.protocol.slice(0, -1)
@@ -149,7 +72,7 @@ function parseStandardUrl(input: string): ProxyConfig {
     name: nameFromUrl(url, `${url.hostname}:${url.port}`),
     type,
     server: url.hostname,
-    port: requiredPort(url),
+    port: requiredPort(url, type === 'anytls' ? 443 : undefined),
     udp: true,
   }
 
@@ -157,8 +80,9 @@ function parseStandardUrl(input: string): ProxyConfig {
   else if (type === 'trojan') parseTrojan(url, base)
   else if (type === 'tuic') parseTuic(url, base)
   else if (type === 'anytls') parseAnytls(url, base)
-  if (type === 'vless' || type === 'trojan') {
-    networkOptions(url, base)
+  if (type === 'trojan') {
+    const network = url.searchParams.get('type') || url.searchParams.get('network')
+    if (network) base.network = network
     tlsOptions(url, base)
   }
 
@@ -239,6 +163,10 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
 
   const deduplicated = new Map<string, ParsedNode>()
   for (const config of configs) {
+    if (config.__warning) {
+      warnings.push(`节点 "${config.name}" 使用${config.__warning}`)
+      delete config.__warning
+    }
     const value = await fingerprint(config)
     if (!deduplicated.has(value)) deduplicated.set(value, { config, fingerprint: value })
   }
