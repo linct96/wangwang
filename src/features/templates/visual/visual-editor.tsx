@@ -1,14 +1,37 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Edit2, Plus, Trash2 } from 'lucide-react'
+import { DragDropProvider } from '@dnd-kit/react'
+import { useSortable } from '@dnd-kit/react/sortable'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  Edit2,
+  Eye,
+  GripVertical,
+  Network,
+  Plus,
+  Radio,
+  Server,
+  Trash2,
+  X,
+  Zap,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
 import { findPotentialRawReferences, newGroup, newRule } from './yaml-adapter'
 import type {
@@ -99,17 +122,33 @@ export function VisualTemplateEditor({
             </Button>
           </GroupDialog>
         </header>
-        <div className="template-visual-list">
-          {draft.groups.map((group) => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              groups={draft.groups}
-              onSave={(next) => editGroup(group, next)}
-              onDelete={() => removeGroup(group)}
-            />
-          ))}
-        </div>
+        <DragDropProvider
+          onDragEnd={(event) => {
+            const { source, target } = event.operation
+            if (!source || !target || source.id === target.id) return
+            const fromIndex = draft.groups.findIndex((g) => g.id === source.id)
+            const toIndex = draft.groups.findIndex((g) => g.id === target.id)
+            if (fromIndex !== -1 && toIndex !== -1) {
+              const nextGroups = [...draft.groups]
+              const [moved] = nextGroups.splice(fromIndex, 1)
+              nextGroups.splice(toIndex, 0, moved)
+              update({ ...draft, groups: nextGroups })
+            }
+          }}
+        >
+          <div className="template-visual-list">
+            {draft.groups.map((group, index) => (
+              <GroupCard
+                key={group.id}
+                index={index}
+                group={group}
+                groups={draft.groups}
+                onSave={(next) => editGroup(group, next)}
+                onDelete={() => removeGroup(group)}
+              />
+            ))}
+          </div>
+        </DragDropProvider>
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
@@ -149,52 +188,165 @@ export function VisualTemplateEditor({
 function GroupCard({
   group,
   groups,
+  index,
   onSave,
   onDelete,
 }: {
   group: ProxyGroupDraft
   groups: ProxyGroupDraft[]
+  index: number
   onSave: (group: ProxyGroupDraft) => void
   onDelete: () => void
 }) {
   const [view, setView] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const { ref, handleRef, isDragging } = useSortable({
+    id: group.id,
+    index,
+  })
+
   return (
-    <article className="template-visual-card">
+    <article
+      ref={ref}
+      className={cn('template-visual-card', isDragging && 'template-card-dragging')}
+    >
       <header className="template-visual-card-header">
-        <div>
+        <div
+          ref={handleRef}
+          className="template-drag-handle"
+          title="拖拽排序"
+          aria-label="拖拽排序"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="template-drag-icon" />
+        </div>
+        <div
+          className="template-group-header-info"
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpanded((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setExpanded((prev) => !prev)
+            }
+          }}
+        >
+          <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
           <strong>{group.name || '未命名代理组'}</strong>
           <Badge variant="secondary">{group.type}</Badge>
+          {!expanded && (
+            <span className="template-group-summary">
+              {group.kind === 'structured' ? `${group.members.length} 个节点引用` : 'RAW 配置'}
+            </span>
+          )}
         </div>
-        <div className="template-visual-card-actions">
+        <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
           {group.kind === 'raw' ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => setView(true)}>
-              查看
-            </Button>
+            <IconButton
+              label="查看详情"
+              onClick={(e) => {
+                e.stopPropagation()
+                setView(true)
+              }}
+            >
+              <Eye />
+            </IconButton>
           ) : (
             <GroupDialog groups={groups} value={group} onSave={onSave}>
-              <Button type="button" variant="outline" size="sm">
-                <Edit2 data-icon="inline-start" />
-                编辑
-              </Button>
+              <IconButton label="编辑代理组">
+                <Edit2 />
+              </IconButton>
             </GroupDialog>
           )}
-          <Button type="button" variant="ghost" size="sm" onClick={onDelete}>
-            <Trash2 data-icon="inline-start" />
-            删除
-          </Button>
+          <IconButton
+            label="删除代理组"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2 />
+          </IconButton>
         </div>
       </header>
-      {group.kind === 'raw' ? (
-        <p className="muted">当前版本不支持可视化修改，请使用 YAML 编辑。</p>
-      ) : (
-        <p className="template-visual-card-meta">
-          成员：{group.members.map(memberLabel).join(' · ') || '无'}
-          {group.type !== 'select' && ` · ${group.interval}s`}
-          {group.type === 'url-test' && ` · tolerance ${group.tolerance}`}
-        </p>
+
+      {expanded && (
+        <div className="template-group-expanded">
+          {group.kind === 'raw' ? (
+            <div className="template-group-raw-info">
+              <p className="muted">当前版本不支持可视化修改，请使用 YAML 编辑。</p>
+              {Array.isArray(group.raw?.proxies) && group.raw.proxies.length > 0 && (
+                <div className="template-node-ref-section">
+                  <div className="template-node-ref-title">引用的节点 ({group.raw.proxies.length})</div>
+                  <div className="template-node-ref-tags">
+                    {group.raw.proxies.map((proxyName: unknown, idx: number) => (
+                      <div key={idx} className="template-node-tag">
+                        <Server className="template-node-ref-icon text-muted-foreground" />
+                        <span className="template-node-tag-name">{String(proxyName)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="template-group-nodes-section">
+              {(group.type !== 'select' || group.url || group.interval || group.tolerance) && (
+                <div className="template-group-params">
+                  {group.url && (
+                    <span className="template-group-param-item">
+                      URL: <code>{group.url}</code>
+                    </span>
+                  )}
+                  {group.interval !== undefined && (
+                    <span className="template-group-param-item">
+                      检测间隔: <code>{group.interval}s</code>
+                    </span>
+                  )}
+                  {group.tolerance !== undefined && (
+                    <span className="template-group-param-item">
+                      容差: <code>{group.tolerance}ms</code>
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="template-node-ref-title">
+                节点引用列表 ({group.members.length})
+              </div>
+              {group.members.length === 0 ? (
+                <div className="template-node-ref-empty">暂无节点引用</div>
+              ) : (
+                <div className="template-node-ref-tags">
+                  {group.members.map((member, index) => {
+                    const label = memberLabel(member, groups)
+                    return (
+                      <div key={`${member.kind}-${index}`} className="template-node-tag">
+                        {member.kind === 'all-proxies' && (
+                          <Zap className="template-node-ref-icon text-amber-500" />
+                        )}
+                        {member.kind === 'group' && (
+                          <Network className="template-node-ref-icon text-blue-500" />
+                        )}
+                        {member.kind === 'builtin' && (
+                          <Radio className="template-node-ref-icon text-emerald-500" />
+                        )}
+                        {member.kind === 'raw' && (
+                          <Server className="template-node-ref-icon text-purple-500" />
+                        )}
+                        <span className="template-node-tag-name">{label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
+
       {view && group.kind === 'raw' && (
-        <AppDialog title={`查看：${group.name}`} onClose={() => setView(false)}>
+        <AppDialog title={`查看：${group.name}`} contentClassName="template-dialog" onClose={() => setView(false)}>
           <pre className="template-raw-preview">{JSON.stringify(group.raw, null, 2)}</pre>
         </AppDialog>
       )}
@@ -229,64 +381,87 @@ function GroupDialog({
   }
   return (
     <>
-      {<span onClick={show}>{children}</span>}
+      <span
+        onClick={(e) => {
+          e.stopPropagation()
+          show()
+        }}
+      >
+        {children}
+      </span>
       {open && (
-        <AppDialog title={value ? '编辑代理组' : '添加代理组'} onClose={() => setOpen(false)}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel>名称</FieldLabel>
-              <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-            </Field>
-            <Field>
-              <FieldLabel>类型</FieldLabel>
-              <Select
-                value={form.type}
-                onValueChange={(type: SupportedProxyGroupType) =>
-                  setForm({
-                    ...form,
-                    type,
-                    ...(type === 'select'
-                      ? { url: undefined, interval: undefined, tolerance: undefined }
-                      : { url: form.url || 'https://www.gstatic.com/generate_204', interval: form.interval || 300 }),
-                    ...(type !== 'url-test' ? { tolerance: undefined } : { tolerance: form.tolerance ?? 50 }),
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="select">select</SelectItem>
-                  <SelectItem value="url-test">url-test</SelectItem>
-                  <SelectItem value="fallback">fallback</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+        <AppDialog
+          title={value ? '编辑代理组' : '添加代理组'}
+          contentClassName="template-dialog"
+          onClose={() => setOpen(false)}
+        >
+          <FieldGroup className="gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel>名称</FieldLabel>
+                <Input
+                  value={form.name}
+                  placeholder="代理组名称"
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>类型</FieldLabel>
+                <Select
+                  value={form.type}
+                  onValueChange={(type: SupportedProxyGroupType) =>
+                    setForm({
+                      ...form,
+                      type,
+                      ...(type === 'select'
+                        ? { url: undefined, interval: undefined, tolerance: undefined }
+                        : { url: form.url || 'https://www.gstatic.com/generate_204', interval: form.interval || 300 }),
+                      ...(type !== 'url-test' ? { tolerance: undefined } : { tolerance: form.tolerance ?? 50 }),
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="select">select (手动选择)</SelectItem>
+                    <SelectItem value="url-test">url-test (自动测速)</SelectItem>
+                    <SelectItem value="fallback">fallback (故障转移)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
             {form.type !== 'select' && (
-              <>
-                <Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field className={cn(form.type === 'url-test' ? 'sm:col-span-2' : '')}>
                   <FieldLabel>测试 URL</FieldLabel>
-                  <Input value={form.url || ''} onChange={(event) => setForm({ ...form, url: event.target.value })} />
+                  <Input
+                    value={form.url || ''}
+                    placeholder="https://www.gstatic.com/generate_204"
+                    onChange={(event) => setForm({ ...form, url: event.target.value })}
+                  />
                 </Field>
                 <Field>
-                  <FieldLabel>interval（秒）</FieldLabel>
+                  <FieldLabel>检测间隔（秒）</FieldLabel>
                   <Input
                     type="number"
+                    min={1}
                     value={form.interval ?? 300}
                     onChange={(event) => setForm({ ...form, interval: Number(event.target.value) })}
                   />
                 </Field>
-              </>
-            )}
-            {form.type === 'url-test' && (
-              <Field>
-                <FieldLabel>tolerance</FieldLabel>
-                <Input
-                  type="number"
-                  value={form.tolerance ?? 50}
-                  onChange={(event) => setForm({ ...form, tolerance: Number(event.target.value) })}
-                />
-              </Field>
+                {form.type === 'url-test' && (
+                  <Field>
+                    <FieldLabel>容差 (tolerance / ms)</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.tolerance ?? 50}
+                      onChange={(event) => setForm({ ...form, tolerance: Number(event.target.value) })}
+                    />
+                  </Field>
+                )}
+              </div>
             )}
             <MemberEditor form={form} groups={groups} onChange={setForm} />
           </FieldGroup>
@@ -304,6 +479,52 @@ function GroupDialog({
   )
 }
 
+function MemberTag({
+  member,
+  index,
+  groups,
+  onDelete,
+}: {
+  member: ProxyGroupMemberDraft
+  index: number
+  groups: ProxyGroupDraft[]
+  onDelete: () => void
+}) {
+  const { ref, handleRef, isDragging } = useSortable({
+    id: `member-${index}`,
+    index,
+  })
+  const label = memberLabel(member, groups)
+
+  return (
+    <div ref={ref} className={cn('template-member-tag', isDragging && 'template-member-dragging')}>
+      <div ref={handleRef} className="template-member-tag-main" title="按住拖拽排序">
+        <GripVertical className="template-tag-drag-icon" />
+        {member.kind === 'all-proxies' && <Zap className="template-node-ref-icon text-amber-500" />}
+        {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
+        {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
+        {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}
+        <span className="template-member-tag-name" title={label}>
+          {label}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="template-tag-remove"
+        title="删除成员"
+        aria-label="删除成员"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          onDelete()
+        }}
+      >
+        <X />
+      </button>
+    </div>
+  )
+}
+
 function MemberEditor({
   form,
   groups,
@@ -313,81 +534,88 @@ function MemberEditor({
   groups: ProxyGroupDraft[]
   onChange: (form: StructuredProxyGroupDraft) => void
 }) {
-  const [add, setAdd] = useState('')
   const choices = [
-    { value: 'all', label: '全部节点（订阅动态注入）' },
-    { value: 'DIRECT', label: 'DIRECT' },
-    { value: 'REJECT', label: 'REJECT' },
+    { value: 'all', label: '全部节点', icon: Zap, iconColor: 'text-amber-500' },
+    { value: 'DIRECT', label: 'DIRECT', icon: Radio, iconColor: 'text-emerald-500' },
+    { value: 'REJECT', label: 'REJECT', icon: Radio, iconColor: 'text-emerald-500' },
     ...groups
       .filter((group) => group.id !== form.id && group.name)
-      .map((group) => ({ value: `group:${group.id}`, label: group.name })),
+      .map((group) => ({ value: `group:${group.id}`, label: group.name, icon: Network, iconColor: 'text-blue-500' })),
   ]
-  function addMember() {
-    if (!add) return
+
+  function addMember(val: string) {
     const member: ProxyGroupMemberDraft =
-      add === 'all'
+      val === 'all'
         ? { kind: 'all-proxies' }
-        : add === 'DIRECT' || add === 'REJECT'
-          ? { kind: 'builtin', value: add }
-          : { kind: 'group', groupId: add.slice(6) }
+        : val === 'DIRECT' || val === 'REJECT'
+          ? { kind: 'builtin', value: val }
+          : { kind: 'group', groupId: val.slice(6) }
     onChange({ ...form, members: [...form.members, member] })
-    setAdd('')
   }
+
   return (
     <Field>
-      <FieldLabel>成员</FieldLabel>
-      <div className="template-member-list">
-        {form.members.map((member, index) => (
-          <div className="template-member-row" key={`${memberLabel(member)}-${index}`}>
-            <span>{memberLabel(member)}</span>
-            <IconButton
-              label="上移"
-              disabled={index === 0}
-              onClick={() => {
-                const members = [...form.members]
-                ;[members[index - 1], members[index]] = [members[index], members[index - 1]]
-                onChange({ ...form, members })
-              }}
-            >
-              <ArrowUp />
-            </IconButton>
-            <IconButton
-              label="下移"
-              disabled={index === form.members.length - 1}
-              onClick={() => {
-                const members = [...form.members]
-                ;[members[index], members[index + 1]] = [members[index + 1], members[index]]
-                onChange({ ...form, members })
-              }}
-            >
-              <ArrowDown />
-            </IconButton>
-            <IconButton
-              label="删除成员"
-              onClick={() => onChange({ ...form, members: form.members.filter((_, item) => item !== index) })}
-            >
-              <Trash2 />
-            </IconButton>
-          </div>
-        ))}
-      </div>
-      <div className="template-member-add">
-        <Select value={add} onValueChange={setAdd}>
-          <SelectTrigger>
-            <SelectValue placeholder="添加成员" />
-          </SelectTrigger>
-          <SelectContent>
-            {choices.map((choice) => (
-              <SelectItem key={choice.value} value={choice.value}>
-                {choice.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button type="button" variant="outline" onClick={addMember}>
-          添加
-        </Button>
-      </div>
+      <FieldLabel>成员列表 ({form.members.length})</FieldLabel>
+      <DragDropProvider
+        onDragEnd={(event) => {
+          const { source, target } = event.operation
+          if (!source || !target || source.id === target.id) return
+          const sourceStr = String(source.id)
+          const targetStr = String(target.id)
+          if (sourceStr.startsWith('member-') && targetStr.startsWith('member-')) {
+            const fromIndex = Number(sourceStr.slice(7))
+            const toIndex = Number(targetStr.slice(7))
+            if (
+              !Number.isNaN(fromIndex) &&
+              !Number.isNaN(toIndex) &&
+              fromIndex >= 0 &&
+              fromIndex < form.members.length &&
+              toIndex >= 0 &&
+              toIndex < form.members.length
+            ) {
+              const nextMembers = [...form.members]
+              const [moved] = nextMembers.splice(fromIndex, 1)
+              nextMembers.splice(toIndex, 0, moved)
+              onChange({ ...form, members: nextMembers })
+            }
+          }
+        }}
+      >
+        <div className="template-member-tags-container">
+          {form.members.map((member, index) => (
+            <MemberTag
+              key={`${member.kind}-${member.kind === 'group' ? member.groupId : member.kind === 'builtin' || member.kind === 'raw' ? member.value : 'all'}-${index}`}
+              member={member}
+              index={index}
+              groups={groups}
+              onDelete={() => onChange({ ...form, members: form.members.filter((_, idx) => idx !== index) })}
+            />
+          ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="template-member-add-trigger"
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <Plus className="template-add-tag-icon" />
+                <span>添加成员</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-56 overflow-y-auto">
+              {choices.map((choice) => {
+                const Icon = choice.icon
+                return (
+                  <DropdownMenuItem key={choice.value} onClick={() => addMember(choice.value)}>
+                    <Icon className={cn('size-3.5', choice.iconColor)} />
+                    <span>{choice.label}</span>
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </DragDropProvider>
     </Field>
   )
 }
@@ -493,7 +721,11 @@ function RuleDialog({
     <>
       {<span onClick={show}>{children}</span>}
       {open && (
-        <AppDialog title={value ? '编辑规则' : '添加规则'} onClose={() => setOpen(false)}>
+        <AppDialog
+          title={value ? '编辑规则' : '添加规则'}
+          contentClassName="template-dialog"
+          onClose={() => setOpen(false)}
+        >
           <FieldGroup>
             <Field>
               <FieldLabel>规则类型</FieldLabel>
@@ -572,17 +804,25 @@ function RuleDialog({
   )
 }
 
-function memberLabel(member: ProxyGroupMemberDraft): string {
-  return member.kind === 'all-proxies'
-    ? '全部节点'
-    : member.kind === 'builtin'
-      ? member.value
-      : member.kind === 'raw'
-        ? member.value
-        : '代理组引用'
+function memberLabel(member: ProxyGroupMemberDraft, groups: ProxyGroupDraft[] = []): string {
+  if (member.kind === 'all-proxies') {
+    return '全部节点'
+  }
+  if (member.kind === 'builtin' || member.kind === 'raw') {
+    return member.value
+  }
+  if (member.kind === 'group') {
+    return groups.find((group) => group.id === member.groupId)?.name || '未知代理组'
+  }
+  return '未知成员'
 }
-function targetLabel(target: RuleTargetDraft, groups: ProxyGroupDraft[]) {
-  return target.kind === 'builtin' || target.kind === 'raw'
-    ? target.value
-    : groups.find((group) => group.id === target.groupId)?.name || '未知代理组'
+
+function targetLabel(target: RuleTargetDraft, groups: ProxyGroupDraft[]): string {
+  if (target.kind === 'builtin' || target.kind === 'raw') {
+    return target.value
+  }
+  if (target.kind === 'group') {
+    return groups.find((group) => group.id === target.groupId)?.name || '未知代理组'
+  }
+  return '未知目标'
 }

@@ -1,4 +1,4 @@
-@scope (.templates-page, .template-editor-page, .template-preview-dialog) {
+@scope (.templates-page, .template-editor-page, .template-preview-dialog, .template-dialog) {
   .template-section + .template-section {
     margin-top: 30px;
   }
@@ -119,17 +119,145 @@
     border-radius: var(--radius-sm);
     background: var(--card);
   }
+  .template-visual-card {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  .template-visual-card:hover {
+    border-color: var(--border-hover, color-mix(in oklch, var(--border) 80%, var(--foreground)));
+  }
+  .template-card-dragging {
+    opacity: 0.5;
+    border-style: dashed;
+    border-color: var(--ring);
+  }
   .template-visual-card-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
   }
-  .template-visual-card-header > div:first-child {
+  .template-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-xs, 4px);
+    color: var(--muted-foreground);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+  .template-drag-handle:hover {
+    color: var(--foreground);
+    background: var(--muted);
+  }
+  .template-drag-handle:active {
+    cursor: grabbing;
+  }
+  .template-drag-icon {
+    width: 15px;
+    height: 15px;
+  }
+  .template-group-header-info {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-xs, 4px);
+    user-select: none;
+  }
+  .template-group-header-info:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .template-collapse-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+    transition: transform 0.2s ease;
+  }
+  .template-collapse-icon.expanded {
+    transform: rotate(180deg);
+  }
+  .template-group-summary {
+    margin-left: 4px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .template-group-expanded {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .template-group-raw-info,
+  .template-group-nodes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .template-group-params {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .template-group-params code {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: var(--muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .template-node-ref-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .template-node-ref-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .template-node-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: var(--radius-xs, 4px);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.4;
+    max-width: 100%;
+  }
+  .template-node-tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .template-node-ref-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+  .template-node-ref-empty {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    padding: 4px 0;
   }
   .template-visual-card-header strong {
     overflow: hidden;
@@ -141,7 +269,7 @@
   .template-member-add {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex-wrap: wrap;
   }
   .template-visual-card-meta {
@@ -165,31 +293,148 @@
     display: flex;
     flex-direction: column;
   }
-  .template-member-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+  .template-member-tags-container {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    min-height: 48px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--muted);
   }
-  .template-member-row {
+  @media (min-width: 500px) {
+    .template-member-tags-container {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .template-member-tag {
     display: flex;
     align-items: center;
-    gap: 4px;
-    min-height: 32px;
-    padding: 2px 4px 2px 8px;
-    border: 1px solid var(--border);
+    min-width: 0;
+    height: 32px;
+    padding: 0 4px 0 2px;
     border-radius: var(--radius-sm);
+    background: var(--background);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1;
+    box-sizing: border-box;
+    user-select: none;
+    box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.04);
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
   }
-  .template-member-row > span {
+  .template-member-tag:hover {
+    border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
+    background: var(--card);
+  }
+  .template-member-tag.template-member-dragging {
+    opacity: 0.5;
+    border-style: dashed;
+    border-color: var(--ring);
+  }
+  .template-member-tag-main {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0 2px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .template-member-tag-main:active {
+    cursor: grabbing;
+  }
+  .template-tag-drag-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+    transition: color 0.15s ease;
+  }
+  .template-member-tag:hover .template-tag-drag-icon {
+    color: var(--foreground);
+  }
+  .template-member-tag .template-node-ref-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+  .template-member-tag-name {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: 12px;
+    color: var(--foreground);
   }
-  .template-member-add > [data-slot='select-trigger'] {
-    flex: 1;
+  .template-tag-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 2px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .template-tag-remove:hover {
+    background: color-mix(in oklch, var(--destructive) 12%, transparent);
+    color: var(--destructive);
+  }
+  .template-tag-remove svg {
+    width: 12px;
+    height: 12px;
+  }
+  .template-member-add-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
     min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--background);
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    box-sizing: border-box;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+  .template-member-add-trigger:hover {
+    border-color: var(--primary);
+    background: color-mix(in oklch, var(--primary) 8%, transparent);
+    color: var(--primary);
+  }
+  .template-member-add-trigger:hover .template-add-tag-icon {
+    color: var(--primary);
+  }
+  .template-member-add-trigger svg:last-child {
+    display: none;
+  }
+  .template-add-tag-icon {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+    transition: color 0.15s ease;
   }
   .template-raw-preview {
     max-height: 50vh;

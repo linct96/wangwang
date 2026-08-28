@@ -202,7 +202,7 @@
 
 @media (min-width: 768px) {
   .mobile-toggle {
-    display: none !important;
+    display: none;
   }
 }
 
