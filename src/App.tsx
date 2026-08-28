@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { ThemeProvider } from 'next-themes'
 import { RouterProvider } from '@tanstack/react-router'
 import { api } from '@/api/client'
@@ -7,7 +8,6 @@ import { router } from '@/app/router'
 import { LoginPage } from '@/features/auth/page'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import '@/styles/auth.css'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -22,26 +22,23 @@ function loadAuthStatus() {
 }
 
 function AuthLoading({ error, onRetry }: { error: string; onRetry: () => void }) {
+  if (!error)
+    return (
+      <main className="auth-loading" aria-busy="true">
+        <RefreshCw className="spin" />
+        <span>加载中</span>
+      </main>
+    )
   return (
     <main className="auth-page">
       <div className="form auth-form" aria-busy={!error}>
-        {error ? (
-          <>
-            <h1>Wangwang</h1>
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-            <Button type="button" onClick={onRetry}>
-              重试
-            </Button>
-          </>
-        ) : (
-          <>
-            <Skeleton className="h-7 w-40" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </>
-        )}
+        <h1>Wangwang</h1>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button type="button" onClick={onRetry}>
+          重试
+        </Button>
       </div>
     </main>
   )

@@ -19,3 +19,13 @@
     font-size: 21px;
   }
 }
+@scope (.auth-loading) {
+  .auth-loading {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted-foreground);
+  }
+}
