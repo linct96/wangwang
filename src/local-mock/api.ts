@@ -190,7 +190,6 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (typeof body.refreshIntervalHours === 'number') source.refreshIntervalHours = body.refreshIntervalHours
     if (typeof body.nodeNameFilter === 'string') source.nodeNameFilter = body.nodeNameFilter.trim() || null
     if (typeof body.nodeTag === 'string') source.nodeTag = body.nodeTag.trim() || null
-    const userAgentChanged = typeof body.userAgent === 'string' && body.userAgent.trim() !== source.userAgent
     if (typeof body.userAgent === 'string') source.userAgent = body.userAgent.trim()
     if (typeof body.url === 'string' && body.url) {
       source.url = body.url
@@ -198,11 +197,8 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       source.lastRefreshedAt = now()
     }
     if (typeof body.enabled === 'boolean' || typeof body.nodeTag === 'string') recompileProfiles(state, [source.id])
-    const job =
-      (typeof body.url === 'string' && body.url) || userAgentChanged ? createJob('refresh_source', source.id) : null
-    if (job) state.jobs.unshift(job)
     writeState(state)
-    return { source, jobId: job?.id || null } as T
+    return { source, jobId: null } as T
   }
   if (sourceMatch && method === 'DELETE') {
     const sourceId = sourceMatch[1]
@@ -355,7 +351,9 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
         (!query || node.name.toLowerCase().includes(query) || node.server.toLowerCase().includes(query)) &&
         (!protocol || node.protocol === protocol) &&
         (!tag || tags.includes(tag)) &&
-        (!sourceId || node.sourceIds.includes(sourceId)) &&
+        (!sourceId ||
+          (node.sourceIds.includes(sourceId) && state.sources.find((source) => source.id === sourceId)?.enabled)) &&
+        node.sourceIds.some((id) => state.sources.find((source) => source.id === id)?.enabled) &&
         (!enabled || String(node.enabled) === enabled)
       )
     })
