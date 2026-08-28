@@ -86,4 +86,23 @@ describe('parseProxyText', () => {
       },
     })
   })
+
+  it('支持过滤无效 YAML 节点并记录警告信息', async () => {
+    const yaml = `
+proxies:
+  - invalid-string-item
+  - name: 缺字段节点
+    type: ss
+  - name: 有效节点
+    type: ss
+    server: ss.example.com
+    port: 8388
+    cipher: aes-128-gcm
+    password: secret
+`
+    const result = await parseProxyText(yaml)
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0]?.config.name).toBe('有效节点')
+    expect(result.warnings.length).toBeGreaterThanOrEqual(2)
+  })
 })
