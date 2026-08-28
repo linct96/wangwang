@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
@@ -9,19 +9,17 @@ import { AddNodeDialog, NodeDialog } from './node-dialogs'
 import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export function NodesPage() {
-  const [query, setQuery] = useState('')
   const [protocol, setProtocol] = useState('')
   const [enabled, setEnabled] = useState('')
   const [page, setPage] = useState(1)
   const { data, error, loading, reload } = useApi<{ items: NodeItem[]; total: number; page: number; pageSize: number }>(
-    `/nodes?page=${page}&pageSize=50&q=${encodeURIComponent(query)}&protocol=${protocol}&enabled=${enabled}`,
+    `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}`,
   )
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
@@ -51,17 +49,6 @@ export function NodesPage() {
         </Button>
       </div>
       <div className="toolbar">
-        <label className="search">
-          <Search />
-          <Input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPage(1)
-            }}
-            placeholder="搜索名称或服务器"
-          />
-        </label>
         <Select
           value={protocol || 'all'}
           onValueChange={(value) => {

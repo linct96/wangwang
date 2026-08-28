@@ -5,21 +5,6 @@
     align-items: center;
     gap: 10px;
   }
-  .search {
-    min-width: 260px;
-    position: relative;
-  }
-  .search svg {
-    position: absolute;
-    top: 50%;
-    left: 10px;
-    z-index: 1;
-    color: var(--muted-foreground);
-    transform: translateY(-50%);
-  }
-  .search input {
-    padding-left: 34px;
-  }
   .batch-actions {
     margin-left: auto;
     display: flex;
@@ -77,10 +62,6 @@
   @media (max-width: 800px) {
     .toolbar {
       flex-wrap: wrap;
-    }
-    .search {
-      width: 100%;
-      min-width: 100%;
     }
     .batch-actions {
       width: 100%;
