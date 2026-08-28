@@ -354,19 +354,19 @@ function SourceDialog({
             </form.Field>
           </Field>
           <Field>
-            <FieldLabel htmlFor="source-node-name-filter">节点名称过滤（正则）</FieldLabel>
+            <FieldLabel htmlFor="source-node-name-filter">节点名称过滤</FieldLabel>
             <form.Field name="nodeNameFilter">
               {(field) => (
                 <Input
                   id="source-node-name-filter"
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="例如：香港|日本"
+                  placeholder="例如：广告|测试"
                   maxLength={200}
                 />
               )}
             </form.Field>
-            <FieldDescription>仅保留名称匹配的节点，留空表示不过滤。</FieldDescription>
+            <FieldDescription>使用正则表达式，排除名称匹配的节点，留空表示不过滤。</FieldDescription>
           </Field>
           <Field>
             <FieldLabel>刷新间隔</FieldLabel>
