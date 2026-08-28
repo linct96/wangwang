@@ -1,6 +1,6 @@
 import type { ProxyGroupDraft, VisualIssue, VisualTemplateDraft } from './model'
 
-const URL_TYPES = new Set(['url-test', 'fallback'])
+const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
 
 export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualIssue[] = []) {

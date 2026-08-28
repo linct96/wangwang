@@ -3,7 +3,8 @@ export type VisualTemplateDraft = {
   rules: RuleDraft[]
 }
 
-export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback'
+export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback' | 'load-balance'
+export type SupportedLoadBalanceStrategy = 'consistent-hashing' | 'round-robin' | 'sticky-sessions'
 
 export type ProxyGroupMemberDraft =
   | { kind: 'all-proxies' }
@@ -20,6 +21,7 @@ export type StructuredProxyGroupDraft = {
   url?: string
   interval?: number
   tolerance?: number
+  strategy?: SupportedLoadBalanceStrategy
   extras: Record<string, unknown>
 }
 

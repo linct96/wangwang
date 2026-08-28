@@ -6,6 +6,7 @@ import type {
   RuleTargetDraft,
   StructuredProxyGroupDraft,
   StructuredRuleDraft,
+  SupportedLoadBalanceStrategy,
   SupportedProxyGroupType,
   SupportedRuleType,
   VisualIssue,
@@ -13,7 +14,7 @@ import type {
 } from './model'
 
 const ALL_PROXIES = '__WANGWANG_ALL_PROXIES__'
-const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback'])
+const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback', 'load-balance'])
 const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'DOMAIN',
   'DOMAIN-SUFFIX',
@@ -24,7 +25,7 @@ const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'IP-CIDR6',
 ])
 const NO_RESOLVE_TYPES = new Set<SupportedRuleType>(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
-const GROUP_KEYS = new Set(['name', 'type', 'proxies', 'url', 'interval', 'tolerance'])
+const GROUP_KEYS = new Set(['name', 'type', 'proxies', 'url', 'interval', 'tolerance', 'strategy'])
 
 export type VisualParseResult = {
   draft: VisualTemplateDraft
@@ -116,6 +117,8 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
       group.interval = typeof value.interval === 'number' ? value.interval : 0
     }
     if (type === 'url-test') group.tolerance = typeof value.tolerance === 'number' ? value.tolerance : 0
+    if (type === 'load-balance')
+      group.strategy = typeof value.strategy === 'string' ? (value.strategy as SupportedLoadBalanceStrategy) : 'consistent-hashing'
     return group
   })
   const rules = ((root.rules as string[] | undefined) || []).map((rule, index) => parseRule(rule, index, groupIds))
@@ -162,6 +165,7 @@ function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
     value.interval = group.interval
   }
   if (group.type === 'url-test' && group.tolerance !== undefined) value.tolerance = group.tolerance
+  if (group.type === 'load-balance' && group.strategy) value.strategy = group.strategy
   return value
 }
 
@@ -219,7 +223,8 @@ export function uniqueName(base: string, groups: ProxyGroupDraft[]) {
 }
 
 export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[]): StructuredProxyGroupDraft {
-  const base = type === 'select' ? '代理组' : type === 'url-test' ? '自动选择' : '故障转移'
+  const base =
+    type === 'select' ? '代理组' : type === 'url-test' ? '自动选择' : type === 'fallback' ? '故障转移' : '负载均衡'
   return {
     kind: 'structured',
     id: runtimeId('group', groups.length),
@@ -229,6 +234,7 @@ export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[
     extras: {},
     ...(type === 'select' ? {} : { url: 'https://www.gstatic.com/generate_204', interval: 300 }),
     ...(type === 'url-test' ? { tolerance: 50 } : {}),
+    ...(type === 'load-balance' ? { strategy: 'consistent-hashing' } : {}),
   }
 }
 
