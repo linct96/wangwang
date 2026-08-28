@@ -22,14 +22,9 @@ import { formatBytes, formatDate, formatRelativeTime } from '@/lib/format'
 
 const customUserAgent = '__custom__'
 const userAgentPresets = [
-  { label: 'Clash', value: 'clash' },
   { label: 'Clash Verge Rev', value: 'clash-verge/v2.5.2' },
-  { label: 'Clash.Meta', value: 'Clash.Meta' },
   { label: 'FlClash', value: 'FlClash/v0.8.96 clash-verge Platform/windows' },
   { label: 'Mihomo', value: 'mihomo' },
-  { label: 'Shadowrocket', value: 'Shadowrocket' },
-  { label: 'sing-box', value: 'sing-box' },
-  { label: 'v2rayN', value: 'v2rayN' },
 ]
 
 export function SourcesPage() {
