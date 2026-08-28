@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { ArrowDown, ArrowUp, Plus, RefreshCw, X } from 'lucide-react'
 import { useForm, useStore } from '@tanstack/react-form'
+import { z } from 'zod'
 import { api } from '@/api/client'
 import type { Profile, RuleModule, Source } from '@/api/types'
 import { AppDialog, IconButton } from '@/components/app-primitives'
@@ -9,7 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import '@/styles/profile-dialog.css'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
@@ -37,6 +38,24 @@ export function ProfileDialog({
       protocols: profile?.protocols || [],
       ruleModules: profile?.ruleModules || ['ads', 'private', 'cn'],
     },
+    validators: {
+      onSubmit: z.object({
+        name: z.string().trim().min(1, '请输入名称').max(60, '名称不能超过 60 个字符'),
+        tags: z.string().superRefine((value, context) => {
+          const tags = value
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+          if (tags.length > 20) context.addIssue({ code: 'custom', message: '标签不能超过 20 个' })
+          if (tags.some((tag) => tag.length > 24))
+            context.addIssue({ code: 'custom', message: '单个标签不能超过 24 个字符' })
+        }),
+        dnsMode: z.enum(['fake-ip', 'redir-host']),
+        sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源').max(20, '节点源不能超过 20 个'),
+        protocols: z.array(z.string()).max(20),
+        ruleModules: z.array(z.enum(['ads', 'private', 'cn'])).max(3),
+      }),
+    },
     onSubmit: async ({ value }) => {
       setError('')
       try {
@@ -61,7 +80,6 @@ export function ProfileDialog({
       }
     },
   })
-  const sourceIds = useStore(form.store, (state) => state.values.sourceIds)
   const selectedProtocols = useStore(form.store, (state) => state.values.protocols)
   const rules = useStore(form.store, (state) => state.values.ruleModules)
   function toggle<T>(items: T[], item: T) {
@@ -80,38 +98,52 @@ export function ProfileDialog({
   }
   return (
     <AppDialog title={profile ? '编辑配置' : '新建配置'} onClose={onClose}>
-      <form className="form profile-form profile-dialog-scope" onSubmit={submit}>
+      <form className="form profile-form profile-dialog-scope" onSubmit={submit} noValidate>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="profile-name">名称</FieldLabel>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  id="profile-name"
-                  required
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="例如：日常使用"
-                />
-              )}
-            </form.Field>
-          </Field>
-          <FieldSet>
-            <FieldLegend variant="label">节点源</FieldLegend>
-            <div className="option-grid">
-              {sources.map((source) => (
-                <Field key={source.id} orientation="horizontal">
-                  <Checkbox
-                    id={`source-${source.id}`}
-                    checked={sourceIds.includes(source.id)}
-                    onCheckedChange={() => form.setFieldValue('sourceIds', toggle(sourceIds, source.id))}
+          <form.Field name="name">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="profile-name">名称</FieldLabel>
+                  <Input
+                    id="profile-name"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="例如：日常使用"
+                    aria-invalid={invalid}
                   />
-                  <FieldLabel htmlFor={`source-${source.id}`}>{source.name}</FieldLabel>
-                  <small>{source.nodeCount}</small>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
-              ))}
-            </div>
-          </FieldSet>
+              )
+            }}
+          </form.Field>
+          <form.Field name="sourceIds">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <FieldSet data-invalid={invalid}>
+                  <FieldLegend variant="label">节点源</FieldLegend>
+                  <div className="option-grid">
+                    {sources.map((source) => (
+                      <Field key={source.id} orientation="horizontal">
+                        <Checkbox
+                          id={`source-${source.id}`}
+                          checked={field.state.value.includes(source.id)}
+                          onCheckedChange={() => field.handleChange(toggle(field.state.value, source.id))}
+                          aria-invalid={invalid}
+                        />
+                        <FieldLabel htmlFor={`source-${source.id}`}>{source.name}</FieldLabel>
+                        <small>{source.nodeCount}</small>
+                      </Field>
+                    ))}
+                  </div>
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </FieldSet>
+              )
+            }}
+          </form.Field>
           <FieldSet>
             <FieldLegend variant="label">协议筛选</FieldLegend>
             <div className="option-grid protocols">
@@ -127,19 +159,25 @@ export function ProfileDialog({
               ))}
             </div>
           </FieldSet>
-          <Field>
-            <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
-            <form.Field name="tags">
-              {(field) => (
-                <Input
-                  id="profile-tags"
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="留空表示全部"
-                />
-              )}
-            </form.Field>
-          </Field>
+          <form.Field name="tags">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
+                  <Input
+                    id="profile-tags"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="留空表示全部"
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
           <FieldSet>
             <FieldLegend variant="label">DNS 模式</FieldLegend>
             <ToggleGroup
@@ -226,9 +264,9 @@ export function ProfileDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.sourceIds]}>
-            {([isSubmitting, currentSourceIds]) => (
-              <Button disabled={Boolean(isSubmitting) || !(Array.isArray(currentSourceIds) && currentSourceIds.length)}>
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
+              <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
               </Button>
             )}
