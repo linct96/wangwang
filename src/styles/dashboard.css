@@ -1,0 +1,45 @@
+@scope (.dashboard-page) {
+  .metrics {
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .metrics a {
+    min-height: 112px;
+    padding: 19px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 8px 12px;
+    color: var(--card-foreground);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .metrics a:hover {
+    border-color: var(--ring);
+    box-shadow: 0 1px 2px oklch(0 0 0 / 6%);
+  }
+  .metrics svg {
+    color: var(--primary);
+  }
+  .metrics span {
+    color: var(--muted-foreground);
+    font-size: 13px;
+  }
+  .metrics strong {
+    grid-column: 1 / -1;
+    align-self: end;
+    font-size: 27px;
+  }
+  @media (max-width: 800px) {
+    .metrics {
+      grid-template-columns: 1fr;
+    }
+  }
+}

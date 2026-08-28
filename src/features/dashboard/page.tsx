@@ -5,13 +5,14 @@ import type { Job } from '@/api/types'
 import { Status, PageState } from '@/components/app-primitives'
 import { formatDate } from '@/lib/format'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import '@/styles/dashboard.css'
 
 export function DashboardPage() {
   const { data, error, loading } = useApi<{ sources: number; nodes: number; profiles: number; recentJobs: Job[] }>(
     '/dashboard',
   )
   return (
-    <>
+    <div className="dashboard-page">
       <div className="page-heading">
         <div>
           <h1>概览</h1>
@@ -77,6 +78,6 @@ export function DashboardPage() {
           </section>
         </>
       )}
-    </>
+    </div>
   )
 }
