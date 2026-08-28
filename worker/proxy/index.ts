@@ -121,9 +121,19 @@ function yamlNodes(text: string): ProxyConfig[] | null {
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
     const normalized = normalize({ ...proxy, port } as ProxyConfig)
-    if (SECRET_FIELDS.some((field) => proxy[field] === '')) normalized.__incompleteSecrets = true
     return normalized
   })
+}
+
+export function parseEditableProxyYaml(text: string): ProxyConfig {
+  if (!text.trim()) throw new Error('节点内容为空')
+  if (new TextEncoder().encode(text).byteLength > MAX_TEXT_BYTES) throw new Error('节点内容超过 1 MiB')
+  const configs = yamlNodes(text)
+  if (!configs || configs.length !== 1) throw new Error('YAML 必须且只能包含一个节点')
+  const config = configs[0]!
+  if (config.__warning) throw new Error(String(config.__warning))
+  delete config.__warning
+  return config
 }
 
 export async function parseProxyText(text: string): Promise<ParseResult> {
@@ -169,11 +179,10 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
       delete config.__warning
     }
     const validationError = validate(config)
-    if (validationError && !config.__incompleteSecrets) {
+    if (validationError) {
       if (warnings.length < 20) warnings.push(`节点 "${config.name || '未命名'}"：${validationError}`)
       continue
     }
-    delete config.__incompleteSecrets
     const value = await fingerprint(config)
     if (!deduplicated.has(value)) deduplicated.set(value, { config, fingerprint: value })
   }

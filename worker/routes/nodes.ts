@@ -2,7 +2,14 @@ import { Hono } from 'hono'
 import { and, asc, count, eq, like, or, sql } from 'drizzle-orm'
 import { body, fail, ok } from '../http'
 import { nodes, profileSources, sourceNodes, sources } from '../db'
-import { editableProxyYaml, fingerprint, parseProxyText, proxyConfigError, restoreProxySecrets } from '../proxy'
+import {
+  editableProxyYaml,
+  fingerprint,
+  parseEditableProxyYaml,
+  parseProxyText,
+  proxyConfigError,
+  restoreProxySecrets,
+} from '../proxy/index'
 import { db, enqueueAffectedProfiles, enqueueProfilesForNode, enqueueProfilesForNodes, mergeNodeTags } from '../tasks'
 import {
   buildManualConfig,
@@ -291,16 +298,15 @@ nodesRouter.patch('/:id', async (c) => {
     return fail(c, 409, 'NODE_MANAGED_BY_SOURCE', '订阅管理的连接参数不能修改')
   let config = input.connection ? buildManualConfig(input.connection, current.config) : current.config
   if (input.yaml) {
-    let parsed: Awaited<ReturnType<typeof parseProxyText>>
+    let parsed: ReturnType<typeof parseEditableProxyYaml>
     try {
-      parsed = await parseProxyText(input.yaml)
+      parsed = parseEditableProxyYaml(input.yaml)
     } catch (reason) {
       return fail(c, 422, 'NODE_YAML_INVALID', reason instanceof Error ? reason.message : 'YAML 内容无效')
     }
-    if (parsed.nodes.length !== 1) return fail(c, 422, 'NODE_YAML_COUNT', 'YAML 必须且只能包含一个节点')
-    if (!importProtocols.has(parsed.nodes[0]!.config.type))
-      return fail(c, 422, 'NODE_PROTOCOL_UNSUPPORTED', `不支持 ${parsed.nodes[0]!.config.type} 协议`)
-    config = restoreProxySecrets(parsed.nodes[0]!.config, current.config)
+    if (!importProtocols.has(parsed.type))
+      return fail(c, 422, 'NODE_PROTOCOL_UNSUPPORTED', `不支持 ${parsed.type} 协议`)
+    config = restoreProxySecrets(parsed, current.config)
     const configError = proxyConfigError(config)
     if (configError) return fail(c, 422, 'NODE_YAML_INVALID', configError)
   }

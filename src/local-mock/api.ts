@@ -1,5 +1,11 @@
 import type { ManualNodeConnection, Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
-import { editableProxyYaml, parseProxyText, proxyConfigError, restoreProxySecrets } from '../../worker/proxy'
+import {
+  editableProxyYaml,
+  parseEditableProxyYaml,
+  parseProxyText,
+  proxyConfigError,
+  restoreProxySecrets,
+} from '../../worker/proxy/index'
 import { builtinTemplates } from '../../worker/templates/builtin'
 import { renderMihomoConfig } from '../../worker/templates/renderer'
 import { parseTemplateYaml } from '../../worker/templates/validator'
@@ -418,12 +424,11 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     let connection: ManualNodeConnection | undefined
     if (typeof body.yaml === 'string') {
       if (!node.canEditConnection) throw new Error('订阅管理的连接参数不能修改')
-      const parsed = await parseProxyText(body.yaml)
-      if (parsed.nodes.length !== 1) throw new Error('YAML 必须且只能包含一个节点')
-      if (!importProtocols.has(parsed.nodes[0]!.config.type as ManualNodeConnection['protocol']))
-        throw new Error(`不支持 ${parsed.nodes[0]!.config.type} 协议`)
+      const parsed = parseEditableProxyYaml(body.yaml)
+      if (!importProtocols.has(parsed.type as ManualNodeConnection['protocol']))
+        throw new Error(`不支持 ${parsed.type} 协议`)
       const current = connectionConfig(requireItem(node.connection, '节点连接参数不存在'))
-      const config = restoreProxySecrets(parsed.nodes[0]!.config, current)
+      const config = restoreProxySecrets(parsed, current)
       const error = proxyConfigError(config)
       if (error) throw new Error(error)
       connection = importedConnection(config)
