@@ -111,18 +111,20 @@ function yamlNodes(text: string): ProxyConfig[] | null {
         ? document
         : null
   if (!items) return null
-  return items.map((item) => {
-    if (!item || typeof item !== 'object') throw new Error('YAML 节点不是对象')
+  return items.map((item, index) => {
+    if (!item || typeof item !== 'object')
+      return {
+        name: '',
+        type: '',
+        server: '',
+        port: Number.NaN,
+        __warning: `YAML 第 ${index + 1} 个节点不是对象`,
+      } as ProxyConfig
     const proxy = { ...(item as Record<string, unknown>) }
     const port = Number(proxy.port)
-    if (!proxy.name || !proxy.type || !proxy.server || !Number.isInteger(port)) throw new Error('YAML 节点必填字段缺失')
-    return normalize({
-      ...proxy,
-      name: String(proxy.name),
-      type: String(proxy.type).toLowerCase(),
-      server: String(proxy.server),
-      port,
-    } as ProxyConfig)
+    const normalized = normalize({ ...proxy, port } as ProxyConfig)
+    if (SECRET_FIELDS.some((field) => proxy[field] === '')) normalized.__incompleteSecrets = true
+    return normalized
   })
 }
 
@@ -164,9 +166,16 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
   const deduplicated = new Map<string, ParsedNode>()
   for (const config of configs) {
     if (config.__warning) {
-      warnings.push(`节点 "${config.name}" 使用${config.__warning}`)
+      if (warnings.length < 20)
+        warnings.push(config.name ? `节点 "${config.name}"：${String(config.__warning)}` : String(config.__warning))
       delete config.__warning
     }
+    const validationError = validate(config)
+    if (validationError && !config.__incompleteSecrets) {
+      if (warnings.length < 20) warnings.push(`节点 "${config.name || '未命名'}"：${validationError}`)
+      continue
+    }
+    delete config.__incompleteSecrets
     const value = await fingerprint(config)
     if (!deduplicated.has(value)) deduplicated.set(value, { config, fingerprint: value })
   }
