@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 export function Status({ value }: { value: string }) {
   const labels: Record<string, string> = {
@@ -36,10 +37,20 @@ export function IconButton({
   )
 }
 
-export function AppDialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export function AppDialog({
+  title,
+  children,
+  onClose,
+  contentClassName,
+}: {
+  title: string
+  children: ReactNode
+  onClose: () => void
+  contentClassName?: string
+}) {
   return (
     <DialogRoot open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl">
+      <DialogContent className={cn('max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-xl', contentClassName)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

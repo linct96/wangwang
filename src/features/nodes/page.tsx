@@ -239,10 +239,21 @@ export function NodesPage() {
       {adding && (
         <AddNodeDialog
           onClose={() => setAdding(false)}
-          onSaved={async () => {
+          onSaved={async (result) => {
             setAdding(false)
             await reload()
-            toast.success('节点添加成功，相关配置正在更新')
+            if (!result) {
+              toast.success('节点添加成功，相关配置正在更新')
+              return
+            }
+            const summary = result.created
+              ? `已导入 ${result.created} 个节点${result.skipped ? `，跳过 ${result.skipped} 个节点` : ''}`
+              : `未导入新节点，跳过 ${result.skipped} 个节点`
+            toast.success(summary)
+            if (result.warnings.length)
+              toast.warning(`有 ${result.warnings.length} 行未导入`, {
+                description: result.warnings.slice(0, 3).join('；'),
+              })
           }}
         />
       )}

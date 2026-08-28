@@ -85,11 +85,24 @@ export const nodeCreateSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(24)).max(10).default([]),
   enabled: z.boolean().default(true),
 })
+export const nodeImportSchema = z.object({
+  content: z
+    .string()
+    .min(1, '节点内容不能为空')
+    .max(1024 * 1024, '节点内容超过 1 MiB'),
+  tags: z.array(z.string().trim().min(1).max(24)).max(10).default([]),
+  enabled: z.boolean().default(true),
+})
 export const nodeUpdateSchema = z.object({
   alias: z.string().trim().max(80).nullable().optional(),
   enabled: z.boolean().optional(),
   tags: z.array(z.string().trim().min(1).max(24)).max(10).optional(),
   connection: manualConnectionSchema.optional(),
+  yaml: z
+    .string()
+    .min(1, 'YAML 内容不能为空')
+    .max(1024 * 1024, 'YAML 内容超过 1 MiB')
+    .optional(),
 })
 export const nodeBatchSchema = z.object({ ids: z.array(z.string()).min(1).max(100), enabled: z.boolean() })
 
@@ -249,5 +262,17 @@ export async function nodeKinds(env: Env, nodeIds: string[]) {
     .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
     .where(inArray(sourceNodes.nodeId, nodeIds))
   for (const row of rows) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.kind])
+  return result
+}
+
+export async function nodeSourceTags(env: Env, nodeIds: string[]) {
+  const result = new Map<string, string[]>()
+  if (!nodeIds.length) return result
+  const rows = await db(env)
+    .select({ nodeId: sourceNodes.nodeId, tag: sources.nodeTag })
+    .from(sourceNodes)
+    .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
+    .where(inArray(sourceNodes.nodeId, nodeIds))
+  for (const row of rows) if (row.tag) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.tag])
   return result
 }

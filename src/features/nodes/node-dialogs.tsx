@@ -2,10 +2,15 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
+import { yaml } from '@codemirror/lang-yaml'
+import { linter, lintGutter } from '@codemirror/lint'
+import CodeMirror from '@uiw/react-codemirror'
+import { useTheme } from 'next-themes'
+import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { ManualNodeConnection, NodeDetail, NodeItem } from '@/api/types'
+import type { ManualNodeConnection, NodeDetail, NodeImportResult, NodeItem } from '@/api/types'
 import { AppDialog, PageState } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -15,7 +20,19 @@ import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Textarea } from '@/components/ui/textarea'
 import { defaultConnection, ManualConnectionFields } from './node-form'
-import { parseVlessLink } from '@/lib/vless'
+
+const yamlEditorExtensions = [
+  yaml(),
+  linter((view) =>
+    parseDocument(view.state.doc.toString()).errors.map((error) => ({
+      from: error.pos[0],
+      to: error.pos[1],
+      severity: 'error',
+      message: error.message,
+    })),
+  ),
+  lintGutter(),
+]
 
 const tagsSchema = z.string().superRefine((value, context) => {
   const tags = value
@@ -45,26 +62,26 @@ const connectionSchema = z
     if (message) context.addIssue({ code: 'custom', message })
   })
 
-export function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [mode, setMode] = useState<'link' | 'form'>('link')
+export function AddNodeDialog({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void
+  onSaved: (result?: NodeImportResult) => void
+}) {
+  const [mode, setMode] = useState<'import' | 'form'>('import')
   const [error, setError] = useState('')
   const form = useForm({
-    defaultValues: { link: '', connection: defaultConnection(), tags: '', enabled: true },
+    defaultValues: { content: '', connection: defaultConnection(), tags: '', enabled: true },
     validators: {
       onSubmit: z.object({
-        link:
-          mode === 'link'
+        content:
+          mode === 'import'
             ? z
                 .string()
                 .trim()
-                .min(1, '请输入 VLESS 链接')
-                .superRefine((value, context) => {
-                  try {
-                    parseVlessLink(value)
-                  } catch (reason) {
-                    context.addIssue({ code: 'custom', message: reason instanceof Error ? reason.message : '链接无效' })
-                  }
-                })
+                .min(1, '请输入节点内容')
+                .refine((value) => new TextEncoder().encode(value).byteLength <= 1024 * 1024, '节点内容不能超过 1 MiB')
             : z.string(),
         connection: mode === 'form' ? connectionSchema : z.any(),
         tags: tagsSchema,
@@ -74,19 +91,26 @@ export function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSav
     onSubmit: async ({ value }) => {
       setError('')
       try {
-        const nextConnection = mode === 'link' ? parseVlessLink(value.link) : value.connection
-        await api('/nodes', {
-          method: 'POST',
-          body: JSON.stringify({
-            connection: nextConnection,
-            tags: value.tags
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
-            enabled: value.enabled,
-          }),
-        })
-        onSaved()
+        const options = {
+          tags: value.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          enabled: value.enabled,
+        }
+        if (mode === 'import') {
+          const result = await api<NodeImportResult>('/nodes/import', {
+            method: 'POST',
+            body: JSON.stringify({ content: value.content, ...options }),
+          })
+          onSaved(result)
+        } else {
+          await api('/nodes', {
+            method: 'POST',
+            body: JSON.stringify({ connection: value.connection, ...options }),
+          })
+          onSaved()
+        }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '添加失败')
       }
@@ -97,35 +121,51 @@ export function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSav
     await form.handleSubmit()
   }
   return (
-    <AppDialog title="添加节点" onClose={onClose}>
+    <AppDialog title="添加节点" onClose={onClose} contentClassName="overflow-hidden">
       <form className="form" onSubmit={submit} noValidate>
-        <FieldGroup>
-          <Segmented
-            block
-            value={mode}
-            options={[
-              { label: '链接导入', value: 'link' },
-              { label: '手动填写', value: 'form' },
-            ]}
-            onChange={(value) => {
-              setMode(value)
-              setError('')
-            }}
-          />
-          {mode === 'link' ? (
-            <form.Field name="link">
+        <Segmented
+          block
+          value={mode}
+          options={[
+            { label: '导入', value: 'import' },
+            { label: '表单', value: 'form' },
+          ]}
+          onChange={(value) => {
+            setMode(value)
+            setError('')
+          }}
+        />
+        <FieldGroup
+          className={
+            mode === 'form'
+              ? 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
+              : 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
+          }
+        >
+          {mode === 'import' ? (
+            <form.Field name="content">
               {(field) => {
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid
                 return (
-                  <Field data-invalid={invalid}>
-                    <FieldLabel htmlFor="manual-link">VLESS 链接</FieldLabel>
+                  <Field className="min-h-0 flex-1" data-invalid={invalid}>
+                    <FieldLabel htmlFor="node-import-content">节点内容</FieldLabel>
                     <Textarea
-                      id="manual-link"
-                      rows={5}
+                      id="node-import-content"
+                      className="min-h-0 flex-1 resize-none overflow-y-auto field-sizing-fixed"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="vless://uuid@example.com:443?..."
+                      placeholder={`每行一个节点链接：
+vless://uuid@example.com:443#香港节点
+trojan://password@example.net:443#日本节点
+
+或粘贴 YAML 节点列表：
+- name: 新加坡节点
+  type: ss
+  server: sg.example.com
+  port: 8388
+  cipher: aes-128-gcm
+  password: your-password`}
                       aria-invalid={invalid}
                     />
                     {invalid && <FieldError errors={field.state.meta.errors} />}
@@ -191,7 +231,7 @@ export function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSav
             {([isSubmitting]) => (
               <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
-                {mode === 'link' ? '解析并添加' : '添加节点'}
+                {mode === 'import' ? '导入节点' : '添加节点'}
               </Button>
             )}
           </form.Subscribe>
@@ -204,7 +244,7 @@ export function AddNodeDialog({ onClose, onSaved }: { onClose: () => void; onSav
 export function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () => void; onSaved: () => void }) {
   const { data, error, loading } = useApi<NodeDetail>(`/nodes/${node.id}`)
   return (
-    <AppDialog title="编辑节点" onClose={onClose}>
+    <AppDialog title="编辑节点" onClose={onClose} contentClassName="overflow-hidden">
       <PageState loading={loading} error={error} />
       {data && <NodeEditor key={data.updatedAt} node={data} onClose={onClose} onSaved={onSaved} />}
     </AppDialog>
@@ -213,19 +253,30 @@ export function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose
 
 function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () => void; onSaved: () => void }) {
   const [error, setError] = useState('')
+  const [mode, setMode] = useState<'form' | 'yaml'>('yaml')
+  const { resolvedTheme } = useTheme()
   const form = useForm({
     defaultValues: {
       alias: node.alias || '',
       tags: node.tags.join(', '),
       enabled: node.enabled,
       connection: node.connection,
+      yaml: node.yaml || '',
     },
     validators: {
       onSubmit: z.object({
         alias: z.string().trim().max(80, '显示名称不能超过 80 个字符'),
         tags: tagsSchema,
         enabled: z.boolean(),
-        connection: node.canEditConnection ? connectionSchema : z.any(),
+        connection: node.canEditConnection && mode === 'form' ? connectionSchema : z.any(),
+        yaml:
+          node.canEditConnection && mode === 'yaml'
+            ? z
+                .string()
+                .trim()
+                .min(1, '请输入 YAML 内容')
+                .refine((value) => new TextEncoder().encode(value).byteLength <= 1024 * 1024, 'YAML 内容不能超过 1 MiB')
+            : z.string(),
       }),
     },
     onSubmit: async ({ value }) => {
@@ -240,7 +291,8 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
               .map((tag) => tag.trim())
               .filter(Boolean),
             enabled: value.enabled,
-            connection: node.canEditConnection ? value.connection : undefined,
+            connection: node.canEditConnection && mode === 'form' ? value.connection : undefined,
+            yaml: node.canEditConnection && mode === 'yaml' ? value.yaml : undefined,
           }),
         })
         onSaved()
@@ -255,8 +307,30 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
   }
   return (
     <form className="form" onSubmit={submit} noValidate>
-      <FieldGroup>
-        {node.canEditConnection && form.getFieldValue('connection') ? (
+      {node.canEditConnection && (
+        <Segmented
+          block
+          value={mode}
+          options={[
+            { label: 'YAML', value: 'yaml' },
+            { label: '表单', value: 'form' },
+          ]}
+          onChange={(value) => {
+            setMode(value)
+            setError('')
+          }}
+        />
+      )}
+      <FieldGroup
+        className={
+          node.canEditConnection && mode === 'form'
+            ? 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
+            : node.canEditConnection
+              ? 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
+              : 'p-1 pr-2'
+        }
+      >
+        {node.canEditConnection && mode === 'form' && form.getFieldValue('connection') ? (
           <form.Field name="connection">
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -268,30 +342,56 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
               )
             }}
           </form.Field>
+        ) : node.canEditConnection ? (
+          <form.Field name="yaml">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field className="min-h-0 flex-1" data-invalid={invalid}>
+                  <FieldLabel id="node-yaml-label">YAML 内容</FieldLabel>
+                  <CodeMirror
+                    id="node-yaml"
+                    className="min-h-0 flex-1 overflow-hidden rounded-md border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+                    value={field.state.value}
+                    height="100%"
+                    theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+                    extensions={yamlEditorExtensions}
+                    onBlur={field.handleBlur}
+                    onChange={field.handleChange}
+                    aria-labelledby="node-yaml-label"
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
         ) : (
           <Alert>
             <AlertDescription>连接参数由外部订阅维护，此处只保存显示名称、标签和启停状态。</AlertDescription>
           </Alert>
         )}
-        <form.Field name="alias">
-          {(field) => {
-            const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-            return (
-              <Field data-invalid={invalid}>
-                <FieldLabel htmlFor="node-alias">显示名称</FieldLabel>
-                <Input
-                  id="node-alias"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder={node.name}
-                  aria-invalid={invalid}
-                />
-                {invalid && <FieldError errors={field.state.meta.errors} />}
-              </Field>
-            )
-          }}
-        </form.Field>
+        {(!node.canEditConnection || mode === 'form') && (
+          <form.Field name="alias">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="node-alias">显示名称</FieldLabel>
+                  <Input
+                    id="node-alias"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder={node.name}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
+        )}
         <form.Field name="tags">
           {(field) => {
             const invalid = field.state.meta.isTouched && !field.state.meta.isValid

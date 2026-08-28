@@ -18,6 +18,7 @@ export type Source = {
   kind: 'url' | 'manual'
   url: string | null
   nodeNameFilter: string | null
+  nodeTag: string | null
   pendingUrl: boolean
   profileCount: number
   refreshIntervalHours: number
@@ -80,7 +81,13 @@ export type ManualNodeConnection = {
   udpRelayMode?: string
 }
 
-export type NodeDetail = NodeItem & { connection: ManualNodeConnection | null }
+export type NodeDetail = NodeItem & { connection: ManualNodeConnection | null; yaml: string | null }
+
+export type NodeImportResult = {
+  created: number
+  skipped: number
+  warnings: string[]
+}
 
 export type RuleModule = 'ads' | 'private' | 'cn'
 

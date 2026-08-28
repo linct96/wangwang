@@ -1,8 +1,10 @@
 import type { ManualNodeConnection, Profile, RuleModule, Source } from '@/api/types'
+import { editableProxyYaml, parseProxyText, proxyConfigError, restoreProxySecrets } from '../../worker/proxy'
 import {
   compileYaml,
   createJob,
   displayUrl,
+  localNodeTags,
   now,
   readState,
   recompileProfiles,
@@ -19,6 +21,92 @@ function parseBody(init?: RequestInit) {
 function requireItem<T>(item: T | undefined, message: string): T {
   if (!item) throw new Error(message)
   return item
+}
+
+const importProtocols = new Set<ManualNodeConnection['protocol']>([
+  'ss',
+  'vmess',
+  'vless',
+  'trojan',
+  'hysteria2',
+  'tuic',
+])
+
+function importedConnection(config: Record<string, unknown>): ManualNodeConnection {
+  const ws = (config['ws-opts'] || {}) as { path?: string; headers?: { Host?: string } }
+  const grpc = (config['grpc-opts'] || {}) as { 'grpc-service-name'?: string }
+  const reality = (config['reality-opts'] || {}) as { 'public-key'?: string; 'short-id'?: string }
+  return {
+    name: String(config.name),
+    protocol: String(config.type) as ManualNodeConnection['protocol'],
+    server: String(config.server),
+    port: Number(config.port),
+    cipher: config.cipher ? String(config.cipher) : undefined,
+    password: config.password ? String(config.password) : undefined,
+    uuid: config.uuid ? String(config.uuid) : undefined,
+    alterId: config.alterId === undefined ? undefined : Number(config.alterId),
+    network: (config.network || 'tcp') as ManualNodeConnection['network'],
+    security: reality['public-key'] ? 'reality' : config.tls ? 'tls' : 'none',
+    sni: config.servername || config.sni ? String(config.servername || config.sni) : undefined,
+    clientFingerprint: config['client-fingerprint'] ? String(config['client-fingerprint']) : undefined,
+    wsPath: ws.path,
+    wsHost: ws.headers?.Host,
+    grpcServiceName: grpc['grpc-service-name'],
+    realityPublicKey: reality['public-key'],
+    realityShortId: reality['short-id'],
+    flow: config.flow ? String(config.flow) : undefined,
+    plugin: config.plugin ? String(config.plugin) : undefined,
+    pluginOptions: config['plugin-opts'] as Record<string, string> | undefined,
+    skipCertVerify: Boolean(config['skip-cert-verify']),
+    obfs: config.obfs ? String(config.obfs) : undefined,
+    obfsPassword: config['obfs-password'] ? String(config['obfs-password']) : undefined,
+    congestionController: config['congestion-controller'] ? String(config['congestion-controller']) : undefined,
+    udpRelayMode: config['udp-relay-mode'] ? String(config['udp-relay-mode']) : undefined,
+  }
+}
+
+function connectionKey(connection: ManualNodeConnection) {
+  return JSON.stringify({ ...connection, name: undefined })
+}
+
+function connectionConfig(connection: ManualNodeConnection) {
+  const config: Record<string, unknown> & { name: string; type: string; server: string; port: number } = {
+    name: connection.name,
+    type: connection.protocol,
+    server: connection.server,
+    port: connection.port,
+    udp: true,
+  }
+  if (connection.cipher) config.cipher = connection.cipher
+  if (connection.password) config.password = connection.password
+  if (connection.uuid) config.uuid = connection.uuid
+  if (connection.alterId !== undefined) config.alterId = connection.alterId
+  if (connection.flow) config.flow = connection.flow
+  if (connection.plugin) config.plugin = connection.plugin
+  if (connection.pluginOptions) config['plugin-opts'] = connection.pluginOptions
+  if (connection.network && connection.network !== 'tcp') config.network = connection.network
+  if (connection.network === 'ws')
+    config['ws-opts'] = {
+      path: connection.wsPath || '/',
+      headers: connection.wsHost ? { Host: connection.wsHost } : undefined,
+    }
+  if (connection.network === 'grpc') config['grpc-opts'] = { 'grpc-service-name': connection.grpcServiceName || '' }
+  if (connection.security && connection.security !== 'none') {
+    config.tls = true
+    config.servername = connection.sni || connection.server
+  }
+  if (connection.security === 'reality')
+    config['reality-opts'] = {
+      'public-key': connection.realityPublicKey || '',
+      'short-id': connection.realityShortId || '',
+    }
+  if (connection.clientFingerprint) config['client-fingerprint'] = connection.clientFingerprint
+  if (connection.skipCertVerify) config['skip-cert-verify'] = true
+  if (connection.obfs) config.obfs = connection.obfs
+  if (connection.obfsPassword) config['obfs-password'] = connection.obfsPassword
+  if (connection.congestionController) config['congestion-controller'] = connection.congestionController
+  if (connection.udpRelayMode) config['udp-relay-mode'] = connection.udpRelayMode
+  return config
 }
 
 export async function localApi<T>(path: string, init?: RequestInit): Promise<T> {
@@ -63,6 +151,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       kind: 'url',
       url: displayUrl(rawUrl),
       nodeNameFilter: String(body.nodeNameFilter || '').trim() || null,
+      nodeTag: String(body.nodeTag || '').trim() || null,
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: Number(body.refreshIntervalHours || 0),
@@ -95,12 +184,13 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (typeof body.name === 'string') source.name = body.name.trim()
     if (typeof body.refreshIntervalHours === 'number') source.refreshIntervalHours = body.refreshIntervalHours
     if (typeof body.nodeNameFilter === 'string') source.nodeNameFilter = body.nodeNameFilter.trim() || null
+    if (typeof body.nodeTag === 'string') source.nodeTag = body.nodeTag.trim() || null
     if (typeof body.url === 'string' && body.url) {
       source.url = displayUrl(body.url)
       source.status = 'ready'
       source.lastRefreshedAt = now()
     }
-    if (typeof body.enabled === 'boolean') recompileProfiles(state, [source.id])
+    if (typeof body.enabled === 'boolean' || typeof body.nodeTag === 'string') recompileProfiles(state, [source.id])
     const job = typeof body.url === 'string' && body.url ? createJob('refresh_source', source.id) : null
     if (job) state.jobs.unshift(job)
     writeState(state)
@@ -144,6 +234,64 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     state.jobs.unshift(job)
     writeState(state)
     return { jobId: job.id } as T
+  }
+
+  if (pathname === '/nodes/import' && method === 'POST') {
+    const parsed = await parseProxyText(String(body.content || ''))
+    const supported = parsed.nodes.filter(
+      (node) =>
+        importProtocols.has(node.config.type as ManualNodeConnection['protocol']) && !proxyConfigError(node.config),
+    )
+    const existing = new Set(state.nodes.flatMap((node) => (node.connection ? [connectionKey(node.connection)] : [])))
+    const imported = supported
+      .map(({ config }) => importedConnection(config))
+      .filter((connection) => {
+        const key = connectionKey(connection)
+        if (existing.has(key)) return false
+        existing.add(key)
+        return true
+      })
+    if (state.nodes.length + imported.length > 2000)
+      throw new Error(`最多还能导入 ${Math.max(0, 2000 - state.nodes.length)} 个节点`)
+
+    const tags = Array.isArray(body.tags) ? [...new Set(body.tags.map(String))] : []
+    for (const connection of imported) {
+      state.nodes.unshift({
+        id: crypto.randomUUID(),
+        name: connection.name,
+        alias: null,
+        protocol: connection.protocol,
+        server: connection.server,
+        port: connection.port,
+        tags,
+        enabled: body.enabled !== false,
+        updatedAt: now(),
+        management: 'manual',
+        canEditConnection: true,
+        canDelete: true,
+        sourceIds: ['system-manual'],
+        connection,
+      })
+    }
+    const manualSource = requireItem(
+      state.sources.find((source) => source.id === 'system-manual'),
+      '本地数据迁移未完成',
+    )
+    manualSource.nodeCount = state.nodes.filter((node) => node.sourceIds.includes('system-manual')).length
+    if (imported.length) recompileProfiles(state, ['system-manual'])
+    writeState(state)
+    const rejectedWarnings = parsed.nodes.flatMap((node) => {
+      if (!importProtocols.has(node.config.type as ManualNodeConnection['protocol']))
+        return [`${node.config.name}：不支持 ${node.config.type} 协议`]
+      const error = proxyConfigError(node.config)
+      return error ? [`${node.config.name}：${error}`] : []
+    })
+    const warnings = [...parsed.warnings, ...rejectedWarnings.slice(0, Math.max(0, 20 - parsed.warnings.length))]
+    return {
+      created: imported.length,
+      skipped: parsed.nodes.length - imported.length,
+      warnings,
+    } as T
   }
 
   if (pathname === '/nodes' && method === 'POST') {
@@ -190,17 +338,24 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get('pageSize')) || 50))
     const query = (url.searchParams.get('q') || '').toLowerCase()
     const protocol = url.searchParams.get('protocol') || ''
+    const tag = url.searchParams.get('tag') || ''
+    const sourceId = url.searchParams.get('sourceId') || ''
     const enabled = url.searchParams.get('enabled') || ''
-    const rows = state.nodes.filter(
-      (node) =>
+    const rows = state.nodes.filter((node) => {
+      const tags = localNodeTags(state, node)
+      return (
         (!query || node.name.toLowerCase().includes(query) || node.server.toLowerCase().includes(query)) &&
         (!protocol || node.protocol === protocol) &&
-        (!enabled || String(node.enabled) === enabled),
-    )
+        (!tag || tags.includes(tag)) &&
+        (!sourceId || node.sourceIds.includes(sourceId)) &&
+        (!enabled || String(node.enabled) === enabled)
+      )
+    })
     return {
-      items: rows
-        .slice((page - 1) * pageSize, page * pageSize)
-        .map(({ sourceIds: _sourceIds, connection: _connection, ...node }) => node),
+      items: rows.slice((page - 1) * pageSize, page * pageSize).map((node) => {
+        const { sourceIds: _sourceIds, connection: _connection, ...view } = node
+        return { ...view, tags: localNodeTags(state, node) }
+      }),
       total: rows.length,
       page,
       pageSize,
@@ -236,7 +391,12 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
           hasObfsPassword: Boolean(node.connection.obfsPassword || node.connection.hasObfsPassword),
         }
       : null
-    return { ...detail, connection: node.canEditConnection ? connection : null } as T
+    return {
+      ...detail,
+      tags: localNodeTags(state, node),
+      connection: node.canEditConnection ? connection : null,
+      yaml: node.canEditConnection && node.connection ? editableProxyYaml(connectionConfig(node.connection)) : null,
+    } as T
   }
   if (nodeMatch && method === 'PATCH') {
     const node = requireItem(
@@ -244,17 +404,34 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       '节点不存在',
     )
     if (body.alias === null || typeof body.alias === 'string') node.alias = body.alias
-    if (Array.isArray(body.tags)) node.tags = body.tags.map(String)
+    if (Array.isArray(body.tags)) {
+      const sourceTags = new Set(localNodeTags(state, { ...node, tags: [] }))
+      node.tags = body.tags.map(String).filter((tag) => !sourceTags.has(tag))
+    }
     if (typeof body.enabled === 'boolean') node.enabled = body.enabled
-    if (body.connection) {
+    let connection: ManualNodeConnection | undefined
+    if (typeof body.yaml === 'string') {
+      if (!node.canEditConnection) throw new Error('订阅管理的连接参数不能修改')
+      const parsed = await parseProxyText(body.yaml)
+      if (parsed.nodes.length !== 1) throw new Error('YAML 必须且只能包含一个节点')
+      if (!importProtocols.has(parsed.nodes[0]!.config.type as ManualNodeConnection['protocol']))
+        throw new Error(`不支持 ${parsed.nodes[0]!.config.type} 协议`)
+      const current = connectionConfig(requireItem(node.connection, '节点连接参数不存在'))
+      const config = restoreProxySecrets(parsed.nodes[0]!.config, current)
+      const error = proxyConfigError(config)
+      if (error) throw new Error(error)
+      connection = importedConnection(config)
+    } else if (body.connection) {
       if (!node.canEditConnection) throw new Error('订阅管理的连接参数不能修改')
       const input = body.connection as ManualNodeConnection
-      const connection = {
+      connection = {
         ...input,
         password: input.password || node.connection?.password,
         uuid: input.uuid || node.connection?.uuid,
         obfsPassword: input.obfsPassword || node.connection?.obfsPassword,
       }
+    }
+    if (connection) {
       node.connection = connection
       node.name = connection.name
       node.protocol = connection.protocol
