@@ -15,6 +15,11 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { formatYaml, yamlEditorExtensions } from '@/lib/yaml-editor'
 import { TemplatePreview } from './template-preview'
+import { Segmented } from '@/components/ui/segmented'
+import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
+import { validateVisualDraft } from './visual/validation'
+import { VisualTemplateEditor } from './visual/visual-editor'
+import type { VisualTemplateDraft } from './visual/model'
 import '@/styles/templates.css'
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:full' | 'import' | 'blank'
@@ -48,6 +53,10 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const initialMode = source === 'blank' || source?.startsWith('builtin:') ? 'visual' : 'yaml'
+  const [mode, setMode] = useState<'visual' | 'yaml'>(initialMode)
+  const [visualDraft, setVisualDraft] = useState<VisualTemplateDraft | null>(null)
+  const [visualIssues, setVisualIssues] = useState<ReturnType<typeof validateVisualDraft>>([])
 
   useEffect(() => {
     const templateId = id || (source?.startsWith('builtin:') ? source : '')
@@ -63,6 +72,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         setName(id ? template.name : `${template.name} 副本`)
         setDescription(template.description || '')
         setYaml(template.yaml)
+        if (!id && source?.startsWith('builtin:')) {
+          const result = parseVisualTemplate(template.yaml)
+          setVisualDraft(result.draft)
+          setVisualIssues(validateVisualDraft(result.draft, result.warnings))
+        }
         setError('')
       })
       .catch((reason) => {
@@ -74,6 +88,42 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     return () => controller.abort()
   }, [id, source])
 
+  useEffect(() => {
+    if (source === 'blank' && yaml && !visualDraft) {
+      try {
+        const result = parseVisualTemplate(yaml)
+        setVisualDraft(result.draft)
+        setVisualIssues(validateVisualDraft(result.draft, result.warnings))
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '无法进入可视化编辑')
+      }
+    }
+  }, [source, yaml, visualDraft])
+
+  function enterVisualMode() {
+    try {
+      const result = parseVisualTemplate(yaml)
+      setVisualDraft(result.draft)
+      setVisualIssues(validateVisualDraft(result.draft, result.warnings))
+      setMode('visual')
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法进入可视化编辑')
+    }
+  }
+
+  function updateVisualDraft(nextDraft: VisualTemplateDraft) {
+    try {
+      const nextYaml = applyVisualTemplate(yaml, nextDraft)
+      setVisualDraft(nextDraft)
+      setVisualIssues(validateVisualDraft(nextDraft))
+      setYaml(nextYaml)
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '可视化更新失败')
+    }
+  }
+
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -82,6 +132,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
       return
     }
     setYaml(await file.text())
+    setVisualDraft(null)
+    setMode('yaml')
     if (!name) setName(file.name.replace(/\.ya?ml$/i, ''))
     setError('')
   }
@@ -159,7 +211,18 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
               </Field>
             </FieldGroup>
             <div className="template-yaml-heading">
-              <FieldLabel id="template-yaml-label">YAML 内容</FieldLabel>
+              <div className="template-content-heading">
+                <FieldLabel id="template-yaml-label">模板内容</FieldLabel>
+                <Segmented
+                  className="template-mode-switch"
+                  value={mode}
+                  options={[
+                    { value: 'visual', label: '可视化编辑' },
+                    { value: 'yaml', label: 'YAML 编辑' },
+                  ]}
+                  onChange={(next) => (next === 'visual' ? enterVisualMode() : setMode('yaml'))}
+                />
+              </div>
               <div>
                 {source === 'import' && (
                   <Button type="button" variant="ghost" size="sm" asChild>
@@ -170,26 +233,37 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                     </label>
                   </Button>
                 )}
-                <IconButton
-                  label="格式化 YAML"
-                  onClick={() => {
-                    const formatted = formatYaml(yaml)
-                    if (formatted) setYaml(formatted)
-                  }}
-                >
-                  <WandSparkles />
-                </IconButton>
+                {mode === 'yaml' && (
+                  <IconButton
+                    label="格式化 YAML"
+                    onClick={() => {
+                      const formatted = formatYaml(yaml)
+                      if (formatted) setYaml(formatted)
+                    }}
+                  >
+                    <WandSparkles />
+                  </IconButton>
+                )}
               </div>
             </div>
-            <CodeMirror
-              className="template-code-editor"
-              value={yaml}
-              height="100%"
-              theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-              extensions={yamlEditorExtensions}
-              onChange={setYaml}
-              aria-labelledby="template-yaml-label"
-            />
+            {mode === 'yaml' ? (
+              <CodeMirror
+                className="template-code-editor"
+                value={yaml}
+                height="100%"
+                theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+                extensions={yamlEditorExtensions}
+                onChange={(next) => {
+                  setYaml(next)
+                  setVisualDraft(null)
+                }}
+                aria-labelledby="template-yaml-label"
+              />
+            ) : (
+              visualDraft && (
+                <VisualTemplateEditor draft={visualDraft} issues={visualIssues} onChange={updateVisualDraft} />
+              )
+            )}
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -200,7 +274,14 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                 <Check data-icon="inline-start" />
                 校验
               </Button>
-              <Button disabled={Boolean(busy) || !name.trim() || !yaml.trim()}>
+              <Button
+                disabled={
+                  Boolean(busy) ||
+                  !name.trim() ||
+                  !yaml.trim() ||
+                  (mode === 'visual' && visualIssues.some((issue) => issue.level === 'error'))
+                }
+              >
                 <Save data-icon="inline-start" />
                 保存模板
               </Button>
