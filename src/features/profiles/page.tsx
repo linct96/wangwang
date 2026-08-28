@@ -6,13 +6,15 @@ import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source } from '@/api/types'
 import { IconButton, PageState, Status } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import '@/styles/profiles.css'
 import { Link } from '@tanstack/react-router'
 import { formatDate } from '@/lib/format'
 import { ProfileDialog } from './profile-dialog'
 
 export function ProfilesPage() {
-  const { data: profiles = [], error, loading, reload } = useApi<Profile[]>('/profiles')
+  const { data: profiles, error, loading, reload } = useApi<Profile[]>('/profiles')
+  const profileItems = profiles || []
   const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const [adding, setAdding] = useState(false)
   async function remove(id: string) {
@@ -30,17 +32,24 @@ export function ProfilesPage() {
       <div className="page-heading">
         <div>
           <h1>配置</h1>
-          <p>{profiles.length}/20 个订阅配置</p>
+          <p>{profileItems.length}/20 个订阅配置</p>
         </div>
         <Button disabled={!sources.length} onClick={() => setAdding(true)}>
           <Plus data-icon="inline-start" />
           新建
         </Button>
       </div>
-      <PageState loading={loading} error={error} />
+      {error && <PageState loading={false} error={error} />}
       <section className="profile-list">
-        {profiles.length ? (
-          profiles.map((profile) => (
+        {loading && !profiles ? (
+          Array.from({ length: 5 }, (_, index) => (
+            <article className="profile-row" key={index} aria-hidden="true">
+              <Skeleton className="h-9 w-9" />
+              <Skeleton className="h-8 w-full" />
+            </article>
+          ))
+        ) : profileItems.length ? (
+          profileItems.map((profile) => (
             <article className="profile-row" key={profile.id}>
               <div className="profile-icon">
                 <FileCode2 />
