@@ -81,8 +81,6 @@ function parseStandardUrl(input: string): ProxyConfig {
   else if (type === 'tuic') parseTuic(url, base)
   else if (type === 'anytls') parseAnytls(url, base)
   if (type === 'trojan') {
-    const network = url.searchParams.get('type') || url.searchParams.get('network')
-    if (network) base.network = network
     tlsOptions(url, base)
   }
 

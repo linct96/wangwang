@@ -1,4 +1,5 @@
 import type { ProxyConfig } from '../../db'
+import { parseTransport } from './transport'
 function decode(value: string) {
   const normalized = value
     .replace(/\s/g, '')
@@ -29,10 +30,12 @@ export function parseVmess(input: string): ProxyConfig {
   const raw = decode(input.slice('vmess://'.length))
   const config = parseVmessConfig(raw),
     network = String(raw.net || 'tcp')
-  if (network !== 'tcp') config.network = network
-  if (network === 'ws')
-    config['ws-opts'] = { path: String(raw.path || '/'), headers: raw.host ? { Host: String(raw.host) } : undefined }
-  if (network === 'grpc') config['grpc-opts'] = { 'grpc-service-name': String(raw.path || '') }
+  parseTransport(config, {
+    network,
+    path: String(raw.path || '/') || undefined,
+    host: raw.host ? String(raw.host) : undefined,
+    serviceName: String(raw.path || '') || undefined,
+  })
   if (String(raw.tls || '') === 'tls') {
     config.tls = true
     config.servername = String(raw.sni || raw.host || config.server)

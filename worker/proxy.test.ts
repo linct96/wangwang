@@ -87,6 +87,17 @@ describe('parseProxyText', () => {
     })
   })
 
+  it('支持解析 Trojan 传输层参数', async () => {
+    const result = await parseProxyText(
+      'trojan://password@example.com:443?type=ws&path=%2Ftrojan&host=cdn.example.com#Trojan',
+    )
+    expect(result.nodes[0]?.config).toMatchObject({
+      type: 'trojan',
+      network: 'ws',
+      'ws-opts': { path: '/trojan', headers: { Host: 'cdn.example.com' } },
+    })
+  })
+
   it('支持过滤无效 YAML 节点并记录警告信息', async () => {
     const yaml = `
 proxies:
