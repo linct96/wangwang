@@ -8,10 +8,21 @@ const base = z
     port: z.number().int().min(1).max(65535),
   })
   .passthrough()
+const vless = base.extend({ uuid: z.string().min(1) }).superRefine((config, context) => {
+  if (!('reality-opts' in config)) return
+  const reality = config['reality-opts']
+  if (
+    !reality ||
+    typeof reality !== 'object' ||
+    typeof (reality as { 'public-key'?: unknown })['public-key'] !== 'string' ||
+    !(reality as { 'public-key': string })['public-key'].trim()
+  )
+    context.addIssue({ code: 'custom', path: ['reality-opts', 'public-key'], message: 'Reality 节点缺少公钥' })
+})
 const schemas: Record<string, typeof base> = {
   ss: base.extend({ cipher: z.string().min(1), password: z.string().min(1) }),
   vmess: base.extend({ uuid: z.string().min(1) }),
-  vless: base.extend({ uuid: z.string().min(1) }),
+  vless,
   trojan: base.extend({ password: z.string().min(1) }),
   hysteria2: base.extend({ password: z.string().min(1) }),
   tuic: base.extend({ uuid: z.string().min(1), password: z.string().min(1) }),
