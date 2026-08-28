@@ -53,10 +53,29 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const initialMode = source === 'blank' || source?.startsWith('builtin:') ? 'visual' : 'yaml'
+  const initialMode = source === 'import' ? 'yaml' : 'visual'
   const [mode, setMode] = useState<'visual' | 'yaml'>(initialMode)
-  const [visualDraft, setVisualDraft] = useState<VisualTemplateDraft | null>(null)
-  const [visualIssues, setVisualIssues] = useState<ReturnType<typeof validateVisualDraft>>([])
+  const [visualDraft, setVisualDraft] = useState<VisualTemplateDraft | null>(() => {
+    if (source === 'blank') {
+      try {
+        return parseVisualTemplate(blankTemplate).draft
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
+  const [visualIssues, setVisualIssues] = useState<ReturnType<typeof validateVisualDraft>>(() => {
+    if (source === 'blank') {
+      try {
+        const result = parseVisualTemplate(blankTemplate)
+        return validateVisualDraft(result.draft, result.warnings)
+      } catch {
+        return []
+      }
+    }
+    return []
+  })
 
   useEffect(() => {
     const templateId = id || (source?.startsWith('builtin:') ? source : '')
@@ -72,10 +91,13 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         setName(id ? template.name : `${template.name} 副本`)
         setDescription(template.description || '')
         setYaml(template.yaml)
-        if (!id && source?.startsWith('builtin:')) {
+        try {
           const result = parseVisualTemplate(template.yaml)
           setVisualDraft(result.draft)
           setVisualIssues(validateVisualDraft(result.draft, result.warnings))
+          setMode('visual')
+        } catch {
+          setMode('yaml')
         }
         setError('')
       })
@@ -94,6 +116,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         const result = parseVisualTemplate(yaml)
         setVisualDraft(result.draft)
         setVisualIssues(validateVisualDraft(result.draft, result.warnings))
+        setMode('visual')
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '无法进入可视化编辑')
       }
