@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from './tasks'
 import { sourceNodes, sources } from './db'
@@ -260,7 +260,7 @@ export async function nodeKinds(env: Env, nodeIds: string[]) {
     .select({ nodeId: sourceNodes.nodeId, kind: sources.kind })
     .from(sourceNodes)
     .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
-    .where(inArray(sourceNodes.nodeId, nodeIds))
+    .where(and(inArray(sourceNodes.nodeId, nodeIds), eq(sources.enabled, true)))
   for (const row of rows) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.kind])
   return result
 }
@@ -272,7 +272,7 @@ export async function nodeSourceTags(env: Env, nodeIds: string[]) {
     .select({ nodeId: sourceNodes.nodeId, tag: sources.nodeTag })
     .from(sourceNodes)
     .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
-    .where(inArray(sourceNodes.nodeId, nodeIds))
+    .where(and(inArray(sourceNodes.nodeId, nodeIds), eq(sources.enabled, true)))
   for (const row of rows) if (row.tag) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.tag])
   return result
 }
