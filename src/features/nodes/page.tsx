@@ -6,6 +6,7 @@ import { useApi } from '@/api/use-api'
 import type { NodeItem } from '@/api/types'
 import { AppDialog, IconButton, PageState, Status } from '@/components/app-primitives'
 import { AddNodeDialog, NodeDialog } from './node-dialogs'
+import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,7 +39,7 @@ export function NodesPage() {
     }
   }
   return (
-    <>
+    <div className="nodes-page">
       <div className="page-heading">
         <div>
           <h1>节点</h1>
@@ -273,6 +274,6 @@ export function NodesPage() {
           </footer>
         </AppDialog>
       )}
-    </>
+    </div>
   )
 }
