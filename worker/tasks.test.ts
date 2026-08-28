@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterNodesByName, parseSubscriptionUserinfo } from './tasks'
+import { parseSubscriptionUserinfo, removeNodesByName } from './tasks'
 
 describe('parseSubscriptionUserinfo', () => {
   it('过滤非法到期时间', () => {
@@ -9,10 +9,10 @@ describe('parseSubscriptionUserinfo', () => {
   })
 })
 
-describe('filterNodesByName', () => {
-  it('按节点名称正则过滤', () => {
+describe('removeNodesByName', () => {
+  it('移除匹配节点名称正则的节点', () => {
     const nodes = [{ config: { name: '香港 01' } }, { config: { name: '日本 01' } }]
-    expect(filterNodesByName(nodes, '香港')).toHaveLength(1)
-    expect(filterNodesByName(nodes, null)).toHaveLength(2)
+    expect(removeNodesByName(nodes, '香港')).toEqual([{ config: { name: '日本 01' } }])
+    expect(removeNodesByName(nodes, null)).toHaveLength(2)
   })
 })

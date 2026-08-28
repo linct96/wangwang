@@ -122,7 +122,7 @@ async function replaceSourceNodes(
 ) {
   const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
-  const nodes = filterNodesByName(parsed.nodes, source.nodeNameFilter)
+  const nodes = removeNodesByName(parsed.nodes, source.nodeNameFilter)
   await ensureNodeCapacity(
     env,
     nodes.map((node) => node.fingerprint),
@@ -187,10 +187,10 @@ async function replaceSourceNodes(
   await env.DB.batch(statements)
 }
 
-export function filterNodesByName<T extends { config: { name: string } }>(nodes: T[], pattern: string | null) {
+export function removeNodesByName<T extends { config: { name: string } }>(nodes: T[], pattern: string | null) {
   if (!pattern) return nodes
   const filter = new RegExp(pattern)
-  return nodes.filter((node) => filter.test(node.config.name))
+  return nodes.filter((node) => !filter.test(node.config.name))
 }
 
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
