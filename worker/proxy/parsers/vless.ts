@@ -13,8 +13,8 @@ export function parseVless(url: URL, config: ProxyConfig) {
   if (network === 'xhttp') {
     config['xhttp-opts'] = {
       path: url.searchParams.get('path') || '/',
+      host: url.searchParams.get('host') || undefined,
       mode: url.searchParams.get('mode') || undefined,
-      headers: url.searchParams.get('host') ? { Host: url.searchParams.get('host') } : undefined,
     }
     config['__warning'] = '暂未完整支持的 VLESS transport: xhttp'
   }
