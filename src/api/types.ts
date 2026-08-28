@@ -19,6 +19,7 @@ export type Source = {
   url: string | null
   nodeNameFilter: string | null
   nodeTag: string | null
+  userAgent: string
   pendingUrl: boolean
   profileCount: number
   refreshIntervalHours: number

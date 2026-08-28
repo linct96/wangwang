@@ -20,6 +20,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatBytes, formatDate, formatRelativeTime } from '@/lib/format'
 
+const customUserAgent = '__custom__'
+const userAgentPresets = [
+  { label: 'Clash', value: 'clash' },
+  { label: 'Clash Verge Rev', value: 'clash-verge/v2.5.2' },
+  { label: 'Clash.Meta', value: 'Clash.Meta' },
+  { label: 'FlClash', value: 'FlClash/v0.8.96 clash-verge Platform/windows' },
+  { label: 'Mihomo', value: 'mihomo' },
+  { label: 'Shadowrocket', value: 'Shadowrocket' },
+  { label: 'sing-box', value: 'sing-box' },
+  { label: 'v2rayN', value: 'v2rayN' },
+]
+
 export function SourcesPage() {
   const { data = [], error, loading, reload } = useApi<Source[]>('/sources')
   const [adding, setAdding] = useState(false)
@@ -288,10 +300,15 @@ function SourceDialog({
   onSaved: (jobId: string | null) => void
 }) {
   const [error, setError] = useState('')
+  const initialUserAgent = source?.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows'
+  const [userAgentOption, setUserAgentOption] = useState(
+    userAgentPresets.some(({ value }) => value === initialUserAgent) ? initialUserAgent : customUserAgent,
+  )
   const form = useForm({
     defaultValues: {
       name: source?.name || '',
       url: source?.url || '',
+      userAgent: source?.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
       nodeTag: source?.nodeTag || '',
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
@@ -302,6 +319,12 @@ function SourceDialog({
           ? z.string().trim().min(1, '请输入订阅名称').max(60, '订阅名称不能超过 60 个字符')
           : z.string().trim().max(60, '订阅名称不能超过 60 个字符'),
         url: z.url('请输入有效的订阅地址').max(2048, '订阅地址不能超过 2048 个字符'),
+        userAgent: z
+          .string()
+          .trim()
+          .min(1, '请输入 User-Agent')
+          .max(200, 'User-Agent 不能超过 200 个字符')
+          .regex(/^[\x20-\x7e]+$/, 'User-Agent 仅支持 ASCII 字符'),
         nodeTag: z.string().trim().max(24, '节点标签不能超过 24 个字符'),
         nodeNameFilter: z
           .string()
@@ -330,6 +353,7 @@ function SourceDialog({
             name: value.name,
             url: source ? (urlChanged ? value.url.trim() : undefined) : value.url.trim(),
             refreshIntervalHours: value.interval,
+            userAgent: value.userAgent.trim(),
             nodeTag: value.nodeTag.trim(),
             nodeNameFilter,
           }),
@@ -363,6 +387,51 @@ function SourceDialog({
                     placeholder="https://example.com/sub"
                     aria-invalid={invalid}
                   />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
+          <form.Field name="userAgent">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="source-user-agent">User-Agent</FieldLabel>
+                  <div className="flex gap-2">
+                    <Select
+                      value={userAgentOption}
+                      onValueChange={(value) => {
+                        setUserAgentOption(value)
+                        form.setFieldValue('userAgent', value === customUserAgent ? '' : value)
+                      }}
+                    >
+                      <SelectTrigger className="w-40 shrink-0" aria-label="User-Agent 客户端">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {userAgentPresets.map(({ label, value }) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value={customUserAgent}>手动输入</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      id="source-user-agent"
+                      className="min-w-0"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder="FlClash/v0.8.96 clash-verge Platform/windows"
+                      readOnly={userAgentOption !== customUserAgent}
+                      aria-readonly={userAgentOption !== customUserAgent}
+                      aria-invalid={invalid}
+                    />
+                  </div>
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               )
@@ -457,12 +526,20 @@ function SourceDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <form.Subscribe selector={(state) => [state.isSubmitting, state.values.url, state.values.nodeNameFilter]}>
-            {([isSubmitting, currentUrl, currentFilter]) => (
+          <form.Subscribe
+            selector={(state) => [
+              state.isSubmitting,
+              state.values.url,
+              state.values.userAgent,
+              state.values.nodeNameFilter,
+            ]}
+          >
+            {([isSubmitting, currentUrl, currentUserAgent, currentFilter]) => (
               <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
                 {source
                   ? String(currentUrl).trim() !== (source.url || '') ||
+                    String(currentUserAgent).trim() !== source.userAgent ||
                     String(currentFilter).trim() !== (source.nodeNameFilter || '')
                     ? '保存并验证'
                     : '保存'

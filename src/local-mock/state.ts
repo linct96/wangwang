@@ -22,9 +22,10 @@ function seedState(): LocalState {
       id: 'source-main',
       name: '主力订阅',
       kind: 'url',
-      url: 'https://example.com/sub?***',
+      url: 'https://example.com/sub?token=demo',
       nodeNameFilter: null,
       nodeTag: null,
+      userAgent: 'FlClash/v0.8.96 clash-verge Platform/windows',
       pendingUrl: false,
       profileCount: 1,
       refreshIntervalHours: 6,
@@ -47,6 +48,7 @@ function seedState(): LocalState {
       url: null,
       nodeNameFilter: null,
       nodeTag: null,
+      userAgent: 'mihomo',
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: 0,
@@ -66,9 +68,10 @@ function seedState(): LocalState {
       id: 'source-test',
       name: '测试订阅（含流量信息）',
       kind: 'url',
-      url: 'https://example.com/test-sub?***',
+      url: 'https://example.com/test-sub?token=demo',
       nodeNameFilter: null,
       nodeTag: null,
+      userAgent: 'Clash.Meta',
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: 6,
@@ -165,7 +168,14 @@ export function readState() {
       Array.isArray(value.profiles) &&
       Array.isArray(value.jobs)
     ) {
-      if (value.version === 2) return value as LocalState
+      if (value.version === 2)
+        return {
+          ...value,
+          sources: value.sources.map((source) => ({
+            ...source,
+            userAgent: source.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
+          })),
+        } as LocalState
       const manualIds = new Set(value.sources.filter((source) => source.kind === 'manual').map((source) => source.id))
       const rewriteSources = (ids: string[]) => [
         ...new Set(ids.map((id) => (manualIds.has(id) ? 'system-manual' : id))),
@@ -197,7 +207,12 @@ export function readState() {
       const sources = [
         ...value.sources
           .filter((source) => source.kind === 'url')
-          .map((source) => ({ ...source, pendingUrl: false, profileCount: 0 })),
+          .map((source) => ({
+            ...source,
+            userAgent: source.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows',
+            pendingUrl: false,
+            profileCount: 0,
+          })),
         {
           id: 'system-manual',
           name: '手动节点',
@@ -205,6 +220,7 @@ export function readState() {
           url: null,
           nodeNameFilter: null,
           nodeTag: null,
+          userAgent: 'mihomo',
           pendingUrl: false,
           profileCount: 0,
           refreshIntervalHours: 0,
@@ -242,11 +258,6 @@ export function writeState(state: LocalState) {
 
 export function createJob(type: Job['type'], entityId: string, createdAt = now()): Job {
   return { id: crypto.randomUUID(), type, entityId, status: 'succeeded', error: null, createdAt }
-}
-
-export function displayUrl(value: string) {
-  const url = new URL(value)
-  return `${url.origin}${url.pathname}${url.search ? '?***' : ''}`
 }
 
 export function localNodeTags(state: LocalState, node: LocalNode) {

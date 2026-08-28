@@ -3,7 +3,6 @@ import { editableProxyYaml, parseProxyText, proxyConfigError, restoreProxySecret
 import {
   compileYaml,
   createJob,
-  displayUrl,
   localNodeTags,
   now,
   readState,
@@ -149,9 +148,10 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       id: crypto.randomUUID(),
       name: String(body.name || '').trim() || new URL(rawUrl).hostname,
       kind: 'url',
-      url: displayUrl(rawUrl),
+      url: rawUrl,
       nodeNameFilter: String(body.nodeNameFilter || '').trim() || null,
       nodeTag: String(body.nodeTag || '').trim() || null,
+      userAgent: String(body.userAgent || 'FlClash/v0.8.96 clash-verge Platform/windows').trim(),
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: Number(body.refreshIntervalHours || 0),
@@ -185,13 +185,16 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (typeof body.refreshIntervalHours === 'number') source.refreshIntervalHours = body.refreshIntervalHours
     if (typeof body.nodeNameFilter === 'string') source.nodeNameFilter = body.nodeNameFilter.trim() || null
     if (typeof body.nodeTag === 'string') source.nodeTag = body.nodeTag.trim() || null
+    const userAgentChanged = typeof body.userAgent === 'string' && body.userAgent.trim() !== source.userAgent
+    if (typeof body.userAgent === 'string') source.userAgent = body.userAgent.trim()
     if (typeof body.url === 'string' && body.url) {
-      source.url = displayUrl(body.url)
+      source.url = body.url
       source.status = 'ready'
       source.lastRefreshedAt = now()
     }
     if (typeof body.enabled === 'boolean' || typeof body.nodeTag === 'string') recompileProfiles(state, [source.id])
-    const job = typeof body.url === 'string' && body.url ? createJob('refresh_source', source.id) : null
+    const job =
+      (typeof body.url === 'string' && body.url) || userAgentChanged ? createJob('refresh_source', source.id) : null
     if (job) state.jobs.unshift(job)
     writeState(state)
     return { source, jobId: job?.id || null } as T

@@ -12,6 +12,12 @@ const nodeNameFilterSchema = z
   .max(200)
   .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
 const nodeTagSchema = z.string().trim().max(24)
+const userAgentSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[\x20-\x7e]+$/, 'User-Agent 仅支持 ASCII 字符')
 
 export const sourceCreateSchema = z.object({
   name: z.string().trim().max(60).optional().default(''),
@@ -19,6 +25,7 @@ export const sourceCreateSchema = z.object({
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
   nodeTag: nodeTagSchema.optional().default(''),
+  userAgent: userAgentSchema.optional().default('FlClash/v0.8.96 clash-verge Platform/windows'),
 })
 
 export const sourceUpdateSchema = z.object({
@@ -28,6 +35,7 @@ export const sourceUpdateSchema = z.object({
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).optional(),
   nodeNameFilter: nodeNameFilterSchema.optional(),
   nodeTag: nodeTagSchema.optional(),
+  userAgent: userAgentSchema.optional(),
 })
 
 function safeRegExp(value: string) {
@@ -44,19 +52,9 @@ function normalizeNodeNameFilter(value: string | undefined) {
   return normalized || null
 }
 
-export function displayUrl(value: string | null) {
-  if (!value) return null
-  try {
-    const url = new URL(value)
-    return `${url.origin}${url.pathname}${url.search ? '?***' : ''}`
-  } catch {
-    return null
-  }
-}
-
 export function sourceView(source: typeof sources.$inferSelect, profileCount = 0) {
-  const { content: _content, url, ...safe } = source
-  return { ...safe, pendingUrl: Boolean(source.pendingUrl), url: displayUrl(url), profileCount }
+  const { content: _content, ...safe } = source
+  return { ...safe, pendingUrl: Boolean(source.pendingUrl), profileCount }
 }
 
 export const sourcesRouter = new Hono<{ Bindings: Env }>()
@@ -97,6 +95,7 @@ sourcesRouter.post('/', async (c) => {
     url: input.url,
     nodeNameFilter,
     nodeTag: input.nodeTag || null,
+    userAgent: input.userAgent,
     content: null,
     refreshIntervalHours: input.refreshIntervalHours,
     enabled: true,
@@ -124,6 +123,8 @@ sourcesRouter.patch('/:id', async (c) => {
   const filterChanged = nodeNameFilter !== current.nodeNameFilter
   const nodeTag = input.nodeTag === undefined ? current.nodeTag : input.nodeTag || null
   const nodeTagChanged = nodeTag !== current.nodeTag
+  const userAgent = input.userAgent ?? current.userAgent
+  const userAgentChanged = userAgent !== current.userAgent
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
   const nextRefreshAt =
     current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
@@ -137,9 +138,12 @@ sourcesRouter.patch('/:id', async (c) => {
       refreshIntervalHours: input.refreshIntervalHours,
       nodeNameFilter,
       nodeTag,
+      userAgent,
       pendingUrl: input.url,
       status: input.url ? 'idle' : undefined,
       error: input.url ? null : undefined,
+      etag: userAgentChanged ? null : undefined,
+      lastModified: userAgentChanged ? null : undefined,
       nextRefreshAt,
       updatedAt: new Date(),
     })
@@ -147,7 +151,7 @@ sourcesRouter.patch('/:id', async (c) => {
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagChanged)
     await enqueueAffectedProfiles(c.env, current.id)
-  if (input.url || filterChanged) {
+  if (input.url || filterChanged || userAgentChanged) {
     try {
       const job = await createJob(c.env, 'refresh_source', current.id)
       return c.json({ data: { source: sourceView(updated!), jobId: job.id } }, 202)

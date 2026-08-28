@@ -22,6 +22,36 @@ export function parseSubscriptionUserinfo(value: string | null) {
   return Object.keys(result).length ? result : null
 }
 
+export function parseContentDispositionFilename(value: string | null) {
+  if (!value) return null
+  const extended = /(?:^|;)\s*filename\*\s*=\s*(?:"([^"]*)"|([^;]*))/i.exec(value)
+  const fallback = /(?:^|;)\s*filename\s*=\s*(?:"([^"]*)"|([^;]*))/i.exec(value)
+  for (const match of [extended, fallback]) {
+    if (!match) continue
+    const raw = (match[1] ?? match[2]).trim()
+    try {
+      const encoded = match === extended ? raw.replace(/^[^']*'[^']*'/, '') : raw
+      const filename = (match === extended ? decodeURIComponent(encoded) : encoded)
+        .split(/[\\/]/)
+        .pop()
+        // eslint-disable-next-line no-control-regex
+        ?.replace(/[\x00-\x1f\x7f]/g, '')
+        .trim()
+      if (filename) return filename.slice(0, 60)
+    } catch {
+      // filename* 解码失败时继续尝试普通 filename。
+    }
+  }
+  return null
+}
+
+function subscriptionMetadata(headers: Headers, fallbackName: string | null = null) {
+  return {
+    name: parseContentDispositionFilename(headers.get('Content-Disposition')) || fallbackName,
+    subscriptionInfo: parseSubscriptionUserinfo(headers.get('Subscription-Userinfo')),
+  }
+}
+
 export function db(env: Env) {
   return drizzle(env.DB)
 }
@@ -69,17 +99,22 @@ async function readResponse(response: Response) {
   return new TextDecoder().decode(merged)
 }
 
-async function fetchSource(urlValue: string, etag: string | null, lastModified: string | null) {
+export async function fetchSource(
+  urlValue: string,
+  userAgent: string,
+  etag: string | null,
+  lastModified: string | null,
+) {
   let url = assertRemoteUrl(urlValue)
   for (let redirect = 0; redirect <= 3; redirect += 1) {
-    const headers = new Headers({ Accept: 'text/yaml,text/plain,*/*', 'User-Agent': 'mihomo' })
+    const headers = new Headers({ Accept: 'text/yaml,text/plain,*/*', 'User-Agent': userAgent })
     if (etag) headers.set('If-None-Match', etag)
     if (lastModified) headers.set('If-Modified-Since', lastModified)
     const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(15_000) })
     if (response.status === 304)
       return {
         notModified: true as const,
-        subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')),
+        ...subscriptionMetadata(response.headers),
       }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('Location')
@@ -93,7 +128,7 @@ async function fetchSource(urlValue: string, etag: string | null, lastModified: 
       text: await readResponse(response),
       etag: response.headers.get('ETag'),
       lastModified: response.headers.get('Last-Modified'),
-      subscriptionInfo: parseSubscriptionUserinfo(response.headers.get('Subscription-Userinfo')),
+      ...subscriptionMetadata(response.headers, url.hostname),
     }
   }
   throw new Error('订阅获取失败')
@@ -119,6 +154,7 @@ async function replaceSourceNodes(
   sourceId: string,
   parsed: Awaited<ReturnType<typeof parseProxyText>>,
   responseMeta?: {
+    name: string | null
     etag: string | null
     lastModified: string | null
     subscriptionInfo: ReturnType<typeof parseSubscriptionUserinfo>
@@ -166,8 +202,9 @@ async function replaceSourceNodes(
       : null
   statements.push(
     env.DB.prepare(
-      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
+      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, name=COALESCE(?, name), status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
     ).bind(
+      responseMeta?.name ?? null,
       parsed.warnings.join('\n') || null,
       nodes.length,
       responseMeta?.etag ?? source.etag,
@@ -234,6 +271,7 @@ export async function refreshSource(env: Env, sourceId: string) {
     source.kind === 'url'
       ? await fetchSource(
           candidateUrl!,
+          source.userAgent,
           source.pendingUrl ? null : source.etag,
           source.pendingUrl ? null : source.lastModified,
         )
@@ -244,6 +282,7 @@ export async function refreshSource(env: Env, sourceId: string) {
     await database
       .update(sources)
       .set({
+        name: response.name ?? undefined,
         status: 'ready',
         error: null,
         ...(response.subscriptionInfo
