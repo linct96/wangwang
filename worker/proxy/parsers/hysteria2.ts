@@ -26,5 +26,7 @@ export function parseHysteria2(input: string): ProxyConfig {
   if (portText && !/^\d+$/.test(portText)) config.ports = portText
   if (url.searchParams.get('obfs')) config.obfs = url.searchParams.get('obfs')
   if (url.searchParams.get('obfs-password')) config['obfs-password'] = url.searchParams.get('obfs-password')
+  if (url.searchParams.get('pinSHA256')) config['pin-sha256'] = url.searchParams.get('pinSHA256')
+  if (url.searchParams.get('ech')) config.ech = url.searchParams.get('ech')
   return config
 }
