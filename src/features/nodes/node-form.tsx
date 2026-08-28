@@ -90,24 +90,19 @@ export function ManualConnectionFields({
         <ConnectionTextField
           id="manual-name"
           label="节点名称"
-          required
           value={value.name}
           onChange={(name) => update({ name })}
         />
         <ConnectionTextField
           id="manual-server"
           label="服务器"
-          required
           value={value.server}
           onChange={(server) => update({ server })}
         />
         <ConnectionTextField
           id="manual-port"
           label="端口"
-          required
           type="number"
-          min={1}
-          max={65535}
           value={value.port}
           onChange={(port) => update({ port: Number(port) })}
         />
@@ -118,14 +113,12 @@ export function ManualConnectionFields({
           <ConnectionTextField
             id="manual-cipher"
             label="加密方式"
-            required
             value={value.cipher || ''}
             onChange={(cipher) => update({ cipher })}
           />
           <ConnectionTextField
             id="manual-password"
             label="密码"
-            required={!value.hasPassword}
             type="password"
             value={value.password || ''}
             placeholder={secretPlaceholder(value.hasPassword)}
@@ -164,7 +157,6 @@ export function ManualConnectionFields({
         <ConnectionTextField
           id="manual-uuid"
           label="UUID"
-          required={!value.hasUuid}
           type="password"
           value={value.uuid || ''}
           placeholder={secretPlaceholder(value.hasUuid)}
@@ -175,7 +167,6 @@ export function ManualConnectionFields({
         <ConnectionTextField
           id="manual-protocol-password"
           label="密码"
-          required={!value.hasPassword}
           type="password"
           value={value.password || ''}
           placeholder={secretPlaceholder(value.hasPassword)}
@@ -285,7 +276,6 @@ export function ManualConnectionFields({
           <ConnectionTextField
             id="manual-reality-key"
             label="Reality 公钥"
-            required
             value={value.realityPublicKey || ''}
             onChange={(realityPublicKey) => update({ realityPublicKey })}
           />
