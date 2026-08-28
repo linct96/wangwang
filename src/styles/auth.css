@@ -1,5 +1,5 @@
 @scope (.auth-page) {
-  .auth-page {
+  :scope {
     min-height: 100vh;
     padding: 20px;
     display: grid;
@@ -20,7 +20,7 @@
   }
 }
 @scope (.auth-loading) {
-  .auth-loading {
+  :scope {
     min-height: 100vh;
     display: flex;
     align-items: center;
