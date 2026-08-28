@@ -286,7 +286,7 @@ export function localNodeTags(state: LocalState, node: LocalNode) {
     ...new Set([
       ...node.tags,
       ...state.sources
-        .filter((source) => node.sourceIds.includes(source.id))
+        .filter((source) => source.enabled && node.sourceIds.includes(source.id))
         .map((source) => source.nodeTag)
         .filter((tag): tag is string => Boolean(tag)),
     ]),

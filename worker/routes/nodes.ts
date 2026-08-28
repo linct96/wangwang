@@ -203,8 +203,17 @@ nodesRouter.get('/', async (c) => {
         )
       : undefined,
     enabled === 'true' ? eq(nodes.enabled, true) : enabled === 'false' ? eq(nodes.enabled, false) : undefined,
+    sql`EXISTS (
+      SELECT 1 FROM source_nodes sn
+      JOIN sources s ON s.id = sn.source_id
+      WHERE sn.node_id = ${nodes.id} AND s.enabled = 1
+    )`,
     sourceId
-      ? sql`EXISTS (SELECT 1 FROM source_nodes sn WHERE sn.node_id = ${nodes.id} AND sn.source_id = ${sourceId})`
+      ? sql`EXISTS (
+          SELECT 1 FROM source_nodes sn
+          JOIN sources s ON s.id = sn.source_id
+          WHERE sn.node_id = ${nodes.id} AND sn.source_id = ${sourceId} AND s.enabled = 1
+        )`
       : undefined,
   )
   const database = db(c.env)
