@@ -324,21 +324,6 @@ function SourceDialog({
       <form className="form" onSubmit={submit}>
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="source-name">名称</FieldLabel>
-            <form.Field name="name">
-              {(field) => (
-                <Input
-                  id="source-name"
-                  required
-                  maxLength={60}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="例如：主力订阅"
-                />
-              )}
-            </form.Field>
-          </Field>
-          <Field>
             <FieldLabel htmlFor="source-url">订阅地址</FieldLabel>
             <form.Field name="url">
               {(field) => (
@@ -349,6 +334,21 @@ function SourceDialog({
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.target.value)}
                   placeholder="https://example.com/sub"
+                />
+              )}
+            </form.Field>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="source-name">订阅名称</FieldLabel>
+            <form.Field name="name">
+              {(field) => (
+                <Input
+                  id="source-name"
+                  required={!source}
+                  maxLength={60}
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="可留空，默认使用域名"
                 />
               )}
             </form.Field>
