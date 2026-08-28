@@ -7,10 +7,6 @@
     padding: 20px 16px 44px;
   }
 
-  .metrics {
-    grid-template-columns: 1fr;
-  }
-
   .page-heading {
     min-height: 54px;
     align-items: center;
@@ -20,36 +16,7 @@
     font-size: 21px;
   }
 
-  .heading-actions,
-  .toolbar {
+  .heading-actions {
     flex-wrap: wrap;
-  }
-
-  .search {
-    width: 100%;
-    min-width: 100%;
-  }
-
-  .batch-actions {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .profile-row {
-    grid-template-columns: auto 1fr auto;
-  }
-
-  .profile-row time,
-  .profile-row > [data-slot='badge'] {
-    display: none;
-  }
-
-  .option-grid,
-  .option-grid.protocols {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .form-grid {
-    grid-template-columns: 1fr;
   }
 }
