@@ -11,6 +11,7 @@ export const sources = sqliteTable(
     pendingUrl: text('pending_url'),
     content: text('content'),
     nodeNameFilter: text('node_name_filter'),
+    nodeTag: text('node_tag'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     etag: text('etag'),

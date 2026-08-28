@@ -26,6 +26,10 @@ export function db(env: Env) {
   return drizzle(env.DB)
 }
 
+export function mergeNodeTags(tags: string[], sourceTags: Array<string | null>) {
+  return [...new Set([...tags, ...sourceTags.filter((tag): tag is string => Boolean(tag))])]
+}
+
 export async function createJob(env: Env, type: JobType, entityId: string) {
   const job = { id: crypto.randomUUID(), type, entityId, status: 'pending' as const, createdAt: new Date() }
   await db(env).insert(jobs).values(job)
@@ -276,6 +280,7 @@ export async function compileProfile(env: Env, profileId: string) {
       config: nodes.config,
       alias: nodes.alias,
       tags: nodes.tags,
+      sourceTag: sources.nodeTag,
       originalName: sourceNodes.originalName,
     })
     .from(nodes)
@@ -301,7 +306,8 @@ export async function compileProfile(env: Env, profileId: string) {
 
   const unique = new Map<string, (typeof selected)[number]>()
   for (const node of selected) {
-    if (profile.tags.length && !profile.tags.some((tag) => node.tags.includes(tag))) continue
+    const tags = mergeNodeTags(node.tags, [node.sourceTag])
+    if (profile.tags.length && !profile.tags.some((tag) => tags.includes(tag))) continue
     if (!unique.has(node.id)) unique.set(node.id, node)
   }
 

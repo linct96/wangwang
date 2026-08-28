@@ -292,6 +292,7 @@ function SourceDialog({
     defaultValues: {
       name: source?.name || '',
       url: source?.url || '',
+      nodeTag: source?.nodeTag || '',
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
     },
@@ -301,6 +302,7 @@ function SourceDialog({
           ? z.string().trim().min(1, '请输入订阅名称').max(60, '订阅名称不能超过 60 个字符')
           : z.string().trim().max(60, '订阅名称不能超过 60 个字符'),
         url: z.url('请输入有效的订阅地址').max(2048, '订阅地址不能超过 2048 个字符'),
+        nodeTag: z.string().trim().max(24, '节点标签不能超过 24 个字符'),
         nodeNameFilter: z
           .string()
           .trim()
@@ -328,6 +330,7 @@ function SourceDialog({
             name: value.name,
             url: source ? (urlChanged ? value.url.trim() : undefined) : value.url.trim(),
             refreshIntervalHours: value.interval,
+            nodeTag: value.nodeTag.trim(),
             nodeNameFilter,
           }),
         })
@@ -377,6 +380,25 @@ function SourceDialog({
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
                     placeholder={source ? '例如：机场订阅' : '可留空，默认使用域名'}
+                    aria-invalid={invalid}
+                  />
+                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                </Field>
+              )
+            }}
+          </form.Field>
+          <form.Field name="nodeTag">
+            {(field) => {
+              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              return (
+                <Field data-invalid={invalid}>
+                  <FieldLabel htmlFor="source-node-tag">节点标签</FieldLabel>
+                  <Input
+                    id="source-node-tag"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="例如：机场 A"
                     aria-invalid={invalid}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}

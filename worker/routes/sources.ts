@@ -11,12 +11,14 @@ const nodeNameFilterSchema = z
   .trim()
   .max(200)
   .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
+const nodeTagSchema = z.string().trim().max(24)
 
 export const sourceCreateSchema = z.object({
   name: z.string().trim().max(60).optional().default(''),
   url: z.string().trim().min(1).max(2048),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
+  nodeTag: nodeTagSchema.optional().default(''),
 })
 
 export const sourceUpdateSchema = z.object({
@@ -25,6 +27,7 @@ export const sourceUpdateSchema = z.object({
   enabled: z.boolean().optional(),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).optional(),
   nodeNameFilter: nodeNameFilterSchema.optional(),
+  nodeTag: nodeTagSchema.optional(),
 })
 
 function safeRegExp(value: string) {
@@ -93,6 +96,7 @@ sourcesRouter.post('/', async (c) => {
     kind: 'url' as const,
     url: input.url,
     nodeNameFilter,
+    nodeTag: input.nodeTag || null,
     content: null,
     refreshIntervalHours: input.refreshIntervalHours,
     enabled: true,
@@ -118,6 +122,8 @@ sourcesRouter.patch('/:id', async (c) => {
   const nodeNameFilter =
     input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
   const filterChanged = nodeNameFilter !== current.nodeNameFilter
+  const nodeTag = input.nodeTag === undefined ? current.nodeTag : input.nodeTag || null
+  const nodeTagChanged = nodeTag !== current.nodeTag
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
   const nextRefreshAt =
     current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
@@ -130,6 +136,7 @@ sourcesRouter.patch('/:id', async (c) => {
       enabled: input.enabled,
       refreshIntervalHours: input.refreshIntervalHours,
       nodeNameFilter,
+      nodeTag,
       pendingUrl: input.url,
       status: input.url ? 'idle' : undefined,
       error: input.url ? null : undefined,
@@ -138,7 +145,7 @@ sourcesRouter.patch('/:id', async (c) => {
     })
     .where(eq(sources.id, current.id))
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
-  if (typeof input.enabled === 'boolean' && input.enabled !== current.enabled)
+  if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagChanged)
     await enqueueAffectedProfiles(c.env, current.id)
   if (input.url || filterChanged) {
     try {

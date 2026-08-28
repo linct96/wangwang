@@ -24,6 +24,7 @@ function seedState(): LocalState {
       kind: 'url',
       url: 'https://example.com/sub?***',
       nodeNameFilter: null,
+      nodeTag: null,
       pendingUrl: false,
       profileCount: 1,
       refreshIntervalHours: 6,
@@ -45,6 +46,7 @@ function seedState(): LocalState {
       kind: 'manual',
       url: null,
       nodeNameFilter: null,
+      nodeTag: null,
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: 0,
@@ -66,6 +68,7 @@ function seedState(): LocalState {
       kind: 'url',
       url: 'https://example.com/test-sub?***',
       nodeNameFilter: null,
+      nodeTag: null,
       pendingUrl: false,
       profileCount: 0,
       refreshIntervalHours: 6,
@@ -201,6 +204,7 @@ export function readState() {
           kind: 'manual' as const,
           url: null,
           nodeNameFilter: null,
+          nodeTag: null,
           pendingUrl: false,
           profileCount: 0,
           refreshIntervalHours: 0,
@@ -245,14 +249,27 @@ export function displayUrl(value: string) {
   return `${url.origin}${url.pathname}${url.search ? '?***' : ''}`
 }
 
+export function localNodeTags(state: LocalState, node: LocalNode) {
+  return [
+    ...new Set([
+      ...node.tags,
+      ...state.sources
+        .filter((source) => node.sourceIds.includes(source.id))
+        .map((source) => source.nodeTag)
+        .filter((tag): tag is string => Boolean(tag)),
+    ]),
+  ]
+}
+
 export function recompileProfiles(state: LocalState, sourceIds: string[], profileIds?: string[]) {
   const enabledSources = new Set(state.sources.filter((source) => source.enabled).map((source) => source.id))
   for (const profile of state.profiles.filter((item) =>
     profileIds ? profileIds.includes(item.id) : item.sourceIds.some((id) => sourceIds.includes(id)),
   )) {
-    const available = state.nodes.filter((node) =>
-      node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)),
-    )
+    const available = state.nodes
+      .filter((node) => node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)))
+      .map((node) => ({ ...node, tags: localNodeTags(state, node) }))
+      .filter((node) => !profile.tags.length || profile.tags.some((tag) => node.tags.includes(tag)))
     if (available.length) {
       profile.revision += 1
       profile.compiledAt = now()
