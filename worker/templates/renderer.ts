@@ -36,9 +36,7 @@ export function renderMihomoConfig({
         : filter.length === 0 || filter.some((pattern) => pattern.test(name)),
     )
     group.proxies = group.proxies.flatMap((item) =>
-      item === CUSTOM_SOURCE_NODES_PLACEHOLDER || item === '__WANGWANG_ALL_PROXIES__'
-        ? selected.map(({ name }) => name)
-        : [item],
+      item === CUSTOM_SOURCE_NODES_PLACEHOLDER ? selected.map(({ name }) => name) : [item],
     )
   }
   validateRenderedConfig(config)
