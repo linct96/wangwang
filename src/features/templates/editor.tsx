@@ -27,7 +27,7 @@ const blankTemplate = `proxy-groups:
   - name: 节点选择
     type: select
     proxies:
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
 rules:
   - MATCH,节点选择

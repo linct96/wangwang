@@ -135,7 +135,7 @@ export function GroupCard({
                   )}
                 </div>
               )}
-              <div className="template-node-ref-title">包含节点与子组 ({group.members.length})</div>
+              <div className="template-node-ref-title">包含节点与子组</div>
               {group.members.length === 0 ? (
                 <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (

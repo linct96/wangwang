@@ -1,6 +1,11 @@
 import { stringify } from 'yaml'
 import type { ProxyConfig } from '../db'
-import { ALL_PROXIES_PLACEHOLDER, MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
+import {
+  CUSTOM_SOURCE_NODES_PLACEHOLDER,
+  MAX_TEMPLATE_BYTES,
+  parseTemplateYaml,
+  validateRenderedConfig,
+} from './validator'
 
 export function renderMihomoConfig({
   nodes,
@@ -31,7 +36,9 @@ export function renderMihomoConfig({
         : filter.length === 0 || filter.some((pattern) => pattern.test(name)),
     )
     group.proxies = group.proxies.flatMap((item) =>
-      item === ALL_PROXIES_PLACEHOLDER ? selected.map(({ name }) => name) : [item],
+      item === CUSTOM_SOURCE_NODES_PLACEHOLDER || item === '__WANGWANG_ALL_PROXIES__'
+        ? selected.map(({ name }) => name)
+        : [item],
     )
   }
   validateRenderedConfig(config)

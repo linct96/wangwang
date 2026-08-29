@@ -1,6 +1,6 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { GripVertical, Network, Plus, Radio, X, Zap } from 'lucide-react'
+import { GripVertical, Plus, X } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
@@ -58,12 +58,12 @@ export function MemberEditor({
   onChange: (form: StructuredProxyGroupDraft) => void
 }) {
   const choices = [
-    { value: 'all', label: '全部节点', icon: Zap, iconColor: 'text-amber-500' },
-    { value: 'DIRECT', label: 'DIRECT', icon: Radio, iconColor: 'text-emerald-500' },
-    { value: 'REJECT', label: 'REJECT', icon: Radio, iconColor: 'text-emerald-500' },
+    { value: 'all', label: '自定义节点源' },
+    { value: 'DIRECT', label: 'DIRECT' },
+    { value: 'REJECT', label: 'REJECT' },
     ...groups
       .filter((group) => group.id !== form.id && group.name)
-      .map((group) => ({ value: `group:${group.id}`, label: group.name, icon: Network, iconColor: 'text-blue-500' })),
+      .map((group) => ({ value: `group:${group.id}`, label: group.name })),
   ]
 
   function addMember(val: string) {
@@ -88,7 +88,7 @@ export function MemberEditor({
 
   return (
     <Field>
-      <FieldLabel>包含节点与子组 (proxies，{form.members.length})</FieldLabel>
+      <FieldLabel>包含节点与子组 (proxies)</FieldLabel>
       <DragDropProvider
         onDragEnd={(event) => {
           const { source, target } = event.operation
@@ -133,10 +133,8 @@ export function MemberEditor({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-56 overflow-y-auto">
               {choices.map((choice) => {
-                const Icon = choice.icon
                 return (
                   <DropdownMenuItem key={choice.value} onClick={() => addMember(choice.value)}>
-                    <Icon className={cn('size-3.5', choice.iconColor)} />
                     <span>{choice.label}</span>
                   </DropdownMenuItem>
                 )

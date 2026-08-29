@@ -209,28 +209,28 @@ export function TemplatesPage() {
                 <Zap className="size-4.5" />
               </div>
               <div className="template-source-text">
-                <strong>从精简模板创建</strong>
+                <strong>从精简规则模板创建</strong>
                 <p>基础分流与快速节点选择，轻量高效</p>
               </div>
             </button>
 
-            <button type="button" className="template-source-card" onClick={() => create('builtin:full')}>
-              <div className="template-source-icon text-blue-500 bg-blue-500/10">
-                <FileCode2 className="size-4.5" />
-              </div>
-              <div className="template-source-text">
-                <strong>从全规则模板创建</strong>
-                <p>包含广告拦截、流媒体、AI服务等全量分流</p>
-              </div>
-            </button>
-
             <button type="button" className="template-source-card" onClick={() => create('builtin:standard')}>
-              <div className="template-source-icon text-sky-500 bg-sky-500/10">
+              <div className="template-source-icon text-blue-500 bg-blue-500/10">
                 <FileCode2 className="size-4.5" />
               </div>
               <div className="template-source-text">
                 <strong>从标准规则模板创建</strong>
                 <p>常用分流规则，国内直连、国外代理</p>
+              </div>
+            </button>
+
+            <button type="button" className="template-source-card" onClick={() => create('builtin:full')}>
+              <div className="template-source-icon text-sky-500 bg-sky-500/10">
+                <FileCode2 className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>从完全规则模板创建</strong>
+                <p>包含广告拦截、流媒体、AI服务等全量分流</p>
               </div>
             </button>
 
