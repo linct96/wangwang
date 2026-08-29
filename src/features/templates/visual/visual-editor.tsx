@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
-import { findPotentialRawReferences } from './yaml-adapter'
+import { findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
@@ -81,6 +81,19 @@ export function VisualTemplateEditor({
       groups: draft.groups.filter((item) => item.id !== group.id),
     })
   }
+
+  function updateGroups(groups: ProxyGroupDraft[]) {
+    const changed = groups.find((next) => {
+      const previous = draft.groups.find((item) => item.id === next.id)
+      return previous && previous.name !== next.name
+    })
+    if (!changed) {
+      update({ ...draft, groups })
+      return
+    }
+    const previous = draft.groups.find((item) => item.id === changed.id)!
+    update(renameRawReferences({ ...draft, groups }, previous.name, changed.name))
+  }
   return (
     <div className="template-visual-editor">
       {issues.length > 0 && (
@@ -111,7 +124,7 @@ export function VisualTemplateEditor({
             </Button>
           </GroupDialog>
         </header>
-        <GroupList groups={draft.groups} onChange={(groups) => update({ ...draft, groups })} onDelete={removeGroup} />
+        <GroupList groups={draft.groups} onChange={updateGroups} onDelete={removeGroup} />
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
