@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronDown,
   Edit2,
   Eye,
@@ -12,6 +10,7 @@ import {
   Plus,
   Radio,
   Server,
+  Smile,
   Trash2,
   X,
   Zap,
@@ -30,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
@@ -88,13 +88,6 @@ export function VisualTemplateEditor({
       return
     }
     update({ ...draft, groups: draft.groups.map((item) => (item.id === group.id ? next : item)) })
-  }
-  function moveRule(index: number, offset: number) {
-    const target = index + offset
-    if (target < 0 || target >= draft.rules.length) return
-    const rules = [...draft.rules]
-    ;[rules[index], rules[target]] = [rules[target], rules[index]]
-    update({ ...draft, rules })
   }
   return (
     <div className="template-visual-editor">
@@ -165,22 +158,35 @@ export function VisualTemplateEditor({
             </Button>
           </RuleDialog>
         </header>
-        <div className="template-visual-list">
-          {draft.rules.map((rule, index) => (
-            <RuleCard
-              key={rule.id}
-              rule={rule}
-              groups={draft.groups}
-              first={index === 0}
-              last={index === draft.rules.length - 1}
-              onMove={(offset) => moveRule(index, offset)}
-              onSave={(next) =>
-                update({ ...draft, rules: draft.rules.map((item) => (item.id === rule.id ? next : item)) })
-              }
-              onDelete={() => update({ ...draft, rules: draft.rules.filter((item) => item.id !== rule.id) })}
-            />
-          ))}
-        </div>
+        <DragDropProvider
+          onDragEnd={(event) => {
+            const { source, target } = event.operation
+            if (!source || !target || source.id === target.id) return
+            const fromIndex = draft.rules.findIndex((r) => r.id === source.id)
+            const toIndex = draft.rules.findIndex((r) => r.id === target.id)
+            if (fromIndex !== -1 && toIndex !== -1) {
+              const nextRules = [...draft.rules]
+              const [moved] = nextRules.splice(fromIndex, 1)
+              nextRules.splice(toIndex, 0, moved)
+              update({ ...draft, rules: nextRules })
+            }
+          }}
+        >
+          <div className="template-visual-list">
+            {draft.rules.map((rule, index) => (
+              <RuleCard
+                key={rule.id}
+                index={index}
+                rule={rule}
+                groups={draft.groups}
+                onSave={(next) =>
+                  update({ ...draft, rules: draft.rules.map((item) => (item.id === rule.id ? next : item)) })
+                }
+                onDelete={() => update({ ...draft, rules: draft.rules.filter((item) => item.id !== rule.id) })}
+              />
+            ))}
+          </div>
+        </DragDropProvider>
       </section>
     </div>
   )
@@ -238,7 +244,7 @@ function GroupCard({
           <Badge variant="secondary">{group.type}</Badge>
           {!expanded && (
             <span className="template-group-summary">
-              {group.kind === 'structured' ? `${group.members.length} 个节点引用` : 'RAW 配置'}
+              {group.kind === 'structured' ? `${group.members.length} 个节点/子组` : 'RAW 配置'}
             </span>
           )}
         </div>
@@ -318,10 +324,10 @@ function GroupCard({
                 </div>
               )}
               <div className="template-node-ref-title">
-                节点引用列表 ({group.members.length})
+                包含节点与子组 ({group.members.length})
               </div>
               {group.members.length === 0 ? (
-                <div className="template-node-ref-empty">暂无节点引用</div>
+                <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (
                 <div className="template-node-ref-tags">
                   {group.members.map((member, index) => {
@@ -360,6 +366,142 @@ function GroupCard({
   )
 }
 
+const EMOJI_PREFIX_REGEX = /^(\p{Extended_Pictographic}|\p{Regional_Indicator}{2})\s*/u
+
+function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'common' | 'region' | 'service'>('common')
+
+  const iconGroups = {
+    common: [
+      { icon: '🚀', label: '节点选择' },
+      { icon: '⚡', label: '自动选择' },
+      { icon: '🎯', label: '全球直连' },
+      { icon: '🛑', label: '全球拦截' },
+      { icon: '🐟', label: '漏网之鱼' },
+      { icon: '🛡️', label: '广告拦截' },
+      { icon: '🪜', label: '科学上网' },
+      { icon: '🌐', label: '国际流量' },
+      { icon: '⚖️', label: '负载均衡' },
+      { icon: '♻️', label: '故障转移' },
+      { icon: '🔄', label: '自动回退' },
+      { icon: '🔒', label: '隐私保护' },
+      { icon: '🧭', label: '导航' },
+      { icon: '⚓', label: '锚点' },
+      { icon: '🚩', label: '标旗' },
+      { icon: '🔮', label: '特殊' },
+      { icon: '🕹️', label: '控制' },
+      { icon: '⚙️', label: '设置' },
+    ],
+    region: [
+      { icon: '🇭🇰', label: '香港' },
+      { icon: '🇹🇼', label: '台湾' },
+      { icon: '🇯🇵', label: '日本' },
+      { icon: '🇸🇬', label: '新加坡' },
+      { icon: '🇺🇸', label: '美国' },
+      { icon: '🇰🇷', label: '韩国' },
+      { icon: '🇬🇧', label: '英国' },
+      { icon: '🇩🇪', label: '德国' },
+      { icon: '🇫🇷', label: '法国' },
+      { icon: '🇨🇦', label: '加拿大' },
+      { icon: '🇦🇺', label: '澳大利亚' },
+      { icon: '🇷🇺', label: '俄罗斯' },
+      { icon: '🇮🇳', label: '印度' },
+      { icon: '🇲🇾', label: '马来西亚' },
+      { icon: '🇹🇭', label: '泰国' },
+      { icon: '🇻🇳', label: '越南' },
+      { icon: '🇵🇭', label: '菲律宾' },
+      { icon: '🇧🇷', label: '巴西' },
+      { icon: '🇦🇷', label: '阿根廷' },
+      { icon: '🇹🇷', label: '土耳其' },
+      { icon: '🇨🇳', label: '中国' },
+      { icon: '🇪🇺', label: '欧洲' },
+      { icon: '🌏', label: '亚太' },
+      { icon: '🌎', label: '美洲' },
+    ],
+    service: [
+      { icon: '🤖', label: 'AI/ChatGPT' },
+      { icon: '🧠', label: 'OpenAI' },
+      { icon: '📺', label: '奈飞/Netflix' },
+      { icon: '🎬', label: '流媒体' },
+      { icon: '🍿', label: '影视' },
+      { icon: '🎵', label: '音乐/Spotify' },
+      { icon: '✈️', label: '电报/Telegram' },
+      { icon: '💬', label: '聊天' },
+      { icon: '🎮', label: '游戏/Steam' },
+      { icon: '🍎', label: 'Apple' },
+      { icon: 'Ⓜ️', label: 'Microsoft' },
+      { icon: '🔍', label: 'Google' },
+      { icon: '🐱', label: 'GitHub' },
+      { icon: '📦', label: 'Docker' },
+      { icon: '📧', label: '邮件' },
+      { icon: '📰', label: '新闻' },
+      { icon: '🛒', label: '购物' },
+      { icon: '💳', label: '支付' },
+    ],
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="default"
+          className="px-2.5 shrink-0 text-muted-foreground hover:text-foreground"
+          title="选择图标"
+        >
+          <Smile className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-2.5">
+        <div className="flex items-center justify-between gap-1 mb-2 border-b border-border pb-1.5">
+          <span className="text-xs font-medium text-foreground">常用图标</span>
+          <div className="flex gap-1">
+            {(
+              [
+                ['common', '常用'],
+                ['region', '地区'],
+                ['service', '服务'],
+              ] as const
+            ).map(([key, name]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={cn(
+                  'px-1.5 py-0.5 text-xs rounded transition-colors',
+                  tab === key
+                    ? 'bg-muted font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-6 gap-1 max-h-48 overflow-y-auto p-0.5">
+          {iconGroups[tab].map((item) => (
+            <button
+              key={item.icon + item.label}
+              type="button"
+              title={item.label}
+              className="flex items-center justify-center size-8 rounded text-base hover:bg-accent transition-colors active:scale-95 cursor-pointer"
+              onClick={() => {
+                onSelect(item.icon)
+                setOpen(false)
+              }}
+            >
+              {item.icon}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function GroupDialog({
   groups,
   value,
@@ -379,9 +521,23 @@ function GroupDialog({
     setOpen(true)
   }
 
+  function handleSelectIcon(icon: string) {
+    if (EMOJI_PREFIX_REGEX.test(form.name)) {
+      setForm({ ...form, name: form.name.replace(EMOJI_PREFIX_REGEX, `${icon} `) })
+    } else if (form.name.trim()) {
+      setForm({ ...form, name: `${icon} ${form.name.trim()}` })
+    } else {
+      setForm({ ...form, name: `${icon} ` })
+    }
+  }
+
   function save() {
     if (!form.name.trim() || groups.some((group) => group.id !== value?.id && group.name === form.name.trim())) {
       toast.error('代理组名称不能为空且不能重复')
+      return
+    }
+    if (form.type !== 'select' && !form.url?.trim()) {
+      toast.error('测试 URL 不能为空')
       return
     }
     onSave({ ...form, name: form.name.trim() })
@@ -407,11 +563,15 @@ function GroupDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
                 <FieldLabel>名称</FieldLabel>
-                <Input
-                  value={form.name}
-                  placeholder="代理组名称"
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                />
+                <div className="flex gap-1.5 items-center">
+                  <ProxyGroupIconPicker onSelect={handleSelectIcon} />
+                  <Input
+                    value={form.name}
+                    placeholder="例如：🚀 节点选择"
+                    className="flex-1 min-w-0"
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  />
+                </div>
               </Field>
               <Field>
                 <FieldLabel>类型</FieldLabel>
@@ -543,8 +703,8 @@ function MemberTag({
       <button
         type="button"
         className="template-tag-remove"
-        title="删除成员"
-        aria-label="删除成员"
+        title="移除"
+        aria-label="移除"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation()
@@ -587,7 +747,7 @@ function MemberEditor({
 
   return (
     <Field>
-      <FieldLabel>成员列表 ({form.members.length})</FieldLabel>
+      <FieldLabel>包含节点与子组 ({form.members.length})</FieldLabel>
       <DragDropProvider
         onDragEnd={(event) => {
           const { source, target } = event.operation
@@ -631,7 +791,7 @@ function MemberEditor({
                 onPointerDown={(e) => e.stopPropagation()}
               >
                 <Plus className="template-add-tag-icon" />
-                <span>添加成员</span>
+                <span>添加节点/组</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-56 overflow-y-auto">
@@ -655,48 +815,73 @@ function MemberEditor({
 function RuleCard({
   rule,
   groups,
-  first,
-  last,
-  onMove,
+  index,
   onSave,
   onDelete,
 }: {
   rule: RuleDraft
   groups: ProxyGroupDraft[]
-  first: boolean
-  last: boolean
-  onMove: (offset: number) => void
+  index: number
   onSave: (rule: RuleDraft) => void
   onDelete: () => void
 }) {
-  const label =
-    rule.kind === 'raw'
-      ? `高级规则：${rule.raw}`
-      : `${rule.type}${rule.value ? ` ${rule.value}` : ''} → ${targetLabel(rule.target, groups)}${rule.noResolve ? ' · no-resolve' : ''}`
+  const { ref, handleRef, isDragging } = useSortable({
+    id: rule.id,
+    index,
+  })
+
   return (
-    <article className="template-rule-row">
-      <div className="template-rule-move">
-        <IconButton label="上移" disabled={first} onClick={() => onMove(-1)}>
-          <ArrowUp />
-        </IconButton>
-        <IconButton label="下移" disabled={last} onClick={() => onMove(1)}>
-          <ArrowDown />
-        </IconButton>
+    <article ref={ref} className={cn('template-rule-row', isDragging && 'template-card-dragging')}>
+      <div
+        ref={handleRef}
+        className="template-drag-handle"
+        title="拖拽排序"
+        aria-label="拖拽排序"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="template-drag-icon" />
       </div>
-      <span>{label}</span>
+
+      <div className="template-rule-content">
+        {rule.kind === 'raw' ? (
+          <div className="template-rule-raw">
+            <Badge variant="outline" className="text-[11px] font-mono shrink-0">RAW</Badge>
+            <code className="template-rule-raw-text">{rule.raw}</code>
+          </div>
+        ) : (
+          <div className="template-rule-info">
+            <Badge variant="outline" className="text-[11px] font-mono shrink-0">
+              {rule.type}
+            </Badge>
+            {rule.value && (
+              <span className="template-rule-value" title={rule.value}>
+                {rule.value}
+              </span>
+            )}
+            <span className="template-rule-arrow">➔</span>
+            <span className="template-rule-target" title={targetLabel(rule.target, groups)}>
+              {targetLabel(rule.target, groups)}
+            </span>
+            {rule.noResolve && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                no-resolve
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="template-rule-actions">
         {rule.kind === 'structured' && (
           <RuleDialog groups={groups} value={rule} rules={[]} onSave={onSave}>
-            <Button type="button" variant="outline" size="sm">
-              <Edit2 data-icon="inline-start" />
-              编辑
-            </Button>
+            <IconButton label="编辑规则">
+              <Edit2 className="size-3.5" />
+            </IconButton>
           </RuleDialog>
         )}
-        <Button type="button" variant="ghost" size="sm" onClick={onDelete}>
-          <Trash2 data-icon="inline-start" />
-          删除
-        </Button>
+        <IconButton label="删除规则" onClick={onDelete}>
+          <Trash2 className="size-3.5" />
+        </IconButton>
       </div>
     </article>
   )
