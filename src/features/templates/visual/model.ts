@@ -18,6 +18,7 @@ export type StructuredProxyGroupDraft = {
   name: string
   type: SupportedProxyGroupType
   members: ProxyGroupMemberDraft[]
+  defaultSelected?: string
   url?: string
   interval?: number
   tolerance?: number

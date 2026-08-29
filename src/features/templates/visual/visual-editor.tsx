@@ -40,6 +40,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
 import { findPotentialRawReferences, newGroup, newRule } from './yaml-adapter'
@@ -324,13 +325,6 @@ export function VisualTemplateEditor({
             ))}
           </div>
         </DragDropProvider>
-        {!ruleQuery && (
-          <QuickAddRule
-            groups={draft.groups}
-            rules={draft.rules}
-            onAdd={addRule}
-          />
-        )}
       </section>
     </div>
   )
@@ -727,7 +721,11 @@ function GroupDialog({
                       type,
                       ...(type === 'select'
                         ? { url: undefined, interval: undefined, tolerance: undefined, strategy: undefined }
-                        : { url: form.url || 'https://www.gstatic.com/generate_204', interval: form.interval || 300 }),
+                        : {
+                            url: form.url || 'https://www.gstatic.com/generate_204',
+                            interval: form.interval || 300,
+                            defaultSelected: undefined,
+                          }),
                       ...(type !== 'url-test' ? { tolerance: undefined } : { tolerance: form.tolerance ?? 50 }),
                       ...(type !== 'load-balance'
                         ? { strategy: undefined }
@@ -747,6 +745,38 @@ function GroupDialog({
                 </Select>
               </Field>
             </div>
+            {form.type === 'select' && (
+              <Field>
+                <FieldLabel>默认节点</FieldLabel>
+                <Select
+                  value={form.defaultSelected || '__first__'}
+                  onValueChange={(defaultSelected) =>
+                    setForm({
+                      ...form,
+                      defaultSelected: defaultSelected === '__first__' ? undefined : defaultSelected,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__first__">第一个节点（默认）</SelectItem>
+                    <SelectGroup>
+                      {form.members.map((member, index) => {
+                        if (member.kind === 'all-proxies') return null
+                        const label = memberLabel(member, groups)
+                        return (
+                          <SelectItem key={`${label}-${index}`} value={label}>
+                            {label}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
             {form.type !== 'select' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field className={cn(form.type === 'url-test' || form.type === 'load-balance' ? 'sm:col-span-2' : '')}>
@@ -1314,10 +1344,19 @@ function RuleCard({
                 </Select>
               </div>
 
-              {rule.noResolve && (
-                <Badge variant="secondary" className="text-[11px] font-mono px-2 py-0.5 shrink-0">
-                  no-resolve
-                </Badge>
+              {rule.kind === 'structured' && ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(rule.type) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={rule.noResolve}
+                        onCheckedChange={(checked) => onSave({ ...rule, noResolve: checked === true })}
+                      />
+                      <span>no-resolve</span>
+                    </label>
+                  </TooltipTrigger>
+                  <TooltipContent>不解析域名，避免额外 DNS 查询</TooltipContent>
+                </Tooltip>
               )}
             </div>
           </div>
@@ -1345,123 +1384,11 @@ function RuleCard({
       )}
 
       <div className="template-rule-actions">
-        {rule.kind === 'structured' && (
-          <RuleDialog groups={groups} value={rule} rules={[]} onSave={onSave}>
-            <IconButton label="高级编辑">
-              <Edit2 className="size-3.5" />
-            </IconButton>
-          </RuleDialog>
-        )}
         <IconButton label="删除规则" onClick={onDelete}>
-          <Trash2 className="size-3.5" />
+          <Trash2 />
         </IconButton>
       </div>
     </article>
-  )
-}
-
-function QuickAddRule({
-  groups,
-  rules,
-  onAdd,
-}: {
-  groups: ProxyGroupDraft[]
-  rules: RuleDraft[]
-  onAdd: (rule: StructuredRuleDraft) => void
-}) {
-  const [type, setType] = useState<SupportedRuleType>('DOMAIN-SUFFIX')
-  const [value, setValue] = useState('')
-  const defaultTarget = groups[0]?.id ? `group:${groups[0].id}` : 'DIRECT'
-  const [targetValue, setTargetValue] = useState(defaultTarget)
-
-  function handleAdd() {
-    if (type !== 'MATCH' && !value.trim()) {
-      toast.error('请输入匹配值')
-      return
-    }
-    if (type === 'MATCH' && rules.some((r) => r.kind === 'structured' && r.type === 'MATCH')) {
-      toast.error('已有 MATCH 兜底规则')
-      return
-    }
-    const target: RuleTargetDraft = targetValue.startsWith('group:')
-      ? { kind: 'group', groupId: targetValue.slice(6) }
-      : targetValue === 'DIRECT' || targetValue === 'REJECT'
-        ? { kind: 'builtin', value: targetValue }
-        : { kind: 'raw', value: targetValue.slice(4) }
-
-    onAdd({
-      kind: 'structured',
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
-      type,
-      value: type === 'MATCH' ? undefined : value.trim(),
-      target,
-      noResolve: false,
-    })
-    setValue('')
-  }
-
-  return (
-    <div className="template-quick-add-rule">
-      <div className="template-rule-grid">
-        <div className="template-rule-col-matcher">
-          <RuleMatcher
-            mode="form"
-            type={type}
-            value={value}
-            onChange={(t, v) => {
-              setType(t)
-              setValue(v || '')
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleAdd()
-              }
-            }}
-            placeholder="输入域名/关键词/IP (如 google.com)，回车添加"
-          />
-        </div>
-
-        <div className="template-rule-col-arrow">
-          <ArrowRight className="template-rule-arrow" />
-        </div>
-
-        <div className="template-rule-col-target">
-          <Select value={targetValue} onValueChange={setTargetValue}>
-            <SelectTrigger
-              className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
-              title="选择目标策略"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {groups
-                  .filter((group) => group.name)
-                  .map((group) => (
-                    <SelectItem key={group.id} value={`group:${group.id}`}>
-                      {group.name}
-                    </SelectItem>
-                  ))}
-                <SelectItem value="DIRECT">DIRECT</SelectItem>
-                <SelectItem value="REJECT">REJECT</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        className="template-quick-add-btn"
-        onClick={handleAdd}
-      >
-        <Plus className="size-3.5 mr-1" />
-        添加
-      </Button>
-    </div>
   )
 }
 
