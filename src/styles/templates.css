@@ -40,7 +40,9 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.03);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
   .template-card:hover {
     border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
@@ -211,7 +213,10 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--card);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease;
   }
   .template-visual-card:hover {
     border-color: var(--border-hover, color-mix(in oklch, var(--border) 80%, var(--foreground)));
@@ -240,7 +245,9 @@
     touch-action: none;
     user-select: none;
     flex-shrink: 0;
-    transition: color 0.15s ease, background-color 0.15s ease;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
   }
   .template-drag-handle:hover {
     color: var(--foreground);
@@ -442,7 +449,10 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--card);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease;
   }
   .template-rule-row:hover {
     border-color: var(--border-hover, color-mix(in oklch, var(--border) 80%, var(--foreground)));
@@ -559,7 +569,9 @@
     color: var(--muted-foreground);
     cursor: pointer;
     padding: 0;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
   .template-inline-hover-btn:hover {
     background: color-mix(in oklch, var(--foreground) 10%, transparent);
@@ -593,7 +605,10 @@
     cursor: pointer;
     flex-shrink: 0;
     padding: 0;
-    transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
   }
   .template-inline-btn-save {
     color: #10b981;
@@ -744,7 +759,11 @@
     box-sizing: border-box;
     user-select: none;
     box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.04);
-    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease;
   }
   .template-member-tag:hover {
     border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
@@ -807,7 +826,9 @@
     cursor: pointer;
     padding: 0;
     margin-left: 2px;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
   .template-tag-remove:hover {
     background: color-mix(in oklch, var(--destructive) 12%, transparent);
@@ -836,7 +857,10 @@
     box-sizing: border-box;
     cursor: pointer;
     user-select: none;
-    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background-color 0.15s ease;
   }
   .template-member-add-trigger:hover {
     border-color: var(--primary);
@@ -980,7 +1004,9 @@
   background: var(--card);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .template-source-card:hover {
