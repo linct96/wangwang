@@ -995,7 +995,7 @@ function InlineValueEdit({
   if (editing) {
     return (
       <div className="template-inline-edit-box" onClick={(e) => e.stopPropagation()}>
-        <input
+        <Input
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -1011,10 +1011,8 @@ function InlineValueEdit({
               setEditing(false)
             }
           }}
-          className={cn(
-            'template-inline-edit-input',
-            !isValid && 'template-inline-edit-invalid',
-          )}
+          aria-invalid={!isValid}
+          className="pr-14 font-mono bg-background"
         />
         <div className="template-inline-actions">
           <button
@@ -1095,16 +1093,23 @@ function RuleMatcher({
           value={type}
           onValueChange={(t: SupportedRuleType) => onChange?.(t, t === 'MATCH' ? undefined : value)}
         >
-          <SelectTrigger className="w-[140px] font-mono">
+          <SelectTrigger className="w-[155px] font-mono">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {ruleTypes.map((t) => (
-                <SelectItem key={t} value={t} className="font-mono">
-                  {t}
-                </SelectItem>
-              ))}
+              {ruleTypes.map((t) => {
+                const meta = getRuleTypeMeta(t)
+                const Icon = meta.Icon
+                return (
+                  <SelectItem key={t} value={t} className="font-mono">
+                    <span className="flex items-center gap-1.5">
+                      <Icon className={cn('size-3.5 shrink-0', meta.colorClass)} />
+                      <span>{t}</span>
+                    </span>
+                  </SelectItem>
+                )
+              })}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -1145,11 +1150,18 @@ function RuleMatcher({
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            {ruleTypes.map((t) => (
-              <SelectItem key={t} value={t} className="font-mono">
-                {t}
-              </SelectItem>
-            ))}
+            {ruleTypes.map((t) => {
+              const meta = getRuleTypeMeta(t)
+              const Icon = meta.Icon
+              return (
+                <SelectItem key={t} value={t} className="font-mono">
+                  <span className="flex items-center gap-1.5">
+                    <Icon className={cn('size-3.5 shrink-0', meta.colorClass)} />
+                    <span>{t}</span>
+                  </span>
+                </SelectItem>
+              )
+            })}
           </SelectGroup>
         </SelectContent>
       </Select>
