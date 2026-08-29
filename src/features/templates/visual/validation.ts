@@ -61,6 +61,26 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         message: `代理组“${group.name}”的 tolerance 必须是非负整数`,
         groupId: group.id,
       })
+    for (const [field, value] of [
+      ['filter', group.filter],
+      ['exclude-filter', group.excludeFilter],
+    ] as const) {
+      if (!value?.trim()) continue
+      try {
+        value
+          .split('`')
+          .map((pattern) => pattern.trim())
+          .filter(Boolean)
+          .forEach((pattern) => (pattern.startsWith('(?i)') ? new RegExp(pattern.slice(4), 'i') : new RegExp(pattern)))
+      } catch {
+        add({
+          level: 'error',
+          code: `GROUP_${field.toUpperCase().replace('-', '_')}_INVALID`,
+          message: `代理组“${group.name}”的 ${field} 包含无效正则表达式`,
+          groupId: group.id,
+        })
+      }
+    }
     if (Object.keys(group.extras).length)
       add({
         level: 'warning',

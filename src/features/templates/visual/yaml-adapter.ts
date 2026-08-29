@@ -25,7 +25,18 @@ const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'IP-CIDR6',
 ])
 const NO_RESOLVE_TYPES = new Set<SupportedRuleType>(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
-const GROUP_KEYS = new Set(['name', 'type', 'proxies', 'url', 'interval', 'tolerance', 'strategy', 'default-selected'])
+const GROUP_KEYS = new Set([
+  'name',
+  'type',
+  'proxies',
+  'url',
+  'interval',
+  'tolerance',
+  'strategy',
+  'default-selected',
+  'filter',
+  'exclude-filter',
+])
 
 export type VisualParseResult = {
   draft: VisualTemplateDraft
@@ -111,6 +122,8 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
       type: type as SupportedProxyGroupType,
       members: ((value.proxies as string[] | undefined) || []).map((member) => parseMember(member, groupIds)),
       defaultSelected: typeof value['default-selected'] === 'string' ? value['default-selected'] : undefined,
+      filter: typeof value.filter === 'string' ? value.filter : undefined,
+      excludeFilter: typeof value['exclude-filter'] === 'string' ? value['exclude-filter'] : undefined,
       extras,
     }
     if (type !== 'select') {
@@ -163,6 +176,8 @@ function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
     proxies: group.members.map((member) => memberValue(member, names)),
   }
   if (group.type === 'select' && group.defaultSelected) value['default-selected'] = group.defaultSelected
+  if (group.filter) value.filter = group.filter
+  if (group.excludeFilter) value['exclude-filter'] = group.excludeFilter
   if (group.type !== 'select') {
     value.url = group.url
     value.interval = group.interval
