@@ -51,8 +51,6 @@ CREATE TABLE `profiles` (
   `enabled` integer DEFAULT 1 NOT NULL,
   `protocols` text DEFAULT '[]' NOT NULL,
   `tags` text DEFAULT '[]' NOT NULL,
-  `rule_modules` text DEFAULT '["ads","private","cn"]' NOT NULL,
-  `dns_mode` text DEFAULT 'fake-ip' NOT NULL,
   `token_version` integer DEFAULT 1 NOT NULL,
   `revision` integer DEFAULT 0 NOT NULL,
   `compiled_yaml` text,

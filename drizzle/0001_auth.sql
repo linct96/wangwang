@@ -1,6 +1,5 @@
 CREATE TABLE `admin_account` (
   `id` integer PRIMARY KEY CHECK (`id` = 1),
-  `email` text NOT NULL,
   `password_hash` text NOT NULL,
   `password_salt` text NOT NULL,
   `created_at` integer NOT NULL

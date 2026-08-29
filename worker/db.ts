@@ -76,7 +76,6 @@ export const sourceNodes = sqliteTable(
   (table) => [primaryKey({ columns: [table.sourceId, table.nodeId] }), index('source_nodes_node_idx').on(table.nodeId)],
 )
 
-export type RuleModule = 'ads' | 'private' | 'cn'
 export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
 
 export const templates = sqliteTable('templates', {
@@ -97,13 +96,6 @@ export const profiles = sqliteTable(
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
-    ruleModules: text('rule_modules', { mode: 'json' })
-      .$type<RuleModule[]>()
-      .notNull()
-      .default(['ads', 'private', 'cn']),
-    dnsMode: text('dns_mode', { enum: ['fake-ip', 'redir-host'] })
-      .notNull()
-      .default('fake-ip'),
     templateId: text('template_id').$type<TemplateId>().notNull().default('builtin:minimal'),
     tokenVersion: integer('token_version').notNull().default(1),
     revision: integer('revision').notNull().default(0),
