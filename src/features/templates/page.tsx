@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Copy, FileCode2, FilePlus2, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
+import { Copy, Eye, FileCode2, FilePlus2, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
@@ -65,7 +65,9 @@ export function TemplatesPage() {
       <div className="page-heading">
         <div>
           <h1>模板库</h1>
-          <p>{custom.length}/20 个自定义模板</p>
+          <p>
+            {custom.length}/20 个自定义模板 · {builtin.length} 个内置模板
+          </p>
         </div>
         <Button onClick={() => setChoosingSource(true)}>
           <Plus data-icon="inline-start" />
@@ -76,32 +78,44 @@ export function TemplatesPage() {
       {templates && (
         <>
           <section className="template-section">
-            <h2>内置模板</h2>
+            <div className="template-section-header">
+              <h2>内置模板</h2>
+              <span className="template-section-count">{builtin.length}</span>
+            </div>
             <div className="template-grid">
               {builtin.map((template) => (
                 <article className="template-card" key={template.id}>
-                  <header>
-                    <div>
-                      <h3>{template.name}</h3>
-                      <p>{template.description}</p>
-                    </div>
-                    <Badge variant="secondary">内置</Badge>
-                  </header>
-                  <footer>
-                    <Button type="button" variant="ghost" onClick={() => setPreviewing(template)}>
-                      预览
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setUsing(template.id)}>
-                      <Zap data-icon="inline-start" />
+                  <div className="template-card-body">
+                    <header className="template-card-header">
+                      <div className="template-card-icon template-icon-builtin">
+                        <Zap className="size-4" />
+                      </div>
+                      <div className="template-card-info">
+                        <div className="template-card-title-row">
+                          <h3 title={template.name}>{template.name}</h3>
+                          <Badge variant="secondary">内置</Badge>
+                        </div>
+                        <p>{template.description || '开箱即用的预设规则模板'}</p>
+                      </div>
+                    </header>
+                  </div>
+                  <footer className="template-card-footer">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                      <Zap className="size-3.5" />
                       使用
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
+                      <Eye className="size-3.5" />
+                      预览
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       disabled={busy === template.id}
                       onClick={() => void duplicate(template)}
                     >
-                      <Copy data-icon="inline-start" />
+                      <Copy className="size-3.5" />
                       复制
                     </Button>
                   </footer>
@@ -109,47 +123,67 @@ export function TemplatesPage() {
               ))}
             </div>
           </section>
+
           <section className="template-section">
-            <h2>我的模板</h2>
+            <div className="template-section-header">
+              <h2>我的模板</h2>
+              <span className="template-section-count">{custom.length}</span>
+            </div>
             {custom.length ? (
               <div className="template-grid">
                 {custom.map((template) => (
                   <article className="template-card" key={template.id}>
-                    <header>
-                      <div>
-                        <h3>{template.name}</h3>
-                        <p>{template.description || '自定义 Mihomo YAML'}</p>
+                    <div className="template-card-body">
+                      <header className="template-card-header">
+                        <div className="template-card-icon template-icon-custom">
+                          <FileCode2 className="size-4" />
+                        </div>
+                        <div className="template-card-info">
+                          <div className="template-card-title-row">
+                            <h3 title={template.name}>{template.name}</h3>
+                            <Badge variant="outline">自定义</Badge>
+                          </div>
+                          <p>{template.description || '自定义 Mihomo YAML 规则模板'}</p>
+                        </div>
+                      </header>
+                      <div className="template-card-meta">
+                        <span className="template-meta-pill">v{template.revision}</span>
+                        <span className="template-meta-pill">{template.profileCount} 个配置使用</span>
+                        <time className="template-meta-time">{formatDate(template.updatedAt)}</time>
                       </div>
-                      <Badge variant="outline">自定义</Badge>
-                    </header>
-                    <div className="template-meta">
-                      <span>revision {template.revision}</span>
-                      <span>{template.profileCount} 个配置使用</span>
-                      <time>{formatDate(template.updatedAt)}</time>
                     </div>
-                    <footer>
-                      <Button type="button" variant="ghost" onClick={() => setPreviewing(template)}>
+                    <footer className="template-card-footer">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void navigate({ to: '/templates/$id/edit', params: { id: template.id } })}
+                      >
+                        <Pencil className="size-3.5" />
+                        编辑
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
+                        <Eye className="size-3.5" />
                         预览
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => void navigate({ to: '/templates/$id/edit', params: { id: template.id } })}
-                      >
-                        <Pencil data-icon="inline-start" />
-                        编辑
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
+                        size="sm"
                         disabled={busy === template.id}
                         onClick={() => void duplicate(template)}
                       >
-                        <Copy data-icon="inline-start" />
+                        <Copy className="size-3.5" />
                         复制
                       </Button>
-                      <Button type="button" variant="ghost" onClick={() => setDeleting(template)}>
-                        <Trash2 data-icon="inline-start" />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleting(template)}
+                      >
+                        <Trash2 className="size-3.5" />
                         删除
                       </Button>
                     </footer>
@@ -160,6 +194,7 @@ export function TemplatesPage() {
               <div className="empty-block">
                 <FileCode2 />
                 <strong>暂无自定义模板</strong>
+                <p className="text-xs text-muted-foreground mt-1">从内置模板复制或直接新建一个自定义规则模板</p>
               </div>
             )}
           </section>
@@ -167,24 +202,63 @@ export function TemplatesPage() {
       )}
 
       {choosingSource && (
-        <AppDialog title="新建模板" onClose={() => setChoosingSource(false)}>
-          <div className="template-source-list">
-            <Button variant="outline" onClick={() => create('builtin:minimal')}>
-              <Zap data-icon="inline-start" />
-              从精简模板创建
-            </Button>
-            <Button variant="outline" onClick={() => create('builtin:full')}>
-              <FileCode2 data-icon="inline-start" />
-              从全规则模板创建
-            </Button>
-            <Button variant="outline" onClick={() => create('import')}>
-              <Upload data-icon="inline-start" />
-              导入 YAML
-            </Button>
-            <Button variant="outline" onClick={() => create('blank')}>
-              <FilePlus2 data-icon="inline-start" />
-              空白模板
-            </Button>
+        <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
+          <div className="template-source-grid">
+            <button
+              type="button"
+              className="template-source-card"
+              onClick={() => create('builtin:minimal')}
+            >
+              <div className="template-source-icon text-amber-500 bg-amber-500/10">
+                <Zap className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>从精简模板创建</strong>
+                <p>基础分流与快速节点选择，轻量高效</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="template-source-card"
+              onClick={() => create('builtin:full')}
+            >
+              <div className="template-source-icon text-blue-500 bg-blue-500/10">
+                <FileCode2 className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>从全规则模板创建</strong>
+                <p>包含广告拦截、流媒体、AI服务等全量分流</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="template-source-card"
+              onClick={() => create('import')}
+            >
+              <div className="template-source-icon text-emerald-500 bg-emerald-500/10">
+                <Upload className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>导入 YAML</strong>
+                <p>导入现有的 Clash / Mihomo 配置文件</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="template-source-card"
+              onClick={() => create('blank')}
+            >
+              <div className="template-source-icon text-purple-500 bg-purple-500/10">
+                <FilePlus2 className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>空白模板</strong>
+                <p>从零开始完全自由配置节点组与规则</p>
+              </div>
+            </button>
           </div>
         </AppDialog>
       )}
