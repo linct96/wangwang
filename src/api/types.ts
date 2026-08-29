@@ -90,7 +90,7 @@ export type NodeImportResult = {
   warnings: string[]
 }
 
-export type TemplateId = 'builtin:minimal' | 'builtin:full' | `custom:${string}`
+export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
 
 export type TemplateSummary = {
   id: TemplateId

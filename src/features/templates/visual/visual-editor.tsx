@@ -208,7 +208,7 @@ export function VisualTemplateEditor({
         <header className="template-visual-toolbar">
           <h2>代理组</h2>
           <GroupDialog groups={draft.groups} onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}>
-            <Button type="button" size="sm">
+            <Button type="button" size="default">
               <Plus data-icon="inline-start" />
               添加代理组
             </Button>
@@ -289,7 +289,7 @@ export function VisualTemplateEditor({
               rules={draft.rules}
               onSave={(rule) => addRule(rule)}
             >
-              <Button type="button" size="sm">
+              <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
                 添加规则
               </Button>
@@ -1116,7 +1116,7 @@ function RuleMatcher({
 
         {type === 'MATCH' ? (
           <div className="template-matcher-match-placeholder">
-            全流量兜底匹配 (MATCH)
+            兜底规则（MATCH）
           </div>
         ) : (
           <Input
@@ -1168,7 +1168,7 @@ function RuleMatcher({
 
       {type === 'MATCH' ? (
         <span className="template-rule-match-desc text-xs">
-          兜底全流量匹配 (Catch-all)
+          兜底规则（MATCH）
         </span>
       ) : (
         <InlineValueEdit

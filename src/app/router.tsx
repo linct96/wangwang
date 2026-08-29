@@ -24,8 +24,8 @@ const newTemplateRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/templates/new',
   validateSearch: (search: Record<string, unknown>) => ({
-    source: ['builtin:minimal', 'builtin:full', 'import', 'blank'].includes(String(search.source))
-      ? (String(search.source) as 'builtin:minimal' | 'builtin:full' | 'import' | 'blank')
+    source: ['builtin:minimal', 'builtin:standard', 'builtin:full', 'import', 'blank'].includes(String(search.source))
+      ? (String(search.source) as 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank')
       : ('blank' as const),
   }),
   component: NewTemplatePage,
