@@ -99,23 +99,6 @@ body {
   min-width: 320px;
   min-height: 100vh;
 }
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  letter-spacing: 0;
-}
-button {
-  cursor: pointer;
-}
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-a {
-  color: inherit;
-}
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
