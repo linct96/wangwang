@@ -92,7 +92,16 @@ export function VisualTemplateEditor({
       return
     }
     const previous = draft.groups.find((item) => item.id === changed.id)!
-    update(renameRawReferences({ ...draft, groups }, previous.name, changed.name))
+    const renamed = renameRawReferences({ ...draft, groups }, previous.name, changed.name)
+    // default-selected 保存的是名称，不是运行时 groupId；组重命名时必须同步它。
+    update({
+      ...renamed,
+      groups: renamed.groups.map((group) =>
+        group.kind === 'structured' && group.defaultSelected === previous.name
+          ? { ...group, defaultSelected: changed.name }
+          : group,
+      ),
+    })
   }
   return (
     <div className="template-visual-editor">
