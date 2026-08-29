@@ -161,109 +161,16 @@ function seedState(): LocalState {
 
 export function readState() {
   try {
-    const value = JSON.parse(localStorage.getItem(storageKey) || 'null') as {
-      version?: number
-      sources?: Source[]
-      nodes?: LocalNode[]
-      profiles?: Profile[]
-      templates?: TemplateDetail[]
-      jobs?: Job[]
-    } | null
+    const value = JSON.parse(localStorage.getItem(storageKey) || 'null') as Partial<LocalState> | null
     if (
-      (value?.version === 1 || value?.version === 2 || value?.version === 3) &&
+      value?.version === 3 &&
       Array.isArray(value.sources) &&
       Array.isArray(value.nodes) &&
       Array.isArray(value.profiles) &&
+      Array.isArray(value.templates) &&
       Array.isArray(value.jobs)
     ) {
-      if (value.version === 2 || value.version === 3) {
-        const migrated = {
-          ...value,
-          version: 3,
-          templates: value.templates || [],
-          sources: value.sources.map((source) => ({
-            ...source,
-            userAgent: source.userAgent || 'mihomo',
-          })),
-          profiles: value.profiles.map((profile) => ({
-            ...profile,
-            templateId: profile.templateId || 'builtin:minimal',
-          })),
-        } as LocalState
-        if (value.version === 2) writeState(migrated)
-        return migrated
-      }
-      const manualIds = new Set(value.sources.filter((source) => source.kind === 'manual').map((source) => source.id))
-      const rewriteSources = (ids: string[]) => [
-        ...new Set(ids.map((id) => (manualIds.has(id) ? 'system-manual' : id))),
-      ]
-      const nodes = (value.nodes as LocalNode[]).map((node) => {
-        const sourceIds = rewriteSources(node.sourceIds)
-        const hasManual = sourceIds.includes('system-manual')
-        const hasSubscription = sourceIds.some((id) => id !== 'system-manual')
-        const nodeManagement: NodeItem['management'] =
-          hasManual && hasSubscription ? 'mixed' : hasManual ? 'manual' : 'subscription'
-        return {
-          ...node,
-          sourceIds,
-          management: nodeManagement,
-          canEditConnection: nodeManagement === 'manual',
-          canDelete: hasManual,
-          connection: hasManual
-            ? {
-                name: node.name,
-                protocol: node.protocol as ManualNodeConnection['protocol'],
-                server: node.server,
-                port: node.port,
-                network: 'tcp' as const,
-                security: 'none' as const,
-              }
-            : undefined,
-        }
-      })
-      const sources = [
-        ...value.sources
-          .filter((source) => source.kind === 'url')
-          .map((source) => ({
-            ...source,
-            userAgent: source.userAgent || 'mihomo',
-            pendingUrl: false,
-            profileCount: 0,
-          })),
-        {
-          id: 'system-manual',
-          name: '手动节点',
-          kind: 'manual' as const,
-          url: null,
-          nodeNameFilter: null,
-          nodeTag: null,
-          userAgent: 'mihomo',
-          pendingUrl: false,
-          profileCount: 0,
-          refreshIntervalHours: 0,
-          enabled: true,
-          status: 'ready' as const,
-          warning: null,
-          error: null,
-          nodeCount: nodes.filter((node) => node.sourceIds.includes('system-manual')).length,
-          uploadBytes: null,
-          downloadBytes: null,
-          totalBytes: null,
-          expireAt: null,
-          infoRefreshedAt: null,
-          lastRefreshedAt: null,
-        },
-      ]
-      const profiles = value.profiles.map((profile) => ({
-        ...profile,
-        templateId: 'builtin:minimal' as const,
-        sourceIds: rewriteSources(profile.sourceIds),
-      }))
-      for (const source of sources)
-        source.profileCount = profiles.filter((profile) => profile.sourceIds.includes(source.id)).length
-      const migrated: LocalState = { version: 3, sources, nodes, profiles, templates: [], jobs: value.jobs }
-      writeState(migrated)
-      return migrated
+      return value as LocalState
     }
   } catch {
     // 损坏的本地数据直接重置为演示数据。
