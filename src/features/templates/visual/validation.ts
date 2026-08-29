@@ -32,7 +32,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       add({
         level: 'error',
         code: 'GROUP_MEMBERS_EMPTY',
-        message: `代理组“${group.name}”至少需要一个成员`,
+        message: `代理组“${group.name}”至少需要包含一个节点或子组`,
         groupId: group.id,
       })
     if (URL_TYPES.has(group.type)) {
