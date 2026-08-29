@@ -11,7 +11,7 @@ import type { Profile, TemplateDetail } from '@/api/types'
 import { IconButton, PageState } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { formatYaml, yamlEditorExtensions } from '@/lib/yaml-editor'
 import { TemplatePreview } from './template-preview'
@@ -213,26 +213,31 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
       {!loading && (
         <form className="template-editor-layout" onSubmit={save}>
           <section className="template-editor-main">
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="template-name">名称</FieldLabel>
-                <Input
-                  id="template-name"
-                  value={name}
-                  maxLength={60}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="template-description">描述</FieldLabel>
-                <Input
-                  id="template-description"
-                  value={description}
-                  maxLength={200}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-              </Field>
-            </FieldGroup>
+            <div className="template-info-card">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel htmlFor="template-name">名称</FieldLabel>
+                  <Input
+                    id="template-name"
+                    value={name}
+                    maxLength={60}
+                    placeholder="例如：我的分流规则模板"
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="template-description">描述（可选）</FieldLabel>
+                  <Input
+                    id="template-description"
+                    value={description}
+                    maxLength={200}
+                    placeholder="简述该模板适用的场景或节点策略"
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </Field>
+              </div>
+            </div>
+
             <div className="template-yaml-heading">
               <div className="template-content-heading">
                 <FieldLabel id="template-yaml-label">模板内容</FieldLabel>
@@ -246,10 +251,10 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   onChange={(next) => (next === 'visual' ? enterVisualMode() : setMode('yaml'))}
                 />
               </div>
-              <div>
+              <div className="flex items-center gap-1.5">
                 {source === 'import' && (
-                  <Button type="button" variant="ghost" size="sm" asChild>
-                    <label>
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <label className="cursor-pointer">
                       <Upload data-icon="inline-start" />
                       导入文件
                       <input className="sr-only" type="file" accept=".yaml,.yml,text/yaml" onChange={importFile} />
@@ -269,6 +274,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                 )}
               </div>
             </div>
+
             {mode === 'yaml' ? (
               <CodeMirror
                 className="template-code-editor"
@@ -287,15 +293,17 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                 <VisualTemplateEditor draft={visualDraft} issues={visualIssues} onChange={updateVisualDraft} />
               )
             )}
+
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
             <footer className="template-editor-actions">
               <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => void validate()}>
                 <Check data-icon="inline-start" />
-                校验
+                校验语法
               </Button>
               <Button
                 disabled={
