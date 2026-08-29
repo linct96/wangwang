@@ -77,7 +77,7 @@ export const sourceNodes = sqliteTable(
 )
 
 export type RuleModule = 'ads' | 'private' | 'cn'
-export type TemplateId = 'builtin:minimal' | 'builtin:full' | `custom:${string}`
+export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
 
 export const templates = sqliteTable('templates', {
   id: text('id').primaryKey(),

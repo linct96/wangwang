@@ -1,5 +1,6 @@
 import { count, desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { profiles, templates } from '../db'
 import type { ProxyConfig, TemplateId } from '../db'
@@ -85,7 +86,7 @@ templatesRouter.post('/', async (c) => {
   }
   const now = new Date()
   const template = {
-    id: `custom:${crypto.randomUUID()}`,
+    id: nanoid(12),
     name: input.name,
     description: input.description || null,
     yaml: input.yaml,
@@ -130,7 +131,7 @@ templatesRouter.post('/:id/duplicate', async (c) => {
   if (!source) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const now = new Date()
   const template = {
-    id: `custom:${crypto.randomUUID()}`,
+    id: nanoid(12),
     name: `${source.name} 副本`,
     description: source.description || null,
     yaml: source.yaml,

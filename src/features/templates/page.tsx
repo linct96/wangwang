@@ -55,7 +55,7 @@ export function TemplatesPage() {
     }
   }
 
-  function create(source: 'builtin:minimal' | 'builtin:full' | 'import' | 'blank') {
+  function create(source: 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank') {
     setChoosingSource(false)
     void navigate({ to: '/templates/new', search: { source } })
   }
@@ -229,6 +229,20 @@ export function TemplatesPage() {
               <div className="template-source-text">
                 <strong>从全规则模板创建</strong>
                 <p>包含广告拦截、流媒体、AI服务等全量分流</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              className="template-source-card"
+              onClick={() => create('builtin:standard')}
+            >
+              <div className="template-source-icon text-sky-500 bg-sky-500/10">
+                <FileCode2 className="size-4.5" />
+              </div>
+              <div className="template-source-text">
+                <strong>从标准规则模板创建</strong>
+                <p>常用分流规则，国内直连、国外代理</p>
               </div>
             </button>
 

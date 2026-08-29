@@ -26,21 +26,21 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://1.1.1.1/dns-query
 proxy-groups:
-  - name: 节点选择
+  - name: 🚀 节点选择
     type: select
     proxies:
-      - 自动选择
-      - 故障转移
+      - ⚡ 自动选择
+      - ♻️ 故障转移
       - __WANGWANG_ALL_PROXIES__
       - DIRECT
-  - name: 自动选择
+  - name: ⚡ 自动选择
     type: url-test
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
     proxies:
       - __WANGWANG_ALL_PROXIES__
-  - name: 故障转移
+  - name: ♻️ 故障转移
     type: fallback
     url: https://www.gstatic.com/generate_204
     interval: 300
@@ -52,8 +52,13 @@ rules:
   - GEOIP,private,DIRECT,no-resolve
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT,no-resolve
-  - MATCH,节点选择
+  - MATCH,🚀 节点选择
 `
+
+const standardYaml = minimalYaml.replace(
+  '  - MATCH,🚀 节点选择\n',
+  '  - GEOSITE,geolocation-!cn,🚀 节点选择\n  - MATCH,🚀 节点选择\n',
+)
 
 const fullYaml = `mixed-port: 7890
 allow-lan: false
@@ -73,62 +78,62 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://1.1.1.1/dns-query
 proxy-groups:
-  - name: 节点选择
+  - name: 🚀 节点选择
     type: select
     proxies:
-      - 自动选择
-      - 故障转移
+      - ⚡ 自动选择
+      - ♻️ 故障转移
       - __WANGWANG_ALL_PROXIES__
       - DIRECT
-  - name: 自动选择
+  - name: ⚡ 自动选择
     type: url-test
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
     proxies:
       - __WANGWANG_ALL_PROXIES__
-  - name: 故障转移
+  - name: ♻️ 故障转移
     type: fallback
     url: https://www.gstatic.com/generate_204
     interval: 300
     proxies:
       - __WANGWANG_ALL_PROXIES__
-  - name: AI 服务
+  - name: 🤖 AI 服务
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
-  - name: Google
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+  - name: 🔍 Google
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
-  - name: Telegram
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+  - name: ✈️ Telegram
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
-  - name: 流媒体
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+  - name: 🎬 流媒体
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
-  - name: Microsoft
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+  - name: Ⓜ️ Microsoft
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
-  - name: Apple
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+  - name: 🍎 Apple
     type: select
-    proxies: [节点选择, 自动选择, DIRECT]
+    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
 rules:
   - GEOSITE,category-ads-all,REJECT
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
-  - GEOSITE,category-ai-!cn,AI 服务
-  - GEOSITE,google,Google
-  - GEOSITE,telegram,Telegram
-  - GEOIP,telegram,Telegram,no-resolve
-  - GEOSITE,youtube,流媒体
-  - GEOSITE,netflix,流媒体
-  - GEOSITE,spotify,流媒体
-  - GEOSITE,tiktok,流媒体
-  - GEOSITE,microsoft,Microsoft
-  - GEOSITE,apple,Apple
+  - GEOSITE,category-ai-!cn,🤖 AI 服务
+  - GEOSITE,google,🔍 Google
+  - GEOSITE,telegram,✈️ Telegram
+  - GEOIP,telegram,✈️ Telegram,no-resolve
+  - GEOSITE,youtube,🎬 流媒体
+  - GEOSITE,netflix,🎬 流媒体
+  - GEOSITE,spotify,🎬 流媒体
+  - GEOSITE,tiktok,🎬 流媒体
+  - GEOSITE,microsoft,Ⓜ️ Microsoft
+  - GEOSITE,apple,🍎 Apple
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT,no-resolve
-  - GEOSITE,geolocation-!cn,节点选择
-  - MATCH,节点选择
+  - GEOSITE,geolocation-!cn,🚀 节点选择
+  - MATCH,🚀 节点选择
 `
 
 export const builtinTemplates: BuiltinTemplate[] = [
@@ -137,14 +142,21 @@ export const builtinTemplates: BuiltinTemplate[] = [
     name: '精简模板',
     description: '基础 DNS / 国内直连 / 自动选择',
     yaml: minimalYaml,
-    revision: 1,
+    revision: 2,
   },
   {
     id: 'builtin:full',
     name: '全规则模板',
     description: '完整规则 / AI / Google / Telegram 等',
     yaml: fullYaml,
-    revision: 1,
+    revision: 2,
+  },
+  {
+    id: 'builtin:standard',
+    name: '标准规则模板',
+    description: '常用分流规则 / 国内直连 / 国外代理',
+    yaml: standardYaml,
+    revision: 2,
   },
 ]
 

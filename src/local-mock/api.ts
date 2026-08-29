@@ -1,4 +1,5 @@
 import type { ManualNodeConnection, Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
+import { nanoid } from 'nanoid'
 import {
   editableProxyYaml,
   parseEditableProxyYaml,
@@ -499,7 +500,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     parseTemplateYaml(yaml)
     const createdAt = now()
     const template: TemplateDetail = {
-      id: `custom:${crypto.randomUUID()}`,
+      id: nanoid(12),
       name: String(body.name || '').trim(),
       description: String(body.description || '').trim() || null,
       yaml,
@@ -556,7 +557,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     const createdAt = now()
     const template: TemplateDetail = {
       ...source,
-      id: `custom:${crypto.randomUUID()}`,
+      id: nanoid(12),
       name: `${source.name} 副本`,
       revision: 1,
       kind: 'custom',

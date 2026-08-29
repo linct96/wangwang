@@ -22,7 +22,7 @@ import { VisualTemplateEditor } from './visual/visual-editor'
 import type { VisualTemplateDraft } from './visual/model'
 import '@/styles/templates.css'
 
-type NewTemplateSource = 'builtin:minimal' | 'builtin:full' | 'import' | 'blank'
+type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
 const blankTemplate = `proxy-groups:
   - name: 节点选择
     type: select
