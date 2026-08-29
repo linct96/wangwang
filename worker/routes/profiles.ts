@@ -8,9 +8,11 @@ import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
 
-const templateIdSchema = z.string().refine((value) => /^(builtin:(minimal|standard|full)|custom:[0-9a-f-]{36}|[A-Za-z0-9_-]{12})$/.test(value), {
-  message: '订阅模板 ID 无效',
-})
+const templateIdSchema = z
+  .string()
+  .refine((value) => /^(builtin:(minimal|standard|full)|custom:[0-9a-f-]{36}|[A-Za-z0-9_-]{12})$/.test(value), {
+    message: '订阅模板 ID 无效',
+  })
 
 export const profileSchema = z.object({
   name: z.string().trim().min(1).max(60),

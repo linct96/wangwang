@@ -119,7 +119,8 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
     }
     if (type === 'url-test') group.tolerance = typeof value.tolerance === 'number' ? value.tolerance : 0
     if (type === 'load-balance')
-      group.strategy = typeof value.strategy === 'string' ? (value.strategy as SupportedLoadBalanceStrategy) : 'consistent-hashing'
+      group.strategy =
+        typeof value.strategy === 'string' ? (value.strategy as SupportedLoadBalanceStrategy) : 'consistent-hashing'
     return group
   })
   const rules = ((root.rules as string[] | undefined) || []).map((rule, index) => parseRule(rule, index, groupIds))

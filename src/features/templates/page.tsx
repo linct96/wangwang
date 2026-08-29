@@ -204,11 +204,7 @@ export function TemplatesPage() {
       {choosingSource && (
         <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
           <div className="template-source-grid">
-            <button
-              type="button"
-              className="template-source-card"
-              onClick={() => create('builtin:minimal')}
-            >
+            <button type="button" className="template-source-card" onClick={() => create('builtin:minimal')}>
               <div className="template-source-icon text-amber-500 bg-amber-500/10">
                 <Zap className="size-4.5" />
               </div>
@@ -218,11 +214,7 @@ export function TemplatesPage() {
               </div>
             </button>
 
-            <button
-              type="button"
-              className="template-source-card"
-              onClick={() => create('builtin:full')}
-            >
+            <button type="button" className="template-source-card" onClick={() => create('builtin:full')}>
               <div className="template-source-icon text-blue-500 bg-blue-500/10">
                 <FileCode2 className="size-4.5" />
               </div>
@@ -232,11 +224,7 @@ export function TemplatesPage() {
               </div>
             </button>
 
-            <button
-              type="button"
-              className="template-source-card"
-              onClick={() => create('builtin:standard')}
-            >
+            <button type="button" className="template-source-card" onClick={() => create('builtin:standard')}>
               <div className="template-source-icon text-sky-500 bg-sky-500/10">
                 <FileCode2 className="size-4.5" />
               </div>
@@ -246,11 +234,7 @@ export function TemplatesPage() {
               </div>
             </button>
 
-            <button
-              type="button"
-              className="template-source-card"
-              onClick={() => create('import')}
-            >
+            <button type="button" className="template-source-card" onClick={() => create('import')}>
               <div className="template-source-icon text-emerald-500 bg-emerald-500/10">
                 <Upload className="size-4.5" />
               </div>
@@ -260,11 +244,7 @@ export function TemplatesPage() {
               </div>
             </button>
 
-            <button
-              type="button"
-              className="template-source-card"
-              onClick={() => create('blank')}
-            >
+            <button type="button" className="template-source-card" onClick={() => create('blank')}>
               <div className="template-source-icon text-purple-500 bg-purple-500/10">
                 <FilePlus2 className="size-4.5" />
               </div>

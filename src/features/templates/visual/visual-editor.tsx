@@ -30,12 +30,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -143,7 +138,14 @@ export function VisualTemplateEditor({
   }
 
   function moveRule(fromIndex: number, toIndex: number) {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= draft.rules.length || toIndex >= draft.rules.length) return
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= draft.rules.length ||
+      toIndex >= draft.rules.length
+    )
+      return
     const nextRules = [...draft.rules]
     const [moved] = nextRules.splice(fromIndex, 1)
     nextRules.splice(toIndex, 0, moved)
@@ -285,11 +287,7 @@ export function VisualTemplateEditor({
                 )}
               </div>
             )}
-            <RuleDialog
-              groups={draft.groups}
-              rules={draft.rules}
-              onSave={(rule) => addRule(rule)}
-            >
+            <RuleDialog groups={draft.groups} rules={draft.rules} onSave={(rule) => addRule(rule)}>
               <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
                 添加规则
@@ -351,10 +349,7 @@ function GroupCard({
   })
 
   return (
-    <article
-      ref={ref}
-      className={cn('template-visual-card', isDragging && 'template-card-dragging')}
-    >
+    <article ref={ref} className={cn('template-visual-card', isDragging && 'template-card-dragging')}>
       <header className="template-visual-card-header">
         <div
           ref={handleRef}
@@ -461,9 +456,7 @@ function GroupCard({
                   )}
                 </div>
               )}
-              <div className="template-node-ref-title">
-                包含节点与子组 ({group.members.length})
-              </div>
+              <div className="template-node-ref-title">包含节点与子组 ({group.members.length})</div>
               {group.members.length === 0 ? (
                 <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (
@@ -472,18 +465,10 @@ function GroupCard({
                     const label = memberLabel(member, groups)
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'all-proxies' && (
-                          <Zap className="template-node-ref-icon text-amber-500" />
-                        )}
-                        {member.kind === 'group' && (
-                          <Network className="template-node-ref-icon text-blue-500" />
-                        )}
-                        {member.kind === 'builtin' && (
-                          <Radio className="template-node-ref-icon text-emerald-500" />
-                        )}
-                        {member.kind === 'raw' && (
-                          <Server className="template-node-ref-icon text-purple-500" />
-                        )}
+                        {member.kind === 'all-proxies' && <Zap className="template-node-ref-icon text-amber-500" />}
+                        {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
+                        {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
+                        {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}
                         <span className="template-node-tag-name">{label}</span>
                       </div>
                     )
@@ -609,9 +594,7 @@ function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) => void }
                 onClick={() => setTab(key)}
                 className={cn(
                   'px-1.5 py-0.5 text-xs rounded transition-colors',
-                  tab === key
-                    ? 'bg-muted font-medium text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
+                  tab === key ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {name}
@@ -812,9 +795,7 @@ function GroupDialog({
                     <FieldLabel>均衡策略 (strategy)</FieldLabel>
                     <Select
                       value={form.strategy || 'consistent-hashing'}
-                      onValueChange={(strategy: SupportedLoadBalanceStrategy) =>
-                        setForm({ ...form, strategy })
-                      }
+                      onValueChange={(strategy: SupportedLoadBalanceStrategy) => setForm({ ...form, strategy })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -959,11 +940,7 @@ function MemberEditor({
           ))}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="template-member-add-trigger"
-                onPointerDown={(e) => e.stopPropagation()}
-              >
+              <button type="button" className="template-member-add-trigger" onPointerDown={(e) => e.stopPropagation()}>
                 <Plus className="template-add-tag-icon" />
                 <span>添加节点/组</span>
               </button>
@@ -1074,10 +1051,7 @@ function InlineValueEdit({
   }
 
   return (
-    <div
-      className="template-inline-value-display"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="template-inline-value-display" onClick={(e) => e.stopPropagation()}>
       <code
         className="template-rule-value select-text cursor-text"
         title={value ? `匹配值：${value}` : '未填写匹配值'}
@@ -1119,10 +1093,7 @@ function RuleMatcher({
   if (mode === 'form') {
     return (
       <div className="template-matcher-form-group" onClick={(e) => e.stopPropagation()}>
-        <Select
-          value={type}
-          onValueChange={(t: SupportedRuleType) => onChange?.(t, t === 'MATCH' ? undefined : value)}
-        >
+        <Select value={type} onValueChange={(t: SupportedRuleType) => onChange?.(t, t === 'MATCH' ? undefined : value)}>
           <SelectTrigger className="w-[155px] font-mono">
             <SelectValue />
           </SelectTrigger>
@@ -1145,9 +1116,7 @@ function RuleMatcher({
         </Select>
 
         {type === 'MATCH' ? (
-          <div className="template-matcher-match-placeholder">
-            兜底规则（MATCH）
-          </div>
+          <div className="template-matcher-match-placeholder">兜底规则（MATCH）</div>
         ) : (
           <Input
             value={value || ''}
@@ -1162,20 +1131,14 @@ function RuleMatcher({
   }
 
   return (
-    <div
-      className="template-matcher-inline-container"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="template-matcher-inline-container" onClick={(e) => e.stopPropagation()}>
       <Select
         value={type}
         onValueChange={(nextType: SupportedRuleType) => {
           onSave?.(nextType, nextType === 'MATCH' ? undefined : value)
         }}
       >
-        <SelectTrigger
-          className="w-auto font-mono cursor-pointer select-none"
-          title="点击切换规则类型"
-        >
+        <SelectTrigger className="w-auto font-mono cursor-pointer select-none" title="点击切换规则类型">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1197,9 +1160,7 @@ function RuleMatcher({
       </Select>
 
       {type === 'MATCH' ? (
-        <span className="template-rule-match-desc text-xs">
-          兜底规则（MATCH）
-        </span>
+        <span className="template-rule-match-desc text-xs">兜底规则（MATCH）</span>
       ) : (
         <InlineValueEdit
           value={value || ''}
@@ -1282,7 +1243,10 @@ function RuleCard({
       <div className="template-rule-content">
         {rule.kind === 'raw' ? (
           <div className="template-rule-raw">
-            <Badge variant="outline" className={cn('text-xs font-mono shrink-0 gap-1.5 px-2.5 py-0.5', typeMeta.badgeClass)}>
+            <Badge
+              variant="outline"
+              className={cn('text-xs font-mono shrink-0 gap-1.5 px-2.5 py-0.5', typeMeta.badgeClass)}
+            >
               <TypeIcon className="size-3.5" />
               RAW
             </Badge>
@@ -1335,9 +1299,7 @@ function RuleCard({
                       <SelectItem value="DIRECT">DIRECT</SelectItem>
                       <SelectItem value="REJECT">REJECT</SelectItem>
                       {rule.target.kind === 'raw' && (
-                        <SelectItem value={`raw:${rule.target.value}`}>
-                          {rule.target.value}（高级）
-                        </SelectItem>
+                        <SelectItem value={`raw:${rule.target.value}`}>{rule.target.value}（高级）</SelectItem>
                       )}
                     </SelectGroup>
                   </SelectContent>
@@ -1364,20 +1326,14 @@ function RuleCard({
       </div>
 
       {isAfterMatch && (
-        <div
-          className="template-rule-warning-pill shrink-0"
-          title="该规则位于 MATCH 兜底规则之后，永远不会生效"
-        >
+        <div className="template-rule-warning-pill shrink-0" title="该规则位于 MATCH 兜底规则之后，永远不会生效">
           <AlertCircle className="size-3.5" />
           <span>不可达</span>
         </div>
       )}
 
       {hasIssues && (
-        <div
-          className="template-rule-error-pill shrink-0"
-          title={issues?.map((i) => i.message).join('\n')}
-        >
+        <div className="template-rule-error-pill shrink-0" title={issues?.map((i) => i.message).join('\n')}>
           <AlertCircle className="size-3.5" />
           <span>配置异常</span>
         </div>
