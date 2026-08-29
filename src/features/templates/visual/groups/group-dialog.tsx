@@ -308,7 +308,7 @@ export function GroupDialog({
               </Field>
             </div>
             <p className="text-xs text-muted-foreground">
-              仅对“全部节点”或来源引入的节点生效，支持用反引号分隔多个正则。
+              仅对“自定义节点源”或来源引入的节点生效，支持用反引号分隔多个正则。
             </p>
             {form.type !== 'select' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

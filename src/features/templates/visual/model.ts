@@ -79,7 +79,7 @@ export type VisualIssue = {
 }
 
 export function memberLabel(member: ProxyGroupMemberDraft, groups: ProxyGroupDraft[] = []): string {
-  if (member.kind === 'all-proxies') return '全部节点'
+  if (member.kind === 'all-proxies') return '自定义节点源'
   if (member.kind === 'builtin' || member.kind === 'raw') return member.value
   return groups.find((group) => group.id === member.groupId)?.name || '未知代理组'
 }

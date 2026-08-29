@@ -31,7 +31,7 @@ proxy-groups:
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
   - name: ⚡ 自动选择
     type: url-test
@@ -39,13 +39,13 @@ proxy-groups:
     interval: 300
     tolerance: 50
     proxies:
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ♻️ 故障转移
     type: fallback
     url: https://www.gstatic.com/generate_204
     interval: 300
     proxies:
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
 rules:
   - GEOSITE,category-ads-all,REJECT
   - GEOSITE,private,DIRECT
@@ -83,7 +83,7 @@ proxy-groups:
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
   - name: ⚡ 自动选择
     type: url-test
@@ -91,13 +91,13 @@ proxy-groups:
     interval: 300
     tolerance: 50
     proxies:
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ♻️ 故障转移
     type: fallback
     url: https://www.gstatic.com/generate_204
     interval: 300
     proxies:
-      - __WANGWANG_ALL_PROXIES__
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🤖 AI 服务
     type: select
     proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
@@ -139,16 +139,9 @@ rules:
 export const builtinTemplates: BuiltinTemplate[] = [
   {
     id: 'builtin:minimal',
-    name: '精简模板',
+    name: '精简规则模板',
     description: '基础 DNS / 国内直连 / 自动选择',
     yaml: minimalYaml,
-    revision: 2,
-  },
-  {
-    id: 'builtin:full',
-    name: '全规则模板',
-    description: '完整规则 / AI / Google / Telegram 等',
-    yaml: fullYaml,
     revision: 2,
   },
   {
@@ -156,6 +149,13 @@ export const builtinTemplates: BuiltinTemplate[] = [
     name: '标准规则模板',
     description: '常用分流规则 / 国内直连 / 国外代理',
     yaml: standardYaml,
+    revision: 2,
+  },
+  {
+    id: 'builtin:full',
+    name: '完全规则模板',
+    description: '完整规则 / AI / Google / Telegram 等',
+    yaml: fullYaml,
     revision: 2,
   },
 ]

@@ -13,7 +13,8 @@ import type {
   VisualTemplateDraft,
 } from './model'
 
-const ALL_PROXIES = '__WANGWANG_ALL_PROXIES__'
+const CUSTOM_SOURCE_NODES = '__WANGWANG_CUSTOM_SOURCE_NODES__'
+const LEGACY_ALL_PROXIES = '__WANGWANG_ALL_PROXIES__'
 const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback', 'load-balance'])
 const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'DOMAIN',
@@ -59,7 +60,7 @@ function parseTarget(value: string, groupIds: Map<string, string>): RuleTargetDr
 }
 
 function parseMember(value: string, groupIds: Map<string, string>): ProxyGroupMemberDraft {
-  if (value === ALL_PROXIES) return { kind: 'all-proxies' }
+  if (value === CUSTOM_SOURCE_NODES || value === LEGACY_ALL_PROXIES) return { kind: 'all-proxies' }
   if (value === 'DIRECT' || value === 'REJECT') return { kind: 'builtin', value }
   const groupId = groupIds.get(value)
   return groupId ? { kind: 'group', groupId } : { kind: 'raw', value }
@@ -163,7 +164,7 @@ function targetValue(target: RuleTargetDraft, names: Map<string, string>) {
 }
 
 function memberValue(member: ProxyGroupMemberDraft, names: Map<string, string>) {
-  if (member.kind === 'all-proxies') return ALL_PROXIES
+  if (member.kind === 'all-proxies') return CUSTOM_SOURCE_NODES
   return member.kind === 'group' ? names.get(member.groupId) || '' : member.value
 }
 

@@ -1,6 +1,7 @@
 import { parse } from 'yaml'
 
-export const ALL_PROXIES_PLACEHOLDER = '__WANGWANG_ALL_PROXIES__'
+export const CUSTOM_SOURCE_NODES_PLACEHOLDER = '__WANGWANG_CUSTOM_SOURCE_NODES__'
+const LEGACY_ALL_PROXIES_PLACEHOLDER = '__WANGWANG_ALL_PROXIES__'
 export const MAX_TEMPLATE_BYTES = 1024 * 1024
 
 export type MihomoTemplateConfig = Record<string, unknown>
@@ -32,7 +33,8 @@ function validateGroups(value: unknown, rendered: boolean) {
       throw new Error(`代理组“${group.name}”的 proxies 必须是字符串数组`)
     for (const item of group.proxies) {
       if (!item.includes('__WANGWANG_')) continue
-      if (rendered || item !== ALL_PROXIES_PLACEHOLDER) throw new Error(`占位符位置或名称无效：${item}`)
+      if (rendered || (item !== CUSTOM_SOURCE_NODES_PLACEHOLDER && item !== LEGACY_ALL_PROXIES_PLACEHOLDER))
+        throw new Error(`占位符位置或名称无效：${item}`)
     }
   }
 }
