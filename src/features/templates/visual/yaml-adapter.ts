@@ -217,6 +217,41 @@ export function findPotentialRawReferences(draft: VisualTemplateDraft, groupName
   return { groupIds, ruleIds, count: groupIds.length + ruleIds.length }
 }
 
+function renameRawValue(value: unknown, oldName: string, newName: string): unknown {
+  if (typeof value === 'string') return value === oldName ? newName : value
+  if (Array.isArray(value)) return value.map((item) => renameRawValue(item, oldName, newName))
+  if (!object(value)) return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renameRawValue(item, oldName, newName)]))
+}
+
+/** 同步更新 RAW 中可确定为代理组名称的精确引用，避免改动普通文本。 */
+export function renameRawReferences(draft: VisualTemplateDraft, oldName: string, newName: string): VisualTemplateDraft {
+  if (!oldName || oldName === newName) return draft
+  return {
+    groups: draft.groups.map((group) =>
+      group.kind === 'raw'
+        ? {
+            ...group,
+            raw: Object.fromEntries(
+              Object.entries(group.raw).map(([key, value]) => [
+                key,
+                key === 'name' ? value : renameRawValue(value, oldName, newName),
+              ]),
+            ),
+          }
+        : group,
+    ),
+    rules: draft.rules.map((rule) => {
+      if (rule.kind !== 'raw') return rule
+      const raw = rule.raw
+        .split(',')
+        .map((token) => (token.trim() === oldName ? token.replace(oldName, newName) : token))
+        .join(',')
+      return raw === rule.raw ? rule : { ...rule, raw }
+    }),
+  }
+}
+
 export function uniqueName(base: string, groups: ProxyGroupDraft[]) {
   const names = new Set(groups.map((group) => group.name))
   if (!names.has(base)) return base
