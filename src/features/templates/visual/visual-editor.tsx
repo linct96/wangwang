@@ -1,14 +1,23 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Check,
   ChevronDown,
+  Code,
   Edit2,
   Eye,
+  Globe,
   GripVertical,
+  MapPin,
   Network,
+  Pencil,
   Plus,
   Radio,
+  Search,
   Server,
   Smile,
   Trash2,
@@ -30,7 +39,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
 import { findPotentialRawReferences, newGroup, newRule } from './yaml-adapter'
@@ -60,6 +69,45 @@ const ruleTypes: SupportedRuleType[] = [
 ]
 const builtinTarget = (value: 'DIRECT' | 'REJECT'): RuleTargetDraft => ({ kind: 'builtin', value })
 
+function getRuleTypeMeta(type: string) {
+  switch (type) {
+    case 'DOMAIN':
+    case 'DOMAIN-SUFFIX':
+    case 'DOMAIN-KEYWORD':
+      return {
+        badgeClass: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900/60',
+        colorClass: 'text-blue-600 dark:text-blue-400',
+        Icon: Globe,
+      }
+    case 'GEOSITE':
+    case 'GEOIP':
+      return {
+        badgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-900/60',
+        colorClass: 'text-purple-600 dark:text-purple-400',
+        Icon: MapPin,
+      }
+    case 'IP-CIDR':
+    case 'IP-CIDR6':
+      return {
+        badgeClass: 'bg-amber-500/10 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-900/60',
+        colorClass: 'text-amber-600 dark:text-amber-400',
+        Icon: Network,
+      }
+    case 'MATCH':
+      return {
+        badgeClass: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800/60',
+        colorClass: 'text-violet-600 dark:text-violet-400',
+        Icon: Zap,
+      }
+    default:
+      return {
+        badgeClass: 'bg-muted text-muted-foreground border-border',
+        colorClass: 'text-muted-foreground',
+        Icon: Code,
+      }
+  }
+}
+
 export function VisualTemplateEditor({
   draft,
   issues,
@@ -69,8 +117,53 @@ export function VisualTemplateEditor({
   issues: VisualIssue[]
   onChange: (draft: VisualTemplateDraft) => void
 }) {
+  const [ruleQuery, setRuleQuery] = useState('')
   const blocking = issues.filter((issue) => issue.level === 'error')
   const update = (next: VisualTemplateDraft) => onChange(next)
+
+  const firstMatchIndex = draft.rules.findIndex((r) => r.kind === 'structured' && r.type === 'MATCH')
+  const hasMatchNotLast = firstMatchIndex !== -1 && firstMatchIndex !== draft.rules.length - 1
+
+  function fixMatchOrder() {
+    const nonMatchRules = draft.rules.filter((r) => !(r.kind === 'structured' && r.type === 'MATCH'))
+    const matchRules = draft.rules.filter((r) => r.kind === 'structured' && r.type === 'MATCH')
+    update({ ...draft, rules: [...nonMatchRules, ...matchRules] })
+    toast.success('已将 MATCH 兜底规则移至最末尾')
+  }
+
+  function addRule(rule: StructuredRuleDraft) {
+    if (firstMatchIndex !== -1 && rule.type !== 'MATCH') {
+      const nextRules = [...draft.rules]
+      nextRules.splice(firstMatchIndex, 0, rule)
+      update({ ...draft, rules: nextRules })
+    } else {
+      update({ ...draft, rules: [...draft.rules, rule] })
+    }
+  }
+
+  function moveRule(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= draft.rules.length || toIndex >= draft.rules.length) return
+    const nextRules = [...draft.rules]
+    const [moved] = nextRules.splice(fromIndex, 1)
+    nextRules.splice(toIndex, 0, moved)
+    update({ ...draft, rules: nextRules })
+  }
+
+  const filteredRulesWithIndex = useMemo(() => {
+    const query = ruleQuery.trim().toLowerCase()
+    return draft.rules
+      .map((rule, originalIndex) => ({ rule, originalIndex }))
+      .filter(({ rule }) => {
+        if (!query) return true
+        if (rule.kind === 'raw') return rule.raw.toLowerCase().includes(query)
+        const typeMatch = rule.type.toLowerCase().includes(query)
+        const valMatch = (rule.value || '').toLowerCase().includes(query)
+        const targetText = targetLabel(rule.target, draft.groups).toLowerCase()
+        const targetMatch = targetText.includes(query)
+        return typeMatch || valMatch || targetMatch
+      })
+  }, [draft.rules, draft.groups, ruleQuery])
+
   function removeGroup(group: ProxyGroupDraft) {
     const refs = groupReferences(draft, group.id)
     const raw = findPotentialRawReferences(draft, group.name)
@@ -80,24 +173,29 @@ export function VisualTemplateEditor({
       )
       return
     }
-    update({ ...draft, groups: draft.groups.filter((item) => item.id !== group.id) })
+    update({
+      ...draft,
+      groups: draft.groups.filter((item) => item.id !== group.id),
+    })
   }
-  function editGroup(group: ProxyGroupDraft, next: ProxyGroupDraft) {
-    if (group.name !== next.name && findPotentialRawReferences(draft, group.name).count) {
-      toast.error('该代理组可能被高级配置引用，请切换到 YAML 编辑后处理。')
-      return
-    }
-    update({ ...draft, groups: draft.groups.map((item) => (item.id === group.id ? next : item)) })
+  function editGroup(current: ProxyGroupDraft, next: ProxyGroupDraft) {
+    update({
+      ...draft,
+      groups: draft.groups.map((item) => (item.id === current.id ? next : item)),
+    })
   }
   return (
     <div className="template-visual-editor">
-      {blocking.length > 0 && (
-        <Alert variant="destructive" className="template-visual-issues">
-          <AlertDescription>{blocking.map((issue) => issue.message).join('；')}</AlertDescription>
-        </Alert>
-      )}
-      {issues.filter((issue) => issue.level === 'warning').length > 0 && (
-        <Alert className="template-visual-issues">
+      {issues.length > 0 && (
+        <Alert
+          variant={blocking.length ? 'destructive' : 'default'}
+          className={cn(
+            'template-visual-issues',
+            blocking.length
+              ? 'border-destructive/60 bg-destructive/10'
+              : 'border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+          )}
+        >
           <AlertDescription>
             {issues
               .filter((issue) => issue.level === 'warning')
@@ -146,17 +244,57 @@ export function VisualTemplateEditor({
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
-          <h2>规则</h2>
-          <RuleDialog
-            groups={draft.groups}
-            rules={draft.rules}
-            onSave={(rule) => update({ ...draft, rules: [...draft.rules, rule] })}
-          >
-            <Button type="button" size="sm">
-              <Plus data-icon="inline-start" />
-              添加规则
-            </Button>
-          </RuleDialog>
+          <div className="template-rule-header-left">
+            <h2>规则</h2>
+            <span className="template-section-count">
+              {ruleQuery ? `${filteredRulesWithIndex.length} / ${draft.rules.length}` : draft.rules.length}
+            </span>
+            {hasMatchNotLast && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="template-fix-match-btn"
+                onClick={fixMatchOrder}
+              >
+                <AlertTriangle className="size-3.5 mr-1 text-amber-500" />
+                将 MATCH 置底
+              </Button>
+            )}
+          </div>
+          <div className="template-rule-header-right">
+            {draft.rules.length >= 4 && (
+              <div className="template-rule-search-box">
+                <Search className="template-rule-search-icon" />
+                <Input
+                  placeholder="搜索规则 (类型/域名/目标)..."
+                  value={ruleQuery}
+                  onChange={(e) => setRuleQuery(e.target.value)}
+                  className="template-rule-search-input"
+                />
+                {ruleQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setRuleQuery('')}
+                    className="template-rule-search-clear"
+                    title="清除搜索"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            <RuleDialog
+              groups={draft.groups}
+              rules={draft.rules}
+              onSave={(rule) => addRule(rule)}
+            >
+              <Button type="button" size="sm">
+                <Plus data-icon="inline-start" />
+                添加规则
+              </Button>
+            </RuleDialog>
+          </div>
         </header>
         <DragDropProvider
           onDragEnd={(event) => {
@@ -165,20 +303,19 @@ export function VisualTemplateEditor({
             const fromIndex = draft.rules.findIndex((r) => r.id === source.id)
             const toIndex = draft.rules.findIndex((r) => r.id === target.id)
             if (fromIndex !== -1 && toIndex !== -1) {
-              const nextRules = [...draft.rules]
-              const [moved] = nextRules.splice(fromIndex, 1)
-              nextRules.splice(toIndex, 0, moved)
-              update({ ...draft, rules: nextRules })
+              moveRule(fromIndex, toIndex)
             }
           }}
         >
           <div className="template-visual-list">
-            {draft.rules.map((rule, index) => (
+            {filteredRulesWithIndex.map(({ rule, originalIndex }) => (
               <RuleCard
                 key={rule.id}
-                index={index}
+                index={originalIndex}
                 rule={rule}
                 groups={draft.groups}
+                isAfterMatch={firstMatchIndex !== -1 && originalIndex > firstMatchIndex}
+                issues={issues.filter((i) => i.ruleId === rule.id)}
                 onSave={(next) =>
                   update({ ...draft, rules: draft.rules.map((item) => (item.id === rule.id ? next : item)) })
                 }
@@ -187,6 +324,13 @@ export function VisualTemplateEditor({
             ))}
           </div>
         </DragDropProvider>
+        {!ruleQuery && (
+          <QuickAddRule
+            groups={draft.groups}
+            rules={draft.rules}
+            onAdd={addRule}
+          />
+        )}
       </section>
     </div>
   )
@@ -812,16 +956,233 @@ function MemberEditor({
   )
 }
 
+function InlineValueEdit({
+  value,
+  placeholder = '输入匹配值...',
+  onSave,
+}: {
+  value: string
+  placeholder?: string
+  onSave: (nextValue: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const isDirty = draft.trim() !== value.trim()
+  const isValid = draft.trim().length > 0
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(value)
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing, value])
+
+  function submit() {
+    const trimmed = draft.trim()
+    if (!trimmed) {
+      setEditing(false)
+      return
+    }
+    if (trimmed !== value) {
+      onSave(trimmed)
+    }
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="template-inline-edit-box" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder}
+          onBlur={submit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              submit()
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setEditing(false)
+            }
+          }}
+          className={cn(
+            'template-inline-edit-input',
+            !isValid && 'template-inline-edit-invalid',
+          )}
+        />
+        <div className="template-inline-actions">
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              submit()
+            }}
+            disabled={!isValid || !isDirty}
+            title={!isDirty ? '未修改' : '保存 (Enter)'}
+            className="template-inline-btn-save"
+          >
+            <Check className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              setEditing(false)
+            }}
+            title="取消 (Esc)"
+            className="template-inline-btn-cancel"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="template-inline-value-display"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <code
+        className="template-rule-value select-text cursor-text"
+        title={value ? `匹配值：${value}` : '未填写匹配值'}
+        onDoubleClick={() => setEditing(true)}
+      >
+        {value || <span className="text-muted-foreground italic font-normal">(未填写)</span>}
+      </code>
+      <div className="template-inline-hover-actions">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="template-inline-hover-btn"
+          title="就地编辑匹配值"
+        >
+          <Pencil className="size-3" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function RuleMatcher({
+  type,
+  value = '',
+  mode = 'inline',
+  onSave,
+  onChange,
+  onKeyDown,
+  placeholder = '输入匹配值 (如 google.com)',
+}: {
+  type: SupportedRuleType
+  value?: string
+  mode?: 'inline' | 'form'
+  onSave?: (type: SupportedRuleType, value?: string) => void
+  onChange?: (type: SupportedRuleType, value?: string) => void
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
+  placeholder?: string
+}) {
+  if (mode === 'form') {
+    return (
+      <div className="template-matcher-form-group" onClick={(e) => e.stopPropagation()}>
+        <Select
+          value={type}
+          onValueChange={(t: SupportedRuleType) => onChange?.(t, t === 'MATCH' ? undefined : value)}
+        >
+          <SelectTrigger className="w-[140px] font-mono">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {ruleTypes.map((t) => (
+                <SelectItem key={t} value={t} className="font-mono">
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        {type === 'MATCH' ? (
+          <div className="template-matcher-match-placeholder">
+            全流量兜底匹配 (MATCH)
+          </div>
+        ) : (
+          <Input
+            value={value || ''}
+            onChange={(e) => onChange?.(type, e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            className="template-matcher-form-input"
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="template-matcher-inline-container"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Select
+        value={type}
+        onValueChange={(nextType: SupportedRuleType) => {
+          onSave?.(nextType, nextType === 'MATCH' ? undefined : value)
+        }}
+      >
+        <SelectTrigger
+          className="w-auto font-mono cursor-pointer select-none"
+          title="点击切换规则类型"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {ruleTypes.map((t) => (
+              <SelectItem key={t} value={t} className="font-mono">
+                {t}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+
+      {type === 'MATCH' ? (
+        <span className="template-rule-match-desc text-xs">
+          兜底全流量匹配 (Catch-all)
+        </span>
+      ) : (
+        <InlineValueEdit
+          value={value || ''}
+          placeholder={placeholder}
+          onSave={(nextValue) => onSave?.(type, nextValue)}
+        />
+      )}
+    </div>
+  )
+}
+
 function RuleCard({
   rule,
   groups,
   index,
+  isAfterMatch,
+  issues,
   onSave,
   onDelete,
 }: {
   rule: RuleDraft
   groups: ProxyGroupDraft[]
   index: number
+  isAfterMatch?: boolean
+  issues?: VisualIssue[]
   onSave: (rule: RuleDraft) => void
   onDelete: () => void
 }) {
@@ -830,8 +1191,42 @@ function RuleCard({
     index,
   })
 
+  const isMatch = rule.kind === 'structured' && rule.type === 'MATCH'
+  const typeMeta = rule.kind === 'structured' ? getRuleTypeMeta(rule.type) : getRuleTypeMeta('RAW')
+  const TypeIcon = typeMeta.Icon
+
+  const targetValue =
+    rule.kind === 'structured'
+      ? rule.target.kind === 'group'
+        ? `group:${rule.target.groupId}`
+        : rule.target.kind === 'builtin'
+          ? rule.target.value
+          : `raw:${rule.target.value}`
+      : ''
+
+  function handleTargetChange(next: string) {
+    if (rule.kind !== 'structured') return
+    const newTarget: RuleTargetDraft = next.startsWith('group:')
+      ? { kind: 'group', groupId: next.slice(6) }
+      : next === 'DIRECT' || next === 'REJECT'
+        ? { kind: 'builtin', value: next }
+        : { kind: 'raw', value: next.slice(4) }
+    onSave({ ...rule, target: newTarget })
+  }
+
+  const hasIssues = Boolean(issues && issues.length > 0)
+
   return (
-    <article ref={ref} className={cn('template-rule-row', isDragging && 'template-card-dragging')}>
+    <article
+      ref={ref}
+      className={cn(
+        'template-rule-row',
+        isDragging && 'template-card-dragging',
+        isMatch && 'template-rule-match-row',
+        isAfterMatch && 'template-rule-unreachable',
+        hasIssues && 'template-rule-issue',
+      )}
+    >
       <div
         ref={handleRef}
         className="template-drag-handle"
@@ -845,36 +1240,102 @@ function RuleCard({
       <div className="template-rule-content">
         {rule.kind === 'raw' ? (
           <div className="template-rule-raw">
-            <Badge variant="outline" className="text-[11px] font-mono shrink-0">RAW</Badge>
-            <code className="template-rule-raw-text">{rule.raw}</code>
+            <Badge variant="outline" className={cn('text-xs font-mono shrink-0 gap-1.5 px-2.5 py-0.5', typeMeta.badgeClass)}>
+              <TypeIcon className="size-3.5" />
+              RAW
+            </Badge>
+            <InlineValueEdit
+              value={rule.raw}
+              placeholder="输入完整规则内容..."
+              onSave={(nextRaw) => onSave({ ...rule, raw: nextRaw })}
+            />
           </div>
         ) : (
-          <div className="template-rule-info">
-            <Badge variant="outline" className="text-[11px] font-mono shrink-0">
-              {rule.type}
-            </Badge>
-            {rule.value && (
-              <span className="template-rule-value" title={rule.value}>
-                {rule.value}
-              </span>
-            )}
-            <span className="template-rule-arrow">➔</span>
-            <span className="template-rule-target" title={targetLabel(rule.target, groups)}>
-              {targetLabel(rule.target, groups)}
-            </span>
-            {rule.noResolve && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                no-resolve
-              </Badge>
-            )}
+          <div className="template-rule-grid">
+            <div className="template-rule-col-matcher">
+              <RuleMatcher
+                mode="inline"
+                type={rule.type}
+                value={rule.value}
+                onSave={(nextType, nextValue) =>
+                  onSave({
+                    ...rule,
+                    type: nextType,
+                    value: nextValue,
+                    noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(nextType) ? rule.noResolve : false,
+                  })
+                }
+              />
+            </div>
+
+            <div className="template-rule-col-arrow">
+              <ArrowRight className="template-rule-arrow" />
+            </div>
+
+            <div className="template-rule-col-target">
+              <div className="template-rule-target-wrapper" onClick={(e) => e.stopPropagation()}>
+                <Select value={targetValue} onValueChange={handleTargetChange}>
+                  <SelectTrigger
+                    className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
+                    title="点击切换目标策略"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {groups
+                        .filter((group) => group.name)
+                        .map((group) => (
+                          <SelectItem key={group.id} value={`group:${group.id}`}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      <SelectItem value="DIRECT">DIRECT</SelectItem>
+                      <SelectItem value="REJECT">REJECT</SelectItem>
+                      {rule.target.kind === 'raw' && (
+                        <SelectItem value={`raw:${rule.target.value}`}>
+                          {rule.target.value}（高级）
+                        </SelectItem>
+                      )}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {rule.noResolve && (
+                <Badge variant="secondary" className="text-[11px] font-mono px-2 py-0.5 shrink-0">
+                  no-resolve
+                </Badge>
+              )}
+            </div>
           </div>
         )}
       </div>
 
+      {isAfterMatch && (
+        <div
+          className="template-rule-warning-pill shrink-0"
+          title="该规则位于 MATCH 兜底规则之后，永远不会生效"
+        >
+          <AlertCircle className="size-3.5" />
+          <span>不可达</span>
+        </div>
+      )}
+
+      {hasIssues && (
+        <div
+          className="template-rule-error-pill shrink-0"
+          title={issues?.map((i) => i.message).join('\n')}
+        >
+          <AlertCircle className="size-3.5" />
+          <span>配置异常</span>
+        </div>
+      )}
+
       <div className="template-rule-actions">
         {rule.kind === 'structured' && (
           <RuleDialog groups={groups} value={rule} rules={[]} onSave={onSave}>
-            <IconButton label="编辑规则">
+            <IconButton label="高级编辑">
               <Edit2 className="size-3.5" />
             </IconButton>
           </RuleDialog>
@@ -884,6 +1345,111 @@ function RuleCard({
         </IconButton>
       </div>
     </article>
+  )
+}
+
+function QuickAddRule({
+  groups,
+  rules,
+  onAdd,
+}: {
+  groups: ProxyGroupDraft[]
+  rules: RuleDraft[]
+  onAdd: (rule: StructuredRuleDraft) => void
+}) {
+  const [type, setType] = useState<SupportedRuleType>('DOMAIN-SUFFIX')
+  const [value, setValue] = useState('')
+  const defaultTarget = groups[0]?.id ? `group:${groups[0].id}` : 'DIRECT'
+  const [targetValue, setTargetValue] = useState(defaultTarget)
+
+  function handleAdd() {
+    if (type !== 'MATCH' && !value.trim()) {
+      toast.error('请输入匹配值')
+      return
+    }
+    if (type === 'MATCH' && rules.some((r) => r.kind === 'structured' && r.type === 'MATCH')) {
+      toast.error('已有 MATCH 兜底规则')
+      return
+    }
+    const target: RuleTargetDraft = targetValue.startsWith('group:')
+      ? { kind: 'group', groupId: targetValue.slice(6) }
+      : targetValue === 'DIRECT' || targetValue === 'REJECT'
+        ? { kind: 'builtin', value: targetValue }
+        : { kind: 'raw', value: targetValue.slice(4) }
+
+    onAdd({
+      kind: 'structured',
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+      type,
+      value: type === 'MATCH' ? undefined : value.trim(),
+      target,
+      noResolve: false,
+    })
+    setValue('')
+  }
+
+  return (
+    <div className="template-quick-add-rule">
+      <div className="template-rule-grid">
+        <div className="template-rule-col-matcher">
+          <RuleMatcher
+            mode="form"
+            type={type}
+            value={value}
+            onChange={(t, v) => {
+              setType(t)
+              setValue(v || '')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleAdd()
+              }
+            }}
+            placeholder="输入域名/关键词/IP (如 google.com)，回车添加"
+          />
+        </div>
+
+        <div className="template-rule-col-arrow">
+          <ArrowRight className="template-rule-arrow" />
+        </div>
+
+        <div className="template-rule-col-target">
+          <Select value={targetValue} onValueChange={setTargetValue}>
+            <SelectTrigger
+              className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
+              title="选择目标策略"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {groups
+                  .filter((group) => group.name)
+                  .map((group) => (
+                    <SelectItem key={group.id} value={`group:${group.id}`}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                <SelectItem value="DIRECT">DIRECT</SelectItem>
+                <SelectItem value="REJECT">REJECT</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="template-quick-add-btn"
+        onClick={handleAdd}
+      >
+        <Plus className="size-3.5 mr-1" />
+        添加
+      </Button>
+    </div>
   )
 }
 
@@ -945,36 +1511,21 @@ function RuleDialog({
         >
           <FieldGroup>
             <Field>
-              <FieldLabel>规则类型</FieldLabel>
-              <Select
-                value={form.type}
-                onValueChange={(type: SupportedRuleType) =>
+              <FieldLabel>匹配条件 (类型与值)</FieldLabel>
+              <RuleMatcher
+                mode="form"
+                type={form.type}
+                value={form.value}
+                onChange={(t, v) =>
                   setForm({
                     ...form,
-                    type,
-                    value: type === 'MATCH' ? undefined : form.value,
-                    noResolve: type === 'GEOIP' || type === 'IP-CIDR' || type === 'IP-CIDR6' ? form.noResolve : false,
+                    type: t,
+                    value: v,
+                    noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(t) ? form.noResolve : false,
                   })
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ruleTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </Field>
-            {form.type !== 'MATCH' && (
-              <Field>
-                <FieldLabel>匹配值</FieldLabel>
-                <Input value={form.value || ''} onChange={(event) => setForm({ ...form, value: event.target.value })} />
-              </Field>
-            )}
             <Field>
               <FieldLabel>目标</FieldLabel>
               <Select value={targetValue} onValueChange={setTarget}>
