@@ -80,6 +80,16 @@ export function MemberEditor({
     onChange({ ...form, members: [...form.members, member] })
   }
 
+  function removeMember(index: number) {
+    const removed = form.members[index]
+    const removedName = removed && memberLabel(removed, groups)
+    onChange({
+      ...form,
+      members: form.members.filter((_, idx) => idx !== index),
+      ...(form.defaultSelected === removedName ? { defaultSelected: undefined } : {}),
+    })
+  }
+
   return (
     <Field>
       <FieldLabel>包含节点与子组 ({form.members.length})</FieldLabel>
@@ -115,7 +125,7 @@ export function MemberEditor({
               member={member}
               index={index}
               groups={groups}
-              onDelete={() => onChange({ ...form, members: form.members.filter((_, idx) => idx !== index) })}
+              onDelete={() => removeMember(index)}
             />
           ))}
           <DropdownMenu>
