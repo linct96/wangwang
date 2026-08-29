@@ -20,14 +20,35 @@ export function renderMihomoConfig({
     seen.set(base, count)
     return { ...proxy, name: count === 1 ? base : `${base}-${count}` }
   })
-  const names = proxies.map((proxy) => proxy.name)
   config.proxies = proxies
   for (const group of config['proxy-groups'] as Array<Record<string, unknown>>) {
     if (!Array.isArray(group.proxies)) continue
-    group.proxies = group.proxies.flatMap((item) => (item === ALL_PROXIES_PLACEHOLDER ? names : [item]))
+    const filter = compileNodeFilter(group.filter, 'filter')
+    const excludeFilter = compileNodeFilter(group['exclude-filter'], 'exclude-filter')
+    const selected = proxies.filter(({ name }) =>
+      excludeFilter.some((pattern) => pattern.test(name))
+        ? false
+        : filter.length === 0 || filter.some((pattern) => pattern.test(name)),
+    )
+    group.proxies = group.proxies.flatMap((item) =>
+      item === ALL_PROXIES_PLACEHOLDER ? selected.map(({ name }) => name) : [item],
+    )
   }
   validateRenderedConfig(config)
   const output = stringify(config, { lineWidth: 0 })
   if (new TextEncoder().encode(output).byteLength > MAX_TEMPLATE_BYTES) throw new Error('生成配置超过 1 MiB')
   return output
+}
+
+function compileNodeFilter(value: unknown, field: string) {
+  if (typeof value !== 'string' || !value.trim()) return []
+  try {
+    return value
+      .split('`')
+      .map((pattern) => pattern.trim())
+      .filter(Boolean)
+      .map((pattern) => (pattern.startsWith('(?i)') ? new RegExp(pattern.slice(4), 'i') : new RegExp(pattern)))
+  } catch {
+    throw new Error(`${field} 包含无效正则表达式`)
+  }
 }

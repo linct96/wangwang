@@ -1,6 +1,6 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { GripVertical, Network, Plus, Radio, Server, X, Zap } from 'lucide-react'
+import { GripVertical, Network, Plus, Radio, X, Zap } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
@@ -27,10 +27,6 @@ export function MemberTag({
     <div ref={ref} className={cn('template-member-tag', isDragging && 'template-member-dragging')}>
       <div ref={handleRef} className="template-member-tag-main" title="按住拖拽排序">
         <GripVertical className="template-tag-drag-icon" />
-        {member.kind === 'all-proxies' && <Zap className="template-node-ref-icon text-amber-500" />}
-        {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
-        {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
-        {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}
         <span className="template-member-tag-name" title={label}>
           {label}
         </span>
@@ -92,7 +88,7 @@ export function MemberEditor({
 
   return (
     <Field>
-      <FieldLabel>包含节点与子组 ({form.members.length})</FieldLabel>
+      <FieldLabel>包含节点与子组 (proxies，{form.members.length})</FieldLabel>
       <DragDropProvider
         onDragEnd={(event) => {
           const { source, target } = event.operation

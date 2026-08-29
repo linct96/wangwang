@@ -212,7 +212,7 @@ export function GroupDialog({
           <FieldGroup className="gap-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
-                <FieldLabel>名称</FieldLabel>
+                <FieldLabel>名称 (name)</FieldLabel>
                 <div className="flex gap-1.5 items-center">
                   <ProxyGroupIconPicker onSelect={handleSelectIcon} />
                   <Input
@@ -224,7 +224,7 @@ export function GroupDialog({
                 </div>
               </Field>
               <Field>
-                <FieldLabel>类型</FieldLabel>
+                <FieldLabel>类型 (type)</FieldLabel>
                 <Select
                   value={form.type}
                   onValueChange={(type: SupportedProxyGroupType) =>
@@ -259,7 +259,7 @@ export function GroupDialog({
             </div>
             {form.type === 'select' && (
               <Field>
-                <FieldLabel>默认节点</FieldLabel>
+                <FieldLabel>默认节点 (default-selected)</FieldLabel>
                 <Select
                   value={form.defaultSelected || '__first__'}
                   onValueChange={(defaultSelected) =>
@@ -289,10 +289,31 @@ export function GroupDialog({
                 </Select>
               </Field>
             )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel>节点筛选 (filter)</FieldLabel>
+                <Input
+                  value={form.filter || ''}
+                  placeholder="例如：(?i)港|hk"
+                  onChange={(event) => setForm({ ...form, filter: event.target.value || undefined })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>排除筛选 (exclude-filter)</FieldLabel>
+                <Input
+                  value={form.excludeFilter || ''}
+                  placeholder="例如：美国|日本"
+                  onChange={(event) => setForm({ ...form, excludeFilter: event.target.value || undefined })}
+                />
+              </Field>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              仅对“全部节点”或来源引入的节点生效，支持用反引号分隔多个正则。
+            </p>
             {form.type !== 'select' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field className={cn(form.type === 'url-test' || form.type === 'load-balance' ? 'sm:col-span-2' : '')}>
-                  <FieldLabel>测试 URL</FieldLabel>
+                  <FieldLabel>测试 URL (url)</FieldLabel>
                   <Input
                     value={form.url || ''}
                     placeholder="https://www.gstatic.com/generate_204"
@@ -300,7 +321,7 @@ export function GroupDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>检测间隔（秒）</FieldLabel>
+                  <FieldLabel>检测间隔 (interval，秒)</FieldLabel>
                   <Input
                     type="number"
                     min={1}
@@ -310,7 +331,7 @@ export function GroupDialog({
                 </Field>
                 {form.type === 'url-test' && (
                   <Field>
-                    <FieldLabel>容差 (tolerance / ms)</FieldLabel>
+                    <FieldLabel>容差 (tolerance，毫秒)</FieldLabel>
                     <Input
                       type="number"
                       min={0}
