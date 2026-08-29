@@ -48,10 +48,8 @@ authRouter.post('/init', async (c) => {
   if (input.password !== input.confirmPassword) return fail(c, 422, 'PASSWORD_MISMATCH', '两次密码输入不一致')
   const { hash, salt } = await hashPassword(input.password)
   try {
-    await c.env.DB.prepare(
-      'INSERT INTO admin_account (id,email,password_hash,password_salt,created_at) VALUES (1,?,?,?,?)',
-    )
-      .bind('', hash, salt, Date.now())
+    await c.env.DB.prepare('INSERT INTO admin_account (id,password_hash,password_salt,created_at) VALUES (1,?,?,?)')
+      .bind(hash, salt, Date.now())
       .run()
   } catch {
     return fail(c, 409, 'ALREADY_INITIALIZED', '管理员账号已初始化')

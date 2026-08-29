@@ -76,9 +76,8 @@ export async function profileView(
     .from(profileNodeExclusions)
     .where(eq(profileNodeExclusions.profileId, profile.id))
   const token = subscriptionToken()
-  const { ruleModules: _ruleModules, dnsMode: _dnsMode, ...view } = profile
   return {
-    ...view,
+    ...profile,
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     sourceIds: sourceRows.map((item) => item.id),
     excludedNodeIds: exclusionRows.map((item) => item.id),
