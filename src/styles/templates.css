@@ -670,25 +670,6 @@
     flex-shrink: 0;
     margin-left: auto;
   }
-  .template-quick-add-rule {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 52px;
-    padding: 0 12px;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius-sm);
-    background: color-mix(in oklch, var(--muted) 45%, var(--background));
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-  }
-  .template-quick-add-rule:focus-within {
-    border-color: var(--primary);
-    background: color-mix(in oklch, var(--primary) 3%, var(--background));
-  }
-  .template-quick-add-matcher {
-    flex: 1;
-    min-width: 0;
-  }
   .template-matcher-form-group {
     display: flex;
     align-items: center;
@@ -731,19 +712,6 @@
     gap: 8px;
     width: 100%;
     min-width: 0;
-  }
-  .template-quick-add-target {
-    height: 32px;
-    width: 140px;
-    font-size: 12px;
-    flex-shrink: 0;
-    background: var(--background);
-  }
-  .template-quick-add-btn {
-    height: 32px;
-    padding: 0 12px;
-    font-size: 12px;
-    flex-shrink: 0;
   }
   .template-member-tags-container {
     display: grid;
@@ -971,14 +939,6 @@
       flex: 1;
     }
     .template-rule-search-input {
-      width: 100%;
-    }
-    .template-quick-add-rule {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .template-quick-add-type,
-    .template-quick-add-target {
       width: 100%;
     }
   }
