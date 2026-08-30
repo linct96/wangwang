@@ -194,7 +194,7 @@ export async function parseProxyText(text: string, nodeNameFilter: string | null
       continue
     }
     const value = await fingerprint(config)
-    if (!deduplicated.has(value)) deduplicated.set(value, { config, fingerprint: value })
+    deduplicated.set(value, { config, fingerprint: value })
   }
   if (!deduplicated.size) throw new Error(warnings[0] || '没有可用节点')
   return { nodes: [...deduplicated.values()], warnings }
