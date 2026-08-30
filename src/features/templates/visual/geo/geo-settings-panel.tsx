@@ -1,16 +1,75 @@
+import { useState } from 'react'
+import {
+  ChevronDown,
+  Database,
+  Globe,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { IconButton } from '@/components/app-primitives'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { Segmented } from '@/components/ui/segmented'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import type { GeoSettingsDraft, VisualIssue } from '../model'
-import { createRecommendedGeoSettings } from './presets'
-import { inferGeoSource } from '../rules/geo-catalog'
+import {
+  createEmptyGeoSettings,
+  createLiteGeoSettings,
+  createLoyalsoldierGeoSettings,
+  createRecommendedGeoSettings,
+  detectActivePreset,
+} from './presets'
 
-const fields = [
-  ['geoip', 'GeoIP DAT', 'geodata-mode 使用 DAT 时用于 GEOIP'],
-  ['geosite', 'GeoSite DAT', '用于 GEOSITE 规则'],
-  ['mmdb', 'Country MMDB', 'geodata-mode 使用 MMDB 时用于 GEOIP'],
-  ['asn', 'ASN MMDB', '用于 IP-ASN / SRC-IP-ASN'],
-] as const
+type GeoUrlKey = 'geosite' | 'geoip' | 'mmdb' | 'asn'
+
+interface GeoFieldConfig {
+  key: GeoUrlKey
+  name: string
+  tag: string
+  tagColor?: string
+  placeholder: string
+}
+
+const GEO_URL_FIELDS: GeoFieldConfig[] = [
+  {
+    key: 'geosite',
+    name: 'GeoSite 规则文件',
+    tag: 'GEOSITE',
+    placeholder: 'https://.../geosite.dat',
+  },
+  {
+    key: 'geoip',
+    name: 'GeoIP DAT 规则文件',
+    tag: 'GEOIP (DAT)',
+    placeholder: 'https://.../geoip.dat',
+  },
+  {
+    key: 'asn',
+    name: 'ASN 规则文件',
+    tag: 'IP-ASN',
+    placeholder: 'https://.../GeoLite2-ASN.mmdb',
+  },
+  {
+    key: 'mmdb',
+    name: 'GeoIP MMDB 规则文件',
+    tag: 'GEOIP (MMDB)',
+    placeholder: 'https://.../country.mmdb',
+  },
+]
 
 export function GeoSettingsPanel({
   value,
@@ -21,120 +80,315 @@ export function GeoSettingsPanel({
   issues: VisualIssue[]
   onChange: (value: GeoSettingsDraft) => void
 }) {
-  const update = (patch: Partial<GeoSettingsDraft>) => onChange({ ...value, ...patch, geoxUrl: { ...value.geoxUrl } })
-  const remove = () =>
+  const [expanded, setExpanded] = useState(true)
+
+  const update = (patch: Partial<GeoSettingsDraft>) =>
+    onChange({ ...value, ...patch, geoxUrl: { ...value.geoxUrl } })
+
+  const updateUrl = (key: GeoUrlKey, url: string | null) => {
     onChange({
-      geodataMode: null,
-      geoAutoUpdate: null,
-      geoUpdateInterval: null,
-      geoxUrl: { geoip: null, geosite: null, mmdb: null, asn: null },
+      ...value,
+      geoxUrl: {
+        ...value.geoxUrl,
+        [key]: url === '' ? null : url,
+      },
     })
-  const mode = value.geodataMode === true ? 'dat' : value.geodataMode === false ? 'mmdb' : 'default'
+  }
+
+  const applyPreset = (presetFn: () => GeoSettingsDraft, label: string) => {
+    onChange(presetFn())
+    toast.success(`已应用 ${label}`)
+  }
+
+  const resetUrlsToRecommended = () => {
+    const recommended = createRecommendedGeoSettings()
+    onChange({
+      ...value,
+      geoxUrl: { ...recommended.geoxUrl },
+    })
+    toast.success('已恢复推荐数据下载地址')
+  }
+
+  const clearAllUrls = () => {
+    onChange({
+      ...value,
+      geoxUrl: {
+        geoip: null,
+        geosite: null,
+        mmdb: null,
+        asn: null,
+      },
+    })
+    toast.success('已清空自定义下载地址（将使用内核默认值）')
+  }
+
+  const activePreset = detectActivePreset(value)
+  const mode = value.geodataMode === true ? 'dat' : 'mmdb'
+  const isAutoUpdate = value.geoAutoUpdate === true
   const intervalIssue = issues.find((issue) => issue.geoField === 'geo-update-interval' && issue.level === 'error')
-  const modeLabel = mode === 'dat' ? 'DAT' : mode === 'mmdb' ? 'MMDB' : 'Mihomo 默认'
-  const updating =
-    value.geoAutoUpdate === true ? '自动更新' : value.geoAutoUpdate === false ? '手动更新' : '默认更新策略'
-  const custom = inferGeoSource(value, 'GEOSITE').custom || inferGeoSource(value, 'GEOIP').custom
-  const restoreUrls = () => onChange({ ...value, geoxUrl: { ...createRecommendedGeoSettings().geoxUrl } })
+
+  const hasAnyCustomValue =
+    value.geodataMode != null ||
+    value.geoAutoUpdate != null ||
+    value.geoUpdateInterval != null ||
+    Object.values(value.geoxUrl).some(Boolean)
+
   return (
     <section className="template-visual-section">
-      <header className="template-visual-toolbar">
-        <div>
-          <h2>GEO 数据</h2>
-          <p className="text-xs text-muted-foreground">
-            {mode === 'default' && !Object.values(value.geoxUrl).some(Boolean)
-              ? '使用 Mihomo 默认配置'
-              : `${modeLabel} · ${updating}${value.geoUpdateInterval ? ` · ${value.geoUpdateInterval}h` : ''}${custom ? ' · 自定义数据源' : ''}`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => onChange(createRecommendedGeoSettings())}>
-            应用推荐配置
-          </Button>
-          <Button type="button" variant="ghost" onClick={remove}>
-            移除 GEO 配置
-          </Button>
-        </div>
-      </header>
-      <div className="grid gap-4 p-4">
-        <p className="text-sm text-muted-foreground">用于 GEOSITE、GEOIP 和 ASN 规则的数据文件。</p>
-        <Field>
-          <FieldLabel>GEOIP 数据格式</FieldLabel>
-          <div className="flex gap-4 text-sm">
-            {(
-              [
-                ['default', '使用 Mihomo 默认'],
-                ['dat', 'DAT'],
-                ['mmdb', 'MMDB'],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="geo-mode"
-                  checked={mode === key}
-                  onChange={() => update({ geodataMode: key === 'default' ? null : key === 'dat' })}
-                />
-                {label}
-              </label>
-            ))}
+      <div className="template-visual-card template-geo-card">
+        {/* 卡片头部 */}
+        <header className="template-visual-card-header template-geo-header">
+          <div
+            className="template-group-header-info"
+            role="button"
+            tabIndex={0}
+            onClick={() => setExpanded((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setExpanded((prev) => !prev)
+              }
+            }}
+          >
+            <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
+            <div className="flex items-center gap-2">
+              <Globe className="size-4 text-primary" />
+              <strong>GEO 规则数据源</strong>
+            </div>
+
+            {/* 状态徽标组 */}
+            <div className="template-geo-badges hidden sm:flex items-center gap-1.5 ml-1">
+              <Badge variant={mode === 'dat' ? 'secondary' : 'outline'}>
+                {mode === 'dat' ? 'DAT 格式' : 'MMDB 格式 (默认)'}
+              </Badge>
+              {isAutoUpdate ? (
+                <Badge variant="secondary">自动更新 · {value.geoUpdateInterval ?? 24}h</Badge>
+              ) : value.geoAutoUpdate === false ? (
+                <Badge variant="outline">手动更新</Badge>
+              ) : null}
+              {activePreset === 'metacubex-full' && <Badge variant="default">MetaCubeX 推荐</Badge>}
+              {activePreset === 'metacubex-lite' && <Badge variant="default">MetaCubeX Lite</Badge>}
+              {activePreset === 'loyalsoldier' && <Badge variant="default">Loyalsoldier</Badge>}
+              {activePreset === 'custom' && <Badge variant="outline">自定义源</Badge>}
+            </div>
           </div>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="geo-auto-update">自动更新 GEO 数据</FieldLabel>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              id="geo-auto-update"
-              type="checkbox"
-              checked={value.geoAutoUpdate === true}
-              onChange={(e) => update({ geoAutoUpdate: e.target.checked })}
-            />
-            开启
-          </label>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="geo-update-interval">更新间隔（小时）</FieldLabel>
-          <Input
-            id="geo-update-interval"
-            type="number"
-            step="1"
-            min="1"
-            value={value.geoUpdateInterval ?? ''}
-            onChange={(e) => update({ geoUpdateInterval: e.target.value === '' ? null : Number(e.target.value) })}
-          />
-          <p className="text-xs text-muted-foreground">关闭自动更新时，开启后生效。</p>
-          {intervalIssue && <p className="text-xs text-destructive">{intervalIssue.message}</p>}
-        </Field>
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">数据下载地址</h3>
-          <Button type="button" variant="outline" size="sm" onClick={restoreUrls}>
-            恢复推荐值
-          </Button>
-        </div>
-        <div className="grid gap-3">
-          {fields.map(([key, label, help]) => (
-            <Field key={key}>
-              <FieldLabel htmlFor={`geo-${key}`}>{label}</FieldLabel>
-              <Input
-                id={`geo-${key}`}
-                type="url"
-                value={value.geoxUrl[key] ?? ''}
-                placeholder="使用 Mihomo 默认值"
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    geoxUrl: { ...value.geoxUrl, [key]: e.target.value === '' ? null : e.target.value },
-                  })
-                }
-              />
-              <p className="text-xs text-muted-foreground">{help}</p>
-              {issues.find((issue) => issue.geoField === key && issue.level === 'error') && (
-                <p className="text-xs text-destructive">{issues.find((issue) => issue.geoField === key)?.message}</p>
-              )}
-            </Field>
-          ))}
-        </div>
+
+          {/* 右侧工具栏操作 */}
+          <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="gap-1.5 text-sm font-medium">
+                  <Sparkles className="size-4 text-amber-500" />
+                  规则预设
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel>推荐规则集</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => applyPreset(createRecommendedGeoSettings, 'MetaCubeX 全量推荐')}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-sm">MetaCubeX 全量 (推荐)</span>
+                    <span className="text-xs text-muted-foreground">DAT 模式 · 完整域名/IP数据库</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-sm">MetaCubeX 精简 (Lite)</span>
+                    <span className="text-xs text-muted-foreground">精简体积 · 内存占用更低</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-sm">Loyalsoldier 规则集</span>
+                    <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => applyPreset(createEmptyGeoSettings, '默认内核配置')}
+                >
+                  <Trash2 className="size-4 mr-1.5" />
+                  <span>清除/重置为默认</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {hasAnyCustomValue && (
+              <IconButton
+                label="清除 GEO 自定义配置"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  applyPreset(createEmptyGeoSettings, '默认内核配置')
+                }}
+              >
+                <Trash2 />
+              </IconButton>
+            )}
+          </div>
+        </header>
+
+        {/* 卡片主体（展开时可见） */}
+        {expanded && (
+          <div className="template-geo-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
+            {/* 顶栏设置项：运行模式与自动更新 */}
+            <div className="flex flex-col gap-3.5">
+              {/* 第一行：数据格式选择 */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-9">
+                <FieldLabel className="mb-0">GEOIP 匹配数据格式 (geodata-mode)</FieldLabel>
+                <Segmented
+                  value={mode}
+                  options={[
+                    { value: 'dat', label: 'DAT 格式' },
+                    { value: 'mmdb', label: 'MMDB 格式 (默认)' },
+                  ]}
+                  onChange={(val) =>
+                    update({
+                      geodataMode: val === 'dat',
+                    })
+                  }
+                  className="w-full sm:w-auto shrink-0"
+                />
+              </div>
+
+              <div className="h-px bg-border/60" />
+
+              {/* 第二行：自动更新设置（单行内联与平滑过渡） */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-9">
+                  <FieldLabel htmlFor="geo-auto-update-switch" className="mb-0">
+                    自动更新规则数据 (geo-auto-update)
+                  </FieldLabel>
+                  <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
+                    {isAutoUpdate && (
+                      <div className="flex items-center gap-2 animate-in fade-in-0 slide-in-from-right-1 duration-150">
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">间隔:</span>
+                        <Input
+                          id="geo-update-interval"
+                          type="number"
+                          step="1"
+                          min="1"
+                          placeholder="24"
+                          value={value.geoUpdateInterval ?? ''}
+                          data-invalid={Boolean(intervalIssue)}
+                          className="h-8 text-sm w-20 px-2"
+                          onChange={(e) =>
+                            update({
+                              geoUpdateInterval: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                        />
+                        <span className="text-sm text-muted-foreground shrink-0">小时</span>
+                      </div>
+                    )}
+                    <Switch
+                      id="geo-auto-update-switch"
+                      checked={isAutoUpdate}
+                      onCheckedChange={(checked) =>
+                        update({
+                          geoAutoUpdate: checked,
+                          geoUpdateInterval: checked ? (value.geoUpdateInterval ?? 24) : value.geoUpdateInterval,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                {intervalIssue && (
+                  <FieldError errors={[intervalIssue]} className="text-right text-xs animate-in fade-in-0 duration-150" />
+                )}
+              </div>
+            </div>
+
+            <div className="h-px bg-border/60" />
+
+            {/* 下载地址列表 */}
+            <div className="flex flex-col gap-3 pt-0.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap min-h-8">
+                <div className="flex items-center gap-2">
+                  <Database className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">数据文件下载地址 (geox-url)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2.5 text-sm text-muted-foreground hover:text-foreground active:scale-[0.98] transition-all"
+                    onClick={resetUrlsToRecommended}
+                  >
+                    <RotateCcw className="size-3.5 mr-1.5" />
+                    恢复推荐地址
+                  </Button>
+                  {Object.values(value.geoxUrl).some(Boolean) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2.5 text-sm text-destructive hover:bg-destructive/10 active:scale-[0.98] transition-all"
+                      onClick={clearAllUrls}
+                    >
+                      清空自定义
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <FieldGroup className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {GEO_URL_FIELDS.map((item) => {
+                  const urlValue = value.geoxUrl[item.key] ?? ''
+                  const fieldIssue = issues.find((issue) => issue.geoField === item.key && issue.level === 'error')
+
+                  return (
+                    <Field
+                      key={item.key}
+                      data-invalid={Boolean(fieldIssue)}
+                      className="template-geo-url-field p-3.5 rounded-lg border border-border bg-card/60 gap-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 min-h-5">
+                        <FieldLabel htmlFor={`geo-url-${item.key}`} className="text-sm font-medium mb-0">
+                          {item.name}
+                        </FieldLabel>
+                        <Badge variant="outline" className="text-xs px-2 py-0.5 font-mono">
+                          {item.tag}
+                        </Badge>
+                      </div>
+
+                      <div className="relative flex items-center">
+                        <Input
+                          id={`geo-url-${item.key}`}
+                          type="url"
+                          value={urlValue}
+                          placeholder={item.placeholder}
+                          data-invalid={Boolean(fieldIssue)}
+                          className={cn(
+                            'h-9 text-sm font-mono pr-8 bg-background',
+                            urlValue ? 'text-foreground' : 'text-muted-foreground',
+                          )}
+                          onChange={(e) => updateUrl(item.key, e.target.value)}
+                        />
+                        {urlValue && (
+                          <button
+                            type="button"
+                            onClick={() => updateUrl(item.key, null)}
+                            className="absolute right-2 size-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted opacity-70 hover:opacity-100 transition-opacity"
+                            title="清空此地址"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {fieldIssue && (
+                        <FieldError errors={[fieldIssue]} className="text-xs animate-in fade-in-0 duration-150" />
+                      )}
+                    </Field>
+                  )
+                })}
+              </FieldGroup>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
 }
+
