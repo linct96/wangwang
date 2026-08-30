@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source, TemplateSummary } from '@/api/types'
-import { IconButton, PageState, Status } from '@/components/app-primitives'
+import { IconButton, PageState } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,10 +98,9 @@ export function ProfileDetailPage() {
           <div>
             <div className="flex items-center gap-2.5">
               <h1>{profile?.name || '配置详情'}</h1>
-              {profile && <Status value={profile.error ? 'error' : profile.compiledAt ? 'ready' : 'idle'} />}
             </div>
             <p>
-              版本 v{profile?.revision || 0} · 最后生成于 {formatDate(profile?.compiledAt || null)}
+              最后生成于 {formatDate(profile?.compiledAt || null)}
             </p>
           </div>
         </div>
