@@ -96,7 +96,6 @@ export type TemplateSummary = {
   id: TemplateId
   name: string
   description: string | null
-  revision: number
   kind: 'builtin' | 'custom'
   readOnly: boolean
   profileCount: number

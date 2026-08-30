@@ -504,7 +504,6 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       name: String(body.name || '').trim(),
       description: String(body.description || '').trim() || null,
       yaml,
-      revision: 1,
       kind: 'custom',
       readOnly: false,
       profileCount: 0,
@@ -559,7 +558,6 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       ...source,
       id: nanoid(12),
       name: `${source.name} 副本`,
-      revision: 1,
       kind: 'custom',
       readOnly: false,
       profileCount: 0,
@@ -591,7 +589,6 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
     if (body.description === null || typeof body.description === 'string')
       template.description = String(body.description || '').trim() || null
     if (typeof body.yaml === 'string') template.yaml = body.yaml
-    template.revision += 1
     template.updatedAt = now()
     const affected = state.profiles.filter((profile) => profile.templateId === id).map((profile) => profile.id)
     recompileProfiles(state, [], affected)

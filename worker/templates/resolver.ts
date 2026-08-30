@@ -19,7 +19,6 @@ export function templateView(
     id: template.id,
     name: template.name,
     description: template.description,
-    revision: template.revision,
     kind: builtin ? ('builtin' as const) : ('custom' as const),
     readOnly: builtin,
     profileCount,
