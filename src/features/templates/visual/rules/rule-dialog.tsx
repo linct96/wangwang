@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { newRule } from '../yaml-adapter'
 import { RuleMatcher } from './rule-card'
 import type { ProxyGroupDraft, RuleDraft, RuleTargetDraft, StructuredRuleDraft } from '../model'
+import type { GeoDataset } from './geo-catalog'
 
 const builtinTarget = (value: 'DIRECT' | 'REJECT'): RuleTargetDraft => ({ kind: 'builtin', value })
 
@@ -17,12 +18,14 @@ export function RuleDialog({
   value,
   onSave,
   children,
+  dataset = 'full',
 }: {
   groups: ProxyGroupDraft[]
   rules: RuleDraft[]
   value?: StructuredRuleDraft
   onSave: (rule: StructuredRuleDraft) => void
   children: React.ReactNode
+  dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
 }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<StructuredRuleDraft>(() => value || newRule(builtinTarget('DIRECT')))
@@ -81,6 +84,13 @@ export function RuleDialog({
                     value: v,
                     noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(t) ? form.noResolve : false,
                   })
+                }
+                dataset={
+                  typeof dataset === 'function' && (form.type === 'GEOSITE' || form.type === 'GEOIP')
+                    ? dataset(form.type)
+                    : typeof dataset === 'string'
+                      ? dataset
+                      : 'full'
                 }
               />
             </Field>

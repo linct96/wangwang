@@ -9,7 +9,7 @@ export function ok<T>(c: AppContext, data: T, status = 200) {
 
 export function fail(
   c: AppContext,
-  status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500,
+  status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500 | 503,
   code: string,
   message: string,
 ) {
