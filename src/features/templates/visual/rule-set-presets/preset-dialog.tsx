@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RuleTargetSelect } from '../rules'
 import { canUseNoResolve } from '../validation'
 import { newRule, newRuleProvider } from '../yaml-adapter'
-import { type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
+import { targetLabel, type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { RULE_SET_PRESETS } from './catalog'
 import { createProviderFromPreset } from './helpers'
 import type {
@@ -89,6 +89,19 @@ export function RuleSetPresetDialog({
             .some((value) => value!.toLowerCase().includes(keyword))),
     )
   }, [category, presets, query, source])
+  const configuredTargets = useMemo(() => {
+    const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
+    const targets = new Map<string, Set<string>>()
+    draft.rules.forEach((rule) => {
+      if (rule.kind !== 'structured' || rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider') return
+      const providerName = providerNames.get(rule.provider.providerId)
+      if (!providerName) return
+      const values = targets.get(providerName) || new Set<string>()
+      values.add(targetLabel(rule.target, draft.groups))
+      targets.set(providerName, values)
+    })
+    return new Map([...targets].map(([name, values]) => [name, [...values].join('、')]))
+  }, [draft.groups, draft.ruleProviders, draft.rules])
   const listRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -274,6 +287,7 @@ export function RuleSetPresetDialog({
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const preset = filtered[virtualItem.index]
                 const selection = selections[preset.id]
+                const configuredTarget = configuredTargets.get(preset.provider.name)
                 return (
                   <div
                     key={virtualItem.key}
@@ -283,7 +297,7 @@ export function RuleSetPresetDialog({
                     style={{ transform: `translateY(${virtualItem.start}px)` }}
                   >
                     <div className="rounded-md border bg-card p-3">
-                      <div className="flex items-start gap-3">
+                      <div className="flex min-h-10 items-center gap-3">
                         <Checkbox
                           id={`preset-${mode}-${preset.id}`}
                           checked={Boolean(selection)}
@@ -295,14 +309,29 @@ export function RuleSetPresetDialog({
                             })
                           }
                         />
-                        <label htmlFor={`preset-${mode}-${preset.id}`} className="min-w-0 flex-1 cursor-pointer">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <strong className="text-sm">{preset.name}</strong>
-                            <Badge variant="outline">{categoryLabels[preset.category]}</Badge>
+                        <label
+                          htmlFor={`preset-${mode}-${preset.id}`}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <strong className="min-w-0 truncate text-sm">{preset.name}</strong>
+                              <Badge variant="outline" className="shrink-0">
+                                {categoryLabels[preset.category]}
+                              </Badge>
+                            </span>
+                            <span className="mt-1 block truncate text-xs text-muted-foreground">
+                              {sourceLabels[preset.source]} · {preset.description}
+                            </span>
                           </span>
-                          <span className="mt-1 block text-xs text-muted-foreground">
-                            {sourceLabels[preset.source]} · {preset.description}
-                          </span>
+                          {configuredTarget && (
+                            <span
+                              className="max-w-[42%] shrink-0 truncate text-right text-xs text-muted-foreground"
+                              title={`已配置：${configuredTarget}`}
+                            >
+                              已配置：{configuredTarget}
+                            </span>
+                          )}
                         </label>
                       </div>
 
