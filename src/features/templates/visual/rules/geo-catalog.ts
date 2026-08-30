@@ -22,11 +22,24 @@ export function detectGeoDataset(yaml: string, type: 'GEOSITE' | 'GEOIP'): GeoDa
   return detectGeoSource(yaml, type).dataset
 }
 export function inferGeoDataset(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): GeoDataset {
+  return inferGeoSource(geo, type).dataset
+}
+export function inferGeoSource(
+  geo: GeoSettingsDraft,
+  type: 'GEOSITE' | 'GEOIP',
+): { dataset: GeoDataset; custom: boolean } {
   const mode = geo.geodataMode === true
   const source = type === 'GEOSITE' ? geo.geoxUrl.geosite : geo.geoxUrl[mode ? 'geoip' : 'mmdb']
-  return source && (type === 'GEOSITE' ? /geosite-lite\.dat/i : /geoip-lite\.dat|country-lite\.mmdb/i).test(source)
-    ? 'lite'
-    : 'full'
+  if (!source) return { dataset: 'full', custom: false }
+  const lite =
+    type === 'GEOSITE'
+      ? /geosite-lite\.dat/i.test(source)
+      : /(?:geoip|country)-lite\.dat|country-lite\.mmdb/i.test(source)
+  const known =
+    type === 'GEOSITE'
+      ? /geosite(?:-lite)?\.dat/i
+      : /(?:geoip|country)(?:-lite)?\.(?:dat|mmdb)|GeoLite2(?:-ASN)?\.mmdb/i
+  return { dataset: lite ? 'lite' : 'full', custom: !known.test(source) }
 }
 export function searchGeoCatalog(items: string[], query: string) {
   const q = query.trim().toLowerCase()
