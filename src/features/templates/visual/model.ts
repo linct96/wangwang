@@ -1,6 +1,14 @@
 export type VisualTemplateDraft = {
+  geo: GeoSettingsDraft
   groups: ProxyGroupDraft[]
   rules: RuleDraft[]
+}
+
+export type GeoSettingsDraft = {
+  geodataMode?: boolean | null
+  geoAutoUpdate?: boolean | null
+  geoUpdateInterval?: number | null
+  geoxUrl: { geoip?: string | null; geosite?: string | null; mmdb?: string | null; asn?: string | null }
 }
 
 export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback' | 'load-balance'
@@ -76,6 +84,7 @@ export type VisualIssue = {
   message: string
   groupId?: string
   ruleId?: string
+  geoField?: 'geodata-mode' | 'geo-auto-update' | 'geo-update-interval' | 'geoip' | 'geosite' | 'mmdb' | 'asn'
 }
 
 export function memberLabel(member: ProxyGroupMemberDraft, groups: ProxyGroupDraft[] = []): string {

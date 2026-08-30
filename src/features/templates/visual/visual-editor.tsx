@@ -18,15 +18,21 @@ import {
   type VisualIssue,
   type VisualTemplateDraft,
 } from './model'
+import type { GeoDataset } from './rules/geo-catalog'
+import { GeoSettingsPanel } from './geo/geo-settings-panel'
 
 export function VisualTemplateEditor({
   draft,
   issues,
   onChange,
+  dataset = 'full',
+  customGeo = false,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
   onChange: (draft: VisualTemplateDraft) => void
+  dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
+  customGeo?: boolean
 }) {
   const [ruleQuery, setRuleQuery] = useState('')
   const blocking = issues.filter((issue) => issue.level === 'error')
@@ -123,6 +129,7 @@ export function VisualTemplateEditor({
           </AlertDescription>
         </Alert>
       )}
+      <GeoSettingsPanel value={draft.geo} issues={issues} onChange={(geo) => update({ ...draft, geo })} />
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
           <h2>代理组</h2>
@@ -136,6 +143,11 @@ export function VisualTemplateEditor({
         <GroupList groups={draft.groups} onChange={updateGroups} onDelete={removeGroup} />
       </section>
       <section className="template-visual-section">
+        {customGeo && (
+          <Alert className="mx-4 mt-4">
+            <AlertDescription>当前使用自定义 GEO 数据源，建议列表可能与实际数据库不同</AlertDescription>
+          </Alert>
+        )}
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
             <h2>规则</h2>
@@ -177,7 +189,7 @@ export function VisualTemplateEditor({
                 )}
               </div>
             )}
-            <RuleDialog groups={draft.groups} rules={draft.rules} onSave={(rule) => addRule(rule)}>
+            <RuleDialog groups={draft.groups} rules={draft.rules} dataset={dataset} onSave={(rule) => addRule(rule)}>
               <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
                 添加规则
@@ -191,6 +203,7 @@ export function VisualTemplateEditor({
           issues={issues}
           query={ruleQuery}
           onChange={(rules) => update({ ...draft, rules })}
+          dataset={dataset}
         />
       </section>
     </div>
