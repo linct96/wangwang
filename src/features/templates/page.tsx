@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
-import { AppDialog, PageState } from '@/components/app-primitives'
+import { AppConfirmDialog, AppDialog, PageState } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -316,17 +316,14 @@ export function TemplatesPage() {
         />
       )}
       {deleting && (
-        <AppDialog title="删除模板" onClose={() => setDeleting(undefined)}>
-          <p className="dialog-copy">确定删除“{deleting.name}”？此操作无法撤销。</p>
-          <footer className="dialog-actions">
-            <Button variant="outline" onClick={() => setDeleting(undefined)}>
-              取消
-            </Button>
-            <Button variant="destructive" disabled={busy === deleting.id} onClick={() => void remove()}>
-              删除
-            </Button>
-          </footer>
-        </AppDialog>
+        <AppConfirmDialog
+          title="删除模板"
+          description={`确定删除“${deleting.name}”？此操作无法撤销。`}
+          confirmLabel="删除"
+          busy={busy === deleting.id}
+          onClose={() => setDeleting(undefined)}
+          onConfirm={() => void remove()}
+        />
       )}
     </div>
   )

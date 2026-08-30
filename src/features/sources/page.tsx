@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Source } from '@/api/types'
-import { AppDialog, IconButton } from '@/components/app-primitives'
+import { AppConfirmDialog, AppDialog, IconButton } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -264,28 +264,18 @@ export function SourcesPage() {
         />
       )}
       {deleting && (
-        <AppDialog title="删除节点源" onClose={() => setDeleting(undefined)}>
-          <p className="dialog-copy">
-            删除“{deleting.name}”将移除 {deleting.nodeCount} 个来源节点，并从 {deleting.profileCount}{' '}
-            个配置中解除引用。受影响配置会自动重新生成。
-          </p>
+        <AppConfirmDialog
+          title="删除节点源"
+          description={`删除“${deleting.name}”将移除 ${deleting.nodeCount} 个来源节点，并从 ${deleting.profileCount} 个配置中解除引用。受影响配置会自动重新生成。`}
+          confirmLabel="删除"
+          busy={busy === deleting.id}
+          onClose={() => setDeleting(undefined)}
+          onConfirm={() => void action(deleting.id, 'delete')}
+        >
           <Alert variant="destructive">
             <AlertDescription>配置生成失败时会继续使用上一可用版本。</AlertDescription>
           </Alert>
-          <footer className="dialog-actions">
-            <Button type="button" variant="outline" onClick={() => setDeleting(undefined)}>
-              取消
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy === deleting.id}
-              onClick={() => void action(deleting.id, 'delete')}
-            >
-              删除
-            </Button>
-          </footer>
-        </AppDialog>
+        </AppConfirmDialog>
       )}
     </div>
   )

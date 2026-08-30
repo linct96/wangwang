@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source, TemplateSummary } from '@/api/types'
-import { IconButton, PageState } from '@/components/app-primitives'
+import { AppConfirmDialog, IconButton, PageState } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +33,7 @@ export function ProfileDetailPage() {
   const { data: templates = [] } = useApi<TemplateSummary[]>('/templates')
 
   const [editing, setEditing] = useState(false)
+  const [rotatingToken, setRotatingToken] = useState(false)
   const [busy, setBusy] = useState(false)
   const [compileStatus, setCompileStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
 
@@ -56,10 +57,10 @@ export function ProfileDetailPage() {
   }
 
   async function runRotateToken() {
-    if (!window.confirm('轮换令牌后，旧的订阅链接将立即失效，所有客户端需重新导入。确定轮换？')) return
     setBusy(true)
     try {
       await api(`/profiles/${id}/rotate-token`, { method: 'POST' })
+      setRotatingToken(false)
       toast.success('订阅令牌已轮换')
       await reload()
     } catch (reason) {
@@ -180,7 +181,7 @@ export function ProfileDetailPage() {
                     size="sm"
                     className="text-destructive hover:bg-destructive/10"
                     disabled={busy}
-                    onClick={() => void runRotateToken()}
+                    onClick={() => setRotatingToken(true)}
                   >
                     <RotateCcwKey className="size-3.5 mr-1.5" />
                     轮换订阅令牌
@@ -301,6 +302,16 @@ export function ProfileDetailPage() {
               await reload()
             }
           }}
+        />
+      )}
+      {rotatingToken && (
+        <AppConfirmDialog
+          title="轮换订阅令牌"
+          description="轮换后，旧的订阅链接将立即失效，所有客户端都需要重新导入。"
+          confirmLabel="确认轮换"
+          busy={busy}
+          onClose={() => setRotatingToken(false)}
+          onConfirm={() => void runRotateToken()}
         />
       )}
     </div>
