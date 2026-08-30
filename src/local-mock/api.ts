@@ -130,20 +130,30 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (pathname === '/geo/catalog' && method === 'GET') {
     const rawType = url.searchParams.get('type')
-    const rawDataset = url.searchParams.get('dataset')
-    if (!['geosite', 'geoip'].includes(rawType || '') || !['full', 'lite'].includes(rawDataset || ''))
+    const rawProvider = url.searchParams.get('provider')
+    if (
+      !['geosite', 'geoip'].includes(rawType || '') ||
+      !['metacubex', 'metacubex-lite', 'loyalsoldier'].includes(rawProvider || '')
+    )
       throw new Error('参数无效')
     const type = rawType as 'geosite' | 'geoip'
-    const dataset = rawDataset as 'full' | 'lite'
+    const provider = rawProvider as 'metacubex' | 'metacubex-lite' | 'loyalsoldier'
     const items =
-      type === 'geoip'
-        ? ['CN', 'JP', 'US', 'cloudflare', 'google', 'telegram']
-        : ['apple', 'category-ads-all', 'cn', 'google', 'google-gemini', 'openai', 'steam@cn', 'youtube']
+      provider === 'loyalsoldier'
+        ? type === 'geoip'
+          ? ['cn', 'us', 'sg', 'private', 'cloudflare', 'google', 'telegram']
+          : ['google', 'github', 'youtube', 'telegram', 'netflix', ...['china-list', 'apple-cn', 'google-cn']]
+        : type === 'geoip'
+          ? ['CN', 'JP', 'US', ...(provider === 'metacubex' ? ['cloudflare', 'google', 'telegram'] : [])]
+          : provider === 'metacubex-lite'
+            ? ['apple', 'cn', 'google', 'openai']
+            : ['apple', 'category-ads-all', 'cn', 'google', 'google-gemini', 'openai', 'steam', 'youtube']
     return {
       type,
-      dataset,
+      provider,
       items,
-      source: { repository: 'MetaCubeX/meta-rules-dat', ref: 'meta', fetchedAt: new Date().toISOString() },
+      updatedAt: new Date().toISOString(),
+      stale: false,
     } as T
   }
 
