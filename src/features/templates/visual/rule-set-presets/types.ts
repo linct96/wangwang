@@ -42,7 +42,5 @@ export interface ApplyRuleSetPresetOptions {
   providerId: string
   ruleId: string
   target?: RuleTargetDraft
-  providerConflict: 'keep' | 'replace'
-  ruleConflict: 'keep' | 'replace'
   noResolve?: boolean
 }
