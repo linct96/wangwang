@@ -246,9 +246,15 @@ export function GeoSettingsPanel({
                 <div className="flex items-center gap-1.5">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button type="button" variant="outline" size="sm" className="gap-1.5 text-sm font-medium">
-                        <Sparkles className="size-4 text-amber-500" />
-                        下载地址预设
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2.5 gap-1.5 text-xs font-medium border-border/80 hover:bg-accent/60"
+                      >
+                        <Sparkles className="size-3.5 text-amber-500 shrink-0" />
+                        <span>填入预设</span>
+                        <ChevronDown className="size-3 text-muted-foreground/70 -mr-0.5" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-60">
