@@ -33,6 +33,7 @@ export function SourcesPage() {
   const [editing, setEditing] = useState<Source>()
   const [deleting, setDeleting] = useState<Source>()
   const [busy, setBusy] = useState('')
+  const [pendingAdd, setPendingAdd] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const initialLoading = loading && data.length === 0
   const refreshing = loading && data.length > 0
@@ -127,82 +128,91 @@ export function SourcesPage() {
                   {error}
                 </TableCell>
               </TableRow>
-            ) : data.length ? (
-              data.map((source) => {
-                const status = refreshStatus[source.id]
-                const isRefreshing = status === 'loading'
-                const usedBytes = (source.uploadBytes || 0) + (source.downloadBytes || 0)
-                const totalBytes = source.totalBytes
-                const usagePercent = totalBytes ? Math.min(100, (usedBytes / totalBytes) * 100) : null
-                return (
-                  <TableRow key={source.id}>
-                    <TableCell>
-                      <div className="cell-main">{source.name}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="cell-sub">{source.url || '-'}</div>
-                    </TableCell>
-                    <TableCell>{source.nodeCount}</TableCell>
-                    <TableCell>
-                      {usagePercent == null ? (
-                        '-'
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex min-w-0 max-w-32 flex-col gap-1">
-                              <div className="flex items-center justify-between gap-2 text-xs font-semibold">
-                                <span>{usagePercent.toFixed(1)}%</span>
-                              </div>
-                              <Progress value={usagePercent} aria-label={`流量使用 ${usagePercent.toFixed(1)}%`} />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                              <span>上传：{formatBytes(source.uploadBytes)}</span>
-                              <span>下载：{formatBytes(source.downloadBytes)}</span>
-                              <span>总量：{formatBytes(totalBytes)}</span>
-                              <span>剩余：{formatBytes(Math.max((totalBytes || 0) - usedBytes, 0))}</span>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
-                    </TableCell>
-                    <TableCell>{formatRelativeTime(source.lastRefreshedAt)}</TableCell>
-                    <TableCell className="actions">
-                      <IconButton
-                        label={status === 'success' ? '刷新成功' : status === 'error' ? '刷新失败' : '刷新'}
-                        disabled={isRefreshing || busy === source.id || !source.enabled}
-                        onClick={() => void action(source.id, 'refresh')}
-                      >
-                        {isRefreshing ? (
-                          <RefreshCw className="spin" />
-                        ) : status === 'success' ? (
-                          <Check className="text-emerald-600 dark:text-emerald-400" />
-                        ) : status === 'error' ? (
-                          <X className="text-destructive" />
-                        ) : (
-                          <RefreshCw />
-                        )}
-                      </IconButton>
-                      <IconButton label="编辑" onClick={() => setEditing(source)}>
-                        <Pencil />
-                      </IconButton>
-                      <IconButton label="删除" onClick={() => setDeleting(source)}>
-                        <Trash2 />
-                      </IconButton>
-                      <Switch
-                        className="ml-3.5 mr-2"
-                        aria-label={source.enabled ? '停用' : '启用'}
-                        checked={source.enabled}
-                        onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
-                      />
+            ) : data.length || pendingAdd ? (
+              <>
+                {pendingAdd && (
+                  <TableRow aria-hidden="true">
+                    <TableCell colSpan={7}>
+                      <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
-                )
-              })
+                )}
+                {data.map((source) => {
+                  const status = refreshStatus[source.id]
+                  const isRefreshing = status === 'loading'
+                  const usedBytes = (source.uploadBytes || 0) + (source.downloadBytes || 0)
+                  const totalBytes = source.totalBytes
+                  const usagePercent = totalBytes ? Math.min(100, (usedBytes / totalBytes) * 100) : null
+                  return (
+                    <TableRow key={source.id}>
+                      <TableCell>
+                        <div className="cell-main">{source.name}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="cell-sub">{source.url || '-'}</div>
+                      </TableCell>
+                      <TableCell>{source.nodeCount}</TableCell>
+                      <TableCell>
+                        {usagePercent == null ? (
+                          '-'
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex min-w-0 max-w-32 flex-col gap-1">
+                                <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                                  <span>{usagePercent.toFixed(1)}%</span>
+                                </div>
+                                <Progress value={usagePercent} aria-label={`流量使用 ${usagePercent.toFixed(1)}%`} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                <span>上传：{formatBytes(source.uploadBytes)}</span>
+                                <span>下载：{formatBytes(source.downloadBytes)}</span>
+                                <span>总量：{formatBytes(totalBytes)}</span>
+                                <span>剩余：{formatBytes(Math.max((totalBytes || 0) - usedBytes, 0))}</span>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
+                      </TableCell>
+                      <TableCell>{formatRelativeTime(source.lastRefreshedAt)}</TableCell>
+                      <TableCell className="actions">
+                        <IconButton
+                          label={status === 'success' ? '刷新成功' : status === 'error' ? '刷新失败' : '刷新'}
+                          disabled={isRefreshing || busy === source.id || !source.enabled}
+                          onClick={() => void action(source.id, 'refresh')}
+                        >
+                          {isRefreshing ? (
+                            <RefreshCw className="spin" />
+                          ) : status === 'success' ? (
+                            <Check className="text-emerald-600 dark:text-emerald-400" />
+                          ) : status === 'error' ? (
+                            <X className="text-destructive" />
+                          ) : (
+                            <RefreshCw />
+                          )}
+                        </IconButton>
+                        <IconButton label="编辑" onClick={() => setEditing(source)}>
+                          <Pencil />
+                        </IconButton>
+                        <IconButton label="删除" onClick={() => setDeleting(source)}>
+                          <Trash2 />
+                        </IconButton>
+                        <Switch
+                          className="ml-3.5 mr-2"
+                          aria-label={source.enabled ? '停用' : '启用'}
+                          checked={source.enabled}
+                          onCheckedChange={(checked) => void action(source.id, 'toggle', checked)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </>
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="empty">
@@ -224,6 +234,7 @@ export function SourcesPage() {
           onClose={() => setAdding(false)}
           onSaved={async (jobId) => {
             setAdding(false)
+            setPendingAdd(true)
             setBusy('new')
             try {
               if (jobId) await waitForJob(jobId)
@@ -232,6 +243,7 @@ export function SourcesPage() {
               toast.error(reason instanceof Error ? reason.message : '订阅刷新失败')
             } finally {
               setBusy('')
+              setPendingAdd(false)
               await reload()
             }
           }}
