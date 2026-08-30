@@ -10,7 +10,15 @@ import { AppDialog } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -94,9 +102,22 @@ export function ProfileDialog({
   const selectedProtocols = useStore(form.store, (state) => state.values.protocols)
   const builtin = templates.filter((template) => template.kind === 'builtin')
   const custom = templates.filter((template) => template.kind === 'custom')
+
   function toggle<T>(items: T[], item: T) {
     return items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
   }
+
+  function selectAllSources() {
+    form.setFieldValue(
+      'sourceIds',
+      sources.map((s) => s.id),
+    )
+  }
+
+  function clearAllSources() {
+    form.setFieldValue('sourceIds', [])
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     await form.handleSubmit()
@@ -111,13 +132,13 @@ export function ProfileDialog({
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
               return (
                 <Field data-invalid={invalid}>
-                  <FieldLabel htmlFor="profile-name">名称</FieldLabel>
+                  <FieldLabel htmlFor="profile-name">配置名称</FieldLabel>
                   <Input
                     id="profile-name"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="例如：日常使用"
+                    placeholder="例如：日常聚合 / 游戏专线"
                     aria-invalid={invalid}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
@@ -125,20 +146,21 @@ export function ProfileDialog({
               )
             }}
           </form.Field>
+
           <form.Field name="templateId">
             {(field) => (
               <Field data-invalid={Boolean(templateError)}>
                 <FieldLabel htmlFor="profile-template">订阅模板</FieldLabel>
                 <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as TemplateId)}>
                   <SelectTrigger id="profile-template" className="w-full" aria-invalid={Boolean(templateError)}>
-                    <SelectValue placeholder="选择订阅模板" />
+                    <SelectValue placeholder="选择订阅规则模板" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
                       <SelectLabel>内置模板</SelectLabel>
                       {builtin.map((template) => (
                         <SelectItem key={template.id} value={template.id}>
-                          {template.name}
+                          {template.name} {template.description ? `(${template.description})` : ''}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -158,23 +180,47 @@ export function ProfileDialog({
               </Field>
             )}
           </form.Field>
+
           <form.Field name="sourceIds">
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
               return (
                 <FieldSet data-invalid={invalid}>
-                  <FieldLegend variant="label">节点源</FieldLegend>
+                  <div className="flex items-center justify-between pb-1">
+                    <FieldLegend variant="label">
+                      选择节点源 ({field.state.value.length}/{sources.length})
+                    </FieldLegend>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground underline cursor-pointer"
+                        onClick={selectAllSources}
+                      >
+                        全选
+                      </button>
+                      <span className="text-muted-foreground">·</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground underline cursor-pointer"
+                        onClick={clearAllSources}
+                      >
+                        清空
+                      </button>
+                    </div>
+                  </div>
                   <div className="option-grid">
                     {sources.map((source) => (
-                      <Field key={source.id} orientation="horizontal">
+                      <Field key={source.id} orientation="horizontal" className="cursor-pointer">
                         <Checkbox
                           id={`source-${source.id}`}
                           checked={field.state.value.includes(source.id)}
                           onCheckedChange={() => field.handleChange(toggle(field.state.value, source.id))}
                           aria-invalid={invalid}
                         />
-                        <FieldLabel htmlFor={`source-${source.id}`}>{source.name}</FieldLabel>
-                        <small>{source.nodeCount}</small>
+                        <FieldLabel htmlFor={`source-${source.id}`} className="cursor-pointer flex-1 truncate">
+                          {source.name}
+                        </FieldLabel>
+                        <small className="font-mono text-xs">{source.nodeCount} 节点</small>
                       </Field>
                     ))}
                   </div>
@@ -183,21 +229,45 @@ export function ProfileDialog({
               )
             }}
           </form.Field>
+
           <FieldSet>
-            <FieldLegend variant="label">协议筛选</FieldLegend>
+            <div className="flex items-center justify-between pb-1">
+              <FieldLegend variant="label">协议筛选</FieldLegend>
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground underline cursor-pointer"
+                  onClick={() => form.setFieldValue('protocols', [...protocols])}
+                >
+                  全选
+                </button>
+                <span className="text-muted-foreground">·</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground underline cursor-pointer"
+                  onClick={() => form.setFieldValue('protocols', [])}
+                >
+                  留空 (全部)
+                </button>
+              </div>
+            </div>
             <div className="option-grid protocols">
               {protocols.map((item) => (
-                <Field key={item} orientation="horizontal">
+                <Field key={item} orientation="horizontal" className="cursor-pointer">
                   <Checkbox
                     id={`protocol-${item}`}
                     checked={selectedProtocols.includes(item)}
                     onCheckedChange={() => form.setFieldValue('protocols', toggle(selectedProtocols, item))}
                   />
-                  <FieldLabel htmlFor={`protocol-${item}`}>{item}</FieldLabel>
+                  <FieldLabel htmlFor={`protocol-${item}`} className="cursor-pointer uppercase font-mono text-xs">
+                    {item}
+                  </FieldLabel>
                 </Field>
               ))}
             </div>
+            <FieldDescription>未勾选任何协议时默认包含全部协议节点。</FieldDescription>
           </FieldSet>
+
           <form.Field name="tags">
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -209,7 +279,7 @@ export function ProfileDialog({
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="留空表示全部"
+                    placeholder="例如：香港, 日本 (逗号分隔，留空表示不过滤)"
                     aria-invalid={invalid}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
@@ -217,12 +287,14 @@ export function ProfileDialog({
               )
             }}
           </form.Field>
+
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
         </FieldGroup>
+
         <footer>
           <Button type="button" variant="outline" onClick={onClose}>
             取消
@@ -230,7 +302,8 @@ export function ProfileDialog({
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => (
               <Button disabled={Boolean(isSubmitting) || Boolean(templateError)}>
-                {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存并生成
+                {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
+                {profile ? '保存并生成' : '创建并生成'}
               </Button>
             )}
           </form.Subscribe>
