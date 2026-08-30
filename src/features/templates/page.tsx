@@ -57,9 +57,7 @@ export function TemplatesPage() {
   const [deleting, setDeleting] = useState<TemplateSummary>()
   const [choosingSource, setChoosingSource] = useState(false)
   const [busy, setBusy] = useState('')
-  const builtin =
-    templates?.filter((template) => template.kind === 'builtin') ??
-    builtinFallback
+  const builtin = templates?.filter((template) => template.kind === 'builtin') ?? builtinFallback
   const custom = templates?.filter((template) => template.kind === 'custom') ?? []
 
   async function duplicate(template: TemplateSummary) {
