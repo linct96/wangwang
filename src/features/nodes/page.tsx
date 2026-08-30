@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { NodeItem } from '@/api/types'
-import { AppDialog, IconButton, PageState, Status } from '@/components/app-primitives'
+import { AppConfirmDialog, IconButton, PageState, Status } from '@/components/app-primitives'
 import { AddNodeDialog, NodeDialog } from './node-dialogs'
 import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -25,6 +25,7 @@ export function NodesPage() {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<NodeItem>()
   const [deleting, setDeleting] = useState<NodeItem>()
+  const [deletingBusy, setDeletingBusy] = useState(false)
   const pages = Math.max(1, Math.ceil((data?.total || 0) / 50))
   async function batch(value: boolean) {
     try {
@@ -34,6 +35,20 @@ export function NodesPage() {
       toast.success(value ? '节点已启用' : '节点已停用')
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '操作失败')
+    }
+  }
+  async function remove() {
+    if (!deleting) return
+    setDeletingBusy(true)
+    try {
+      await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
+      setDeleting(undefined)
+      await reload()
+      toast.success('手动节点已删除')
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : '删除失败')
+    } finally {
+      setDeletingBusy(false)
     }
   }
   return (
@@ -245,32 +260,14 @@ export function NodesPage() {
         />
       )}
       {deleting && (
-        <AppDialog title="删除手动节点" onClose={() => setDeleting(undefined)}>
-          <p className="dialog-copy">
-            删除“{deleting.name}”后，引用“手动节点”的配置会自动重新生成。订阅来源仍持有的相同节点不会被删除。
-          </p>
-          <footer className="dialog-actions">
-            <Button type="button" variant="outline" onClick={() => setDeleting(undefined)}>
-              取消
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={async () => {
-                try {
-                  await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
-                  setDeleting(undefined)
-                  await reload()
-                  toast.success('手动节点已删除')
-                } catch (reason) {
-                  toast.error(reason instanceof Error ? reason.message : '删除失败')
-                }
-              }}
-            >
-              删除
-            </Button>
-          </footer>
-        </AppDialog>
+        <AppConfirmDialog
+          title="删除手动节点"
+          description={`删除“${deleting.name}”后，引用“手动节点”的配置会自动重新生成。订阅来源仍持有的相同节点不会被删除。`}
+          confirmLabel="删除"
+          busy={deletingBusy}
+          onClose={() => setDeleting(undefined)}
+          onConfirm={() => void remove()}
+        />
       )}
     </div>
   )

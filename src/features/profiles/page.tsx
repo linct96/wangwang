@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source, TemplateSummary } from '@/api/types'
-import { IconButton, PageState } from '@/components/app-primitives'
+import { AppConfirmDialog, IconButton, PageState } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ export function ProfilesPage() {
   const { data: templates = [] } = useApi<TemplateSummary[]>('/templates')
   const [adding, setAdding] = useState(false)
   const [editingProfile, setEditingProfile] = useState<Profile>()
+  const [deleting, setDeleting] = useState<Profile>()
   const [compileStatus, setCompileStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [busyId, setBusyId] = useState('')
 
@@ -70,14 +71,17 @@ export function ProfilesPage() {
     }
   }
 
-  async function remove(id: string, name: string) {
-    if (!window.confirm(`确定删除配置「${name}」？`)) return
+  async function remove(profile: Profile) {
+    setBusyId(profile.id)
     try {
-      await api(`/profiles/${id}`, { method: 'DELETE' })
+      await api(`/profiles/${profile.id}`, { method: 'DELETE' })
+      setDeleting(undefined)
       await reload()
       toast.success('配置已删除')
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '删除失败')
+    } finally {
+      setBusyId('')
     }
   }
 
@@ -171,7 +175,7 @@ export function ProfilesPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => void remove(profile.id, profile.name)}
+                                onClick={() => setDeleting(profile)}
                               >
                                 <Trash2 className="size-4 mr-2" /> 删除配置
                               </DropdownMenuItem>
@@ -284,6 +288,16 @@ export function ProfilesPage() {
             }
             await reload()
           }}
+        />
+      )}
+      {deleting && (
+        <AppConfirmDialog
+          title="删除配置"
+          description={`确定删除“${deleting.name}”？此操作无法撤销。`}
+          confirmLabel="删除"
+          busy={busyId === deleting.id}
+          onClose={() => setDeleting(undefined)}
+          onConfirm={() => void remove(deleting)}
         />
       )}
     </div>
