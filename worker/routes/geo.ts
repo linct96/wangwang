@@ -1,94 +1,81 @@
 import { Hono } from 'hono'
 import { fail, ok } from '../http'
-
-export type GeoCatalog = {
-  version: 1
-  source: { repository: 'MetaCubeX/meta-rules-dat'; ref: 'meta'; commit?: string; fetchedAt: string }
-  geosite: { full: string[]; lite: string[] }
-  geoip: { full: string[]; lite: string[] }
-}
-
+export type GeoProvider = 'metacubex' | 'metacubex-lite' | 'loyalsoldier' | 'custom'
+export type GeoType = 'geosite' | 'geoip'
 type TreeItem = { path?: string; type?: string }
-const API = 'https://api.github.com/repos/MetaCubeX/meta-rules-dat/git/trees/meta?recursive=1'
-const CACHE_KEY = 'https://wangwang.internal/api/geo/catalog'
-function validCatalog(value: unknown): value is GeoCatalog {
-  if (!value || typeof value !== 'object') return false
-  const c = value as Partial<GeoCatalog>
-  return (
-    c.version === 1 &&
-    Boolean(c.source?.fetchedAt) &&
-    (['geosite', 'geoip'] as const).every((type) => {
-      const group = c[type]
-      return Boolean(group) && (['full', 'lite'] as const).every((dataset) => Array.isArray(group?.[dataset]))
+const EXTRA = ['china-list', 'apple-cn', 'google-cn', 'win-spy', 'win-update', 'win-extra']
+const LOYALSOLDIER_SOURCES = {
+  geoipCatalog: { repo: 'Loyalsoldier/geoip', ref: 'release', path: 'dat' },
+  geositeCatalog: { repo: 'v2fly/domain-list-community', ref: 'master', path: 'data' },
+} as const
+const CACHE_BASE = 'https://wangwang.internal/api/geo/catalog'
+function pathItem(provider: Exclude<GeoProvider, 'custom'>, type: GeoType, path: string) {
+  if (provider === 'loyalsoldier')
+    return type === 'geoip' && path.startsWith(`${LOYALSOLDIER_SOURCES.geoipCatalog.path}/`) && path.endsWith('.dat')
+      ? path.slice(4, -4).toLowerCase()
+      : type === 'geosite' && path.startsWith(`${LOYALSOLDIER_SOURCES.geositeCatalog.path}/`) && !path.includes('/', 5)
+        ? path.slice(5)
+        : null
+  const m = /^(geo|geo-lite)\/(geosite|geoip)\/([^/]+)\.mrs$/.exec(path)
+  return m && m[2] === type && (provider === 'metacubex' ? m[1] === 'geo' : m[1] === 'geo-lite') ? m[3] : null
+}
+async function getGeoCatalog(provider: Exclude<GeoProvider, 'custom'>, type: GeoType, token?: string) {
+  const cacheKey = `${CACHE_BASE}?provider=${provider}&type=${type}`
+  const cached = await caches.default.match(cacheKey)
+  const hit = cached ? ((await cached.json()) as { items: string[]; updatedAt: string }) : undefined
+  if (hit && Date.now() - Date.parse(hit.updatedAt) < 86400000) return { ...hit, stale: false }
+  const repo =
+    provider === 'loyalsoldier'
+      ? type === 'geosite'
+        ? LOYALSOLDIER_SOURCES.geositeCatalog.repo
+        : LOYALSOLDIER_SOURCES.geoipCatalog.repo
+      : 'MetaCubeX/meta-rules-dat'
+  const ref =
+    provider === 'loyalsoldier'
+      ? type === 'geosite'
+        ? LOYALSOLDIER_SOURCES.geositeCatalog.ref
+        : LOYALSOLDIER_SOURCES.geoipCatalog.ref
+      : 'meta'
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'wangwang' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const response = await fetch(`https://api.github.com/repos/${repo}/git/trees/${ref}?recursive=1`, { headers })
+  if (!response.ok) throw new Error(`GitHub ${response.status}`)
+  const payload = (await response.json()) as { tree?: TreeItem[]; truncated?: boolean }
+  if (payload.truncated) throw new Error('GitHub tree truncated')
+  const items = (payload.tree || [])
+    .filter((i) => i.type === 'blob')
+    .map((i) => {
+      const value = i.path && pathItem(provider, type, i.path)
+      if (value && provider !== 'loyalsoldier' && type === 'geoip' && /^[a-z]{2}$/i.test(value))
+        return value.toUpperCase()
+      return value
     })
+    .filter((v): v is string => Boolean(v))
+  const merged = provider === 'loyalsoldier' && type === 'geosite' ? [...items, ...EXTRA] : items
+  const result = { items: [...new Set(merged)].sort(), updatedAt: new Date().toISOString() }
+  await caches.default.put(
+    cacheKey,
+    new Response(JSON.stringify(result), { headers: { 'Cache-Control': 'max-age=604800' } }),
   )
+  return { ...result, stale: false }
 }
-
-export function buildGeoCatalog(tree: TreeItem[], fetchedAt = new Date().toISOString(), commit?: string): GeoCatalog {
-  const values = {
-    geosite: { full: [] as string[], lite: [] as string[] },
-    geoip: { full: [] as string[], lite: [] as string[] },
-  }
-  for (const item of tree) {
-    if (item.type !== 'blob' || !item.path?.endsWith('.mrs')) continue
-    const match = /^(geo|geo-lite)\/(geosite|geoip)\/([^/]+)\.mrs$/.exec(item.path)
-    if (!match) continue
-    const dataset = match[1] === 'geo-lite' ? 'lite' : 'full'
-    let value = match[3]
-    if (match[2] === 'geoip' && /^[a-z]{2}$/i.test(value)) value = value.toUpperCase()
-    values[match[2] as 'geosite' | 'geoip'][dataset].push(value)
-  }
-  for (const type of ['geosite', 'geoip'] as const)
-    for (const dataset of ['full', 'lite'] as const) values[type][dataset] = [...new Set(values[type][dataset])].sort()
-  return {
-    version: 1,
-    source: { repository: 'MetaCubeX/meta-rules-dat', ref: 'meta', ...(commit ? { commit } : {}), fetchedAt },
-    ...values,
-  }
-}
-
 export const geoRouter = new Hono<{ Bindings: Env }>()
 geoRouter.get('/catalog', async (c) => {
-  const type = c.req.query('type')
-  const dataset = c.req.query('dataset')
-  if (!['geosite', 'geoip'].includes(type || '') || !['full', 'lite'].includes(dataset || ''))
-    return fail(c, 400, 'INVALID_GEO_QUERY', 'type 必须是 geosite 或 geoip，dataset 必须是 full 或 lite')
-  const cache = await caches.default.match(CACHE_KEY)
-  let catalog: GeoCatalog | undefined
-  let stale = false
-  if (cache) {
-    try {
-      const value: unknown = await cache.json()
-      catalog = validCatalog(value) ? value : undefined
-    } catch {
-      catalog = undefined
-    }
+  const type = c.req.query('type') as GeoType,
+    provider = c.req.query('provider') as GeoProvider
+  if (
+    !['geosite', 'geoip'].includes(type) ||
+    !['metacubex', 'metacubex-lite', 'loyalsoldier', 'custom'].includes(provider)
+  )
+    return fail(c, 400, 'INVALID_GEO_QUERY', 'type 或 provider 无效')
+  if (provider === 'custom') return fail(c, 400, 'UNSUPPORTED_GEO_PROVIDER', 'Custom 不提供 catalog')
+  try {
+    return ok(c, { provider, type, ...(await getGeoCatalog(provider, type, c.env.GITHUB_TOKEN)) })
+  } catch {
+    const staleResponse = await caches.default.match(`${CACHE_BASE}?provider=${provider}&type=${type}`)
+    const stale = staleResponse ? ((await staleResponse.json()) as { items: string[]; updatedAt: string }) : undefined
+    if (!stale || Date.now() - Date.parse(stale.updatedAt) > 7 * 86400000)
+      return fail(c, 503, 'GEO_UNAVAILABLE', 'GEO 数据暂时不可用')
+    return ok(c, { provider, type, ...stale, stale: true })
   }
-  const fresh = catalog && Date.now() - Date.parse(catalog.source.fetchedAt) < 24 * 3600_000
-  if (!fresh) {
-    try {
-      const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'wangwang' }
-      if (c.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${c.env.GITHUB_TOKEN}`
-      const response = await fetch(API, { headers })
-      if (!response.ok) throw new Error(`GitHub ${response.status}`)
-      const payload = (await response.json()) as { tree?: TreeItem[]; sha?: string; truncated?: boolean }
-      if (payload.truncated) throw new Error('GitHub tree truncated')
-      catalog = buildGeoCatalog(payload.tree || [], new Date().toISOString(), payload.sha)
-      await caches.default.put(
-        CACHE_KEY,
-        new Response(JSON.stringify(catalog), { headers: { 'Cache-Control': 'max-age=86400' } }),
-      )
-    } catch {
-      if (!catalog || Date.now() - Date.parse(catalog.source.fetchedAt) > 7 * 86400_000)
-        return fail(c, 503, 'GEO_UNAVAILABLE', 'GEO 数据暂时不可用')
-      stale = true
-    }
-  }
-  return ok(c, {
-    type,
-    dataset,
-    items: catalog![type as 'geosite' | 'geoip'][dataset as 'full' | 'lite'],
-    source: catalog!.source,
-    ...(stale ? { stale: true } : {}),
-  })
 })
