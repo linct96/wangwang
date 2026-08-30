@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Database, LoaderCircle, Plus, Search } from 'lucide-react'
+import { AlertTriangle, Database, LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,8 @@ import {
   findPresetProvider,
   findProviderRule,
   providerMatchesPreset,
-  targetsEqual,
+  ruleDifferences,
+  ruleMatchesSelection,
 } from './helpers'
 import type {
   ApplyRuleSetPresetOptions,
@@ -46,13 +47,12 @@ const sourceLabels: Record<RuleSetPresetSource, string> = {
   loyalsoldier: 'Loyalsoldier',
 }
 
-function initialTarget(preset: RuleSetPreset, draft: VisualTemplateDraft): RuleTargetDraft {
+function initialTarget(preset: RuleSetPreset, draft: VisualTemplateDraft): RuleTargetDraft | undefined {
   if (preset.defaultTarget === 'DIRECT' || preset.defaultTarget === 'REJECT') {
     return { kind: 'builtin', value: preset.defaultTarget }
   }
-  const group =
-    draft.groups.find((item) => item.name === preset.defaultTarget) || draft.groups.find((item) => item.name)
-  return group ? { kind: 'group', groupId: group.id } : { kind: 'builtin', value: 'DIRECT' }
+  const group = preset.defaultTarget && draft.groups.find((item) => item.name === preset.defaultTarget)
+  return group ? { kind: 'group', groupId: group.id } : undefined
 }
 
 function initialSelection(preset: RuleSetPreset, draft: VisualTemplateDraft): ApplyRuleSetPresetOptions {
@@ -60,7 +60,7 @@ function initialSelection(preset: RuleSetPreset, draft: VisualTemplateDraft): Ap
   return {
     presetId: preset.id,
     providerId: newRuleProvider(draft.ruleProviders).id,
-    ruleId: newRule(target).id,
+    ruleId: newRule(target || { kind: 'builtin', value: 'DIRECT' }).id,
     target,
     providerConflict: 'keep',
     ruleConflict: 'keep',
@@ -116,6 +116,7 @@ export function RuleSetPresetDialog({
   const [source, setSource] = useState<RuleSetPresetSource | 'all'>('all')
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
+  const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>()
   const catalog = useRuleSetPresetCatalog(open)
   const presets = catalog.data?.items.length ? catalog.data.items : RULE_SET_PRESETS
 
@@ -138,6 +139,7 @@ export function RuleSetPresetDialog({
     setSource('all')
     setCategory('all')
     setSelections({})
+    setBulkTarget(undefined)
     setOpen(true)
   }
 
@@ -166,6 +168,15 @@ export function RuleSetPresetDialog({
   }
 
   const selectedCount = Object.keys(selections).length
+  const missingTargetCount = Object.values(selections).filter((selection) => !selection.target).length
+  const bulkTargetValue = bulkTarget
+    ? bulkTarget.kind === 'group'
+      ? `group:${bulkTarget.groupId}`
+      : bulkTarget.value
+    : ''
+  const staleSources = catalog.data?.sources
+    ? (['metacubex', 'loyalsoldier'] as const).filter((source) => catalog.data?.sources?.[source].stale)
+    : []
   return (
     <>
       <span onClick={show}>{children}</span>
@@ -212,19 +223,88 @@ export function RuleSetPresetDialog({
             </Select>
           </div>
 
-          {(catalog.loading || catalog.error || catalog.data?.stale) && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {catalog.loading ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : (
-                <AlertTriangle className="size-3.5 text-amber-500" />
-              )}
+          {(catalog.loading || catalog.error || catalog.data?.stale || catalog.data?.updatedAt) && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {(catalog.loading || catalog.error || catalog.data?.stale) &&
+                (catalog.loading ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <AlertTriangle className="size-3.5 text-amber-500" />
+                ))}
               {catalog.loading
                 ? '正在同步社区目录，内置预设可正常使用'
                 : catalog.error
                   ? '社区目录加载失败，当前使用内置预设'
-                  : '社区目录暂时使用上次同步的数据'}
-            </p>
+                  : catalog.data?.stale
+                    ? '社区目录暂时使用上次同步的数据'
+                    : null}
+              {staleSources.map((source) => (
+                <span key={source}>
+                  {source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 数据暂时使用上次同步结果
+                </span>
+              ))}
+              {catalog.data?.updatedAt && !catalog.loading && (
+                <>
+                  <span>
+                    更新于{' '}
+                    {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2" onClick={catalog.reload}>
+                    <RefreshCw className="size-3.5" />
+                    刷新
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          {mode === 'provider-and-rule' && selectedCount > 0 && (
+            <div className="flex items-center gap-2 border-y py-3">
+              <span className="shrink-0 text-sm font-medium">统一目标策略</span>
+              <Select
+                value={bulkTargetValue}
+                onValueChange={(value) =>
+                  setBulkTarget(
+                    value.startsWith('group:')
+                      ? { kind: 'group', groupId: value.slice(6) }
+                      : { kind: 'builtin', value: value as 'DIRECT' | 'REJECT' },
+                  )
+                }
+              >
+                <SelectTrigger className="min-w-0 flex-1">
+                  <SelectValue placeholder="请选择目标策略" />
+                </SelectTrigger>
+                <SelectContent>
+                  {draft.groups
+                    .filter((group) => group.name)
+                    .map((group) => (
+                      <SelectItem key={group.id} value={`group:${group.id}`}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  <SelectItem value="DIRECT">DIRECT</SelectItem>
+                  <SelectItem value="REJECT">REJECT</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!bulkTarget}
+                onClick={() =>
+                  bulkTarget &&
+                  setSelections((current) =>
+                    Object.fromEntries(
+                      Object.entries(current).map(([id, selection]) => [id, { ...selection, target: bulkTarget }]),
+                    ),
+                  )
+                }
+              >
+                应用到全部
+              </Button>
+            </div>
           )}
 
           <div className="max-h-[min(56vh,520px)] space-y-2 overflow-y-auto pr-1">
@@ -234,12 +314,31 @@ export function RuleSetPresetDialog({
               const providerConflict = Boolean(existingProvider && !providerMatchesPreset(existingProvider, preset))
               const differences = existingProvider ? providerDifferences(existingProvider, preset) : []
               const existingRule = existingProvider ? findProviderRule(draft.rules, existingProvider.id) : undefined
+              const ruleDifferenceLabels =
+                selection &&
+                existingProvider &&
+                existingRule?.kind === 'structured' &&
+                existingRule.type === 'RULE-SET' &&
+                selection.target
+                  ? ruleDifferences(
+                      existingRule,
+                      existingProvider.id,
+                      selection.target,
+                      Boolean(selection.noResolve ?? preset.noResolve),
+                    )
+                  : []
               const ruleConflict = Boolean(
                 selection &&
+                existingProvider &&
                 existingRule?.kind === 'structured' &&
                 existingRule.type === 'RULE-SET' &&
                 selection.target &&
-                !targetsEqual(existingRule.target, selection.target),
+                !ruleMatchesSelection(
+                  existingRule,
+                  existingProvider.id,
+                  selection.target,
+                  Boolean(selection.noResolve ?? preset.noResolve),
+                ),
               )
               return (
                 <div key={preset.id} className="rounded-md border bg-card p-3">
@@ -318,15 +417,14 @@ export function RuleSetPresetDialog({
                           {ruleConflict && existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET' && (
                             <div className="space-y-2 text-xs">
                               <p className="text-destructive">
-                                已有分流规则：{targetLabel(existingRule.target, draft.groups)} →{' '}
-                                {targetLabel(selection.target, draft.groups)}
+                                已有分流规则配置不同（{ruleDifferenceLabels.join('、')}），请选择是否使用本次配置。
                               </p>
                               <Segmented
                                 value={selection.ruleConflict}
                                 onChange={(value) => updateSelection(preset, { ruleConflict: value })}
                                 options={[
                                   { value: 'keep', label: '保留当前' },
-                                  { value: 'replace', label: '修改目标' },
+                                  { value: 'replace', label: '使用本次配置' },
                                 ]}
                               />
                             </div>
@@ -359,13 +457,16 @@ export function RuleSetPresetDialog({
             <span className="mr-auto flex items-center gap-1.5 text-sm text-muted-foreground">
               <Database className="size-4" />
               已选择 {selectedCount} 项
+              {mode === 'provider-and-rule' && missingTargetCount > 0 && (
+                <span className="text-destructive">（还有 {missingTargetCount} 项未设置目标）</span>
+              )}
             </span>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               取消
             </Button>
             <Button
               type="button"
-              disabled={!selectedCount}
+              disabled={!selectedCount || (mode === 'provider-and-rule' && missingTargetCount > 0)}
               onClick={() => {
                 onApply(Object.values(selections), presets)
                 setOpen(false)

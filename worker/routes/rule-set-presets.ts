@@ -5,9 +5,18 @@ import type { RuleSetPreset, RuleSetPresetCategory } from '../../src/features/te
 
 type GitTreeItem = { path?: string; type?: 'blob' | 'tree'; sha?: string }
 type GitTree = { sha: string; tree: GitTreeItem[]; truncated?: boolean }
-type StoredCatalog = { items: RuleSetPreset[]; updatedAt: string; revision: string }
+type SourceSnapshot = { items: RuleSetPreset[]; updatedAt: string; revision: string; stale?: boolean }
+type StoredCatalog = {
+  items: RuleSetPreset[]
+  updatedAt: string
+  revision: string
+  sources?: { metacubex: SourceSnapshot; loyalsoldier: SourceSnapshot }
+}
 
 const CATALOG_KEY = 'rule-set-presets:catalog:v1'
+const CATALOG_VERSION = 'v2'
+// 修改内置预设或生成逻辑时递增，确保上游 SHA 不变时也会重建 Catalog。
+const BUILTIN_CATALOG_REVISION = '2026-08-30-1'
 const MAX_AGE = 36 * 60 * 60 * 1000
 const META_REPO = 'MetaCubeX/meta-rules-dat'
 const LOYAL_REPO = 'Loyalsoldier/clash-rules'
@@ -99,38 +108,69 @@ function files(tree: GitTree, extension: string) {
 
 function mergeBuiltins(items: RuleSetPreset[]) {
   const builtinUrls = new Set(RULE_SET_PRESETS.map((item) => item.provider.url))
+  const names = new Set(RULE_SET_PRESETS.map((item) => item.provider.name))
   return [
     ...RULE_SET_PRESETS,
     ...items
-      .filter((item) => !builtinUrls.has(item.provider.url))
+      .filter((item) => {
+        if (builtinUrls.has(item.provider.url) || names.has(item.provider.name)) return false
+        names.add(item.provider.name)
+        return true
+      })
       .sort((left, right) => left.name.localeCompare(right.name, 'en')),
   ]
 }
 
 export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog> {
   const previous = await env.KV.get<StoredCatalog>(CATALOG_KEY, { type: 'json' })
-  const [metaRoot, loyalRoot] = await Promise.all([
+  const [metaResult, loyalResult] = await Promise.allSettled([
     githubTree(META_REPO, 'meta', env.GITHUB_TOKEN),
     githubTree(LOYAL_REPO, 'release', env.GITHUB_TOKEN),
   ])
-  const revision = `${metaRoot.sha}:${loyalRoot.sha}`
-  if (previous?.revision === revision) {
-    const result = { ...previous, updatedAt: new Date().toISOString() }
-    await env.KV.put(CATALOG_KEY, JSON.stringify(result))
-    return result
+  const previousSources = previous?.sources
+  const fallback = (source: 'metacubex' | 'loyalsoldier') =>
+    previousSources?.[source] || {
+      items: previous?.items.filter((item) => item.source === source) || [],
+      revision: previous?.revision || '',
+      updatedAt: previous?.updatedAt || new Date(0).toISOString(),
+      stale: true,
+    }
+  let metacubex = fallback('metacubex')
+  let loyalsoldier = fallback('loyalsoldier')
+  if (metaResult.status === 'fulfilled') {
+    try {
+      const metaGeo = await githubTree(META_REPO, childTree(metaResult.value, 'geo'), env.GITHUB_TOKEN)
+      const [geosite, geoip] = await Promise.all([
+        githubTree(META_REPO, childTree(metaGeo, 'geosite'), env.GITHUB_TOKEN),
+        githubTree(META_REPO, childTree(metaGeo, 'geoip'), env.GITHUB_TOKEN),
+      ])
+      metacubex = {
+        items: [
+          ...files(geosite, '.mrs').map((name) => metaPreset(name, 'domain')),
+          ...files(geoip, '.mrs').map((name) => metaPreset(name, 'ipcidr')),
+        ],
+        revision: `${metaResult.value.sha}:${metaGeo.sha}`,
+        updatedAt: new Date().toISOString(),
+      }
+    } catch {
+      metacubex = { ...metacubex, stale: true }
+    }
   }
-
-  const metaGeo = await githubTree(META_REPO, childTree(metaRoot, 'geo'), env.GITHUB_TOKEN)
-  const [geosite, geoip] = await Promise.all([
-    githubTree(META_REPO, childTree(metaGeo, 'geosite'), env.GITHUB_TOKEN),
-    githubTree(META_REPO, childTree(metaGeo, 'geoip'), env.GITHUB_TOKEN),
-  ])
-  const items = mergeBuiltins([
-    ...files(geosite, '.mrs').map((name) => metaPreset(name, 'domain')),
-    ...files(geoip, '.mrs').map((name) => metaPreset(name, 'ipcidr')),
-    ...files(loyalRoot, '.txt').map(loyalPreset),
-  ])
-  const result = { items, revision, updatedAt: new Date().toISOString() }
+  if (loyalResult.status === 'fulfilled')
+    loyalsoldier = {
+      items: files(loyalResult.value, '.txt').map(loyalPreset),
+      revision: loyalResult.value.sha,
+      updatedAt: new Date().toISOString(),
+    }
+  else loyalsoldier = { ...loyalsoldier, stale: true }
+  if (!metacubex.items.length && !loyalsoldier.items.length) throw new Error('Rule-set preset sources unavailable')
+  const updatedAt = new Date().toISOString()
+  const result = {
+    items: mergeBuiltins([...metacubex.items, ...loyalsoldier.items]),
+    revision: `${CATALOG_VERSION}:${BUILTIN_CATALOG_REVISION}:${metacubex.revision}:${loyalsoldier.revision}`,
+    updatedAt,
+    sources: { metacubex, loyalsoldier },
+  }
   await env.KV.put(CATALOG_KEY, JSON.stringify(result))
   return result
 }

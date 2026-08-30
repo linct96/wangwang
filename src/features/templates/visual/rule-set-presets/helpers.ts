@@ -1,4 +1,10 @@
-import type { RuleDraft, RuleProviderDraft, RuleTargetDraft, StructuredRuleProviderDraft } from '../model'
+import type {
+  RuleDraft,
+  RuleProviderDraft,
+  RuleTargetDraft,
+  RuleSetRuleDraft,
+  StructuredRuleProviderDraft,
+} from '../model'
 import type { RuleSetPreset } from './types'
 
 export function createProviderFromPreset(preset: RuleSetPreset, id: string): StructuredRuleProviderDraft {
@@ -41,6 +47,28 @@ export function findProviderRule(rules: RuleDraft[], providerId: string) {
       rule.provider.kind === 'provider' &&
       rule.provider.providerId === providerId,
   )
+}
+
+export function ruleDifferences(
+  rule: RuleSetRuleDraft,
+  providerId: string,
+  target: RuleTargetDraft,
+  noResolve: boolean,
+) {
+  return [
+    ...(rule.provider.kind !== 'provider' || rule.provider.providerId !== providerId ? ['规则集数据源'] : []),
+    ...(targetsEqual(rule.target, target) ? [] : ['目标策略']),
+    ...(Boolean(rule.noResolve) === noResolve ? [] : ['no-resolve']),
+  ]
+}
+
+export function ruleMatchesSelection(
+  rule: RuleSetRuleDraft,
+  providerId: string,
+  target: RuleTargetDraft,
+  noResolve: boolean,
+) {
+  return ruleDifferences(rule, providerId, target, noResolve).length === 0
 }
 
 export function targetsEqual(left: RuleTargetDraft, right: RuleTargetDraft) {
