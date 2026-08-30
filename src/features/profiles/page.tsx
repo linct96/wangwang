@@ -161,10 +161,7 @@ export function ProfilesPage() {
                               </IconButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                disabled={isCompiling}
-                                onClick={() => void triggerCompile(profile.id)}
-                              >
+                              <DropdownMenuItem disabled={isCompiling} onClick={() => void triggerCompile(profile.id)}>
                                 <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
                                 {isCompiling ? '正在生成...' : '重新生成'}
                               </DropdownMenuItem>

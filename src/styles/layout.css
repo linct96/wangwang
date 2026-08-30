@@ -75,6 +75,7 @@
 .header-nav {
   display: none;
   align-items: center;
+  gap: 4px;
   padding: 3px;
   border-radius: 9999px;
   background: color-mix(in oklch, var(--muted) 60%, transparent);
