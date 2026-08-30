@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useForm, useStore } from '@tanstack/react-form'
+import { useForm } from '@tanstack/react-form'
 import { RefreshCw } from 'lucide-react'
 import { z } from 'zod'
 import { api } from '@/api/client'
@@ -8,16 +8,14 @@ import { useApi } from '@/api/use-api'
 import type { Profile, Source, TemplateId, TemplateSummary } from '@/api/types'
 import { AppDialog } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,9 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 import '@/styles/profile-dialog.css'
-
-const protocols = ['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic']
 
 export function ProfileDialog({
   sources,
@@ -99,7 +96,6 @@ export function ProfileDialog({
       }
     },
   })
-  const selectedProtocols = useStore(form.store, (state) => state.values.protocols)
   const builtin = templates.filter((template) => template.kind === 'builtin')
   const custom = templates.filter((template) => template.kind === 'custom')
 
@@ -185,88 +181,83 @@ export function ProfileDialog({
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
               return (
-                <FieldSet data-invalid={invalid}>
-                  <div className="flex items-center justify-between pb-1">
-                    <FieldLegend variant="label">
-                      选择节点源 ({field.state.value.length}/{sources.length})
-                    </FieldLegend>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground underline cursor-pointer"
-                        onClick={selectAllSources}
-                      >
-                        全选
-                      </button>
-                      <span className="text-muted-foreground">·</span>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground underline cursor-pointer"
-                        onClick={clearAllSources}
-                      >
-                        清空
-                      </button>
+                <Field data-invalid={invalid} className="gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FieldLabel>包含节点源</FieldLabel>
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        已选 {field.state.value.length} / {sources.length}
+                      </Badge>
                     </div>
+                    {sources.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="text-xs text-muted-foreground hover:text-foreground h-6 px-1.5"
+                          onClick={selectAllSources}
+                        >
+                          全选
+                        </Button>
+                        <span className="text-muted-foreground text-xs">/</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="text-xs text-muted-foreground hover:text-foreground h-6 px-1.5"
+                          onClick={clearAllSources}
+                        >
+                          清空
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  <div className="option-grid">
-                    {sources.map((source) => (
-                      <Field key={source.id} orientation="horizontal" className="cursor-pointer">
-                        <Checkbox
-                          id={`source-${source.id}`}
-                          checked={field.state.value.includes(source.id)}
-                          onCheckedChange={() => field.handleChange(toggle(field.state.value, source.id))}
-                          aria-invalid={invalid}
-                        />
-                        <FieldLabel htmlFor={`source-${source.id}`} className="cursor-pointer flex-1 truncate">
-                          {source.name}
-                        </FieldLabel>
-                        <small className="font-mono text-xs">{source.nodeCount} 节点</small>
-                      </Field>
-                    ))}
-                  </div>
+
+                  {sources.length === 0 ? (
+                    <div className="text-xs text-muted-foreground py-6 text-center border border-dashed rounded-lg">
+                      暂无可用节点源，请先添加节点源
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-0.5">
+                      {sources.map((source) => {
+                        const checked = field.state.value.includes(source.id)
+                        return (
+                          <label
+                            key={source.id}
+                            htmlFor={`source-${source.id}`}
+                            className={cn(
+                              'flex items-center justify-between gap-2.5 p-2.5 rounded-lg border text-sm cursor-pointer transition-all select-none',
+                              checked
+                                ? 'border-primary/40 bg-primary/5 shadow-xs dark:bg-primary/10'
+                                : 'border-border/70 hover:border-border hover:bg-muted/40',
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Checkbox
+                                id={`source-${source.id}`}
+                                checked={checked}
+                                onCheckedChange={() => field.handleChange(toggle(field.state.value, source.id))}
+                                aria-invalid={invalid}
+                              />
+                              <span className="truncate font-medium text-xs sm:text-sm">{source.name}</span>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="text-[11px] font-mono shrink-0 px-1.5 py-0 h-4.5 text-muted-foreground font-normal"
+                            >
+                              {source.nodeCount} 节点
+                            </Badge>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
                   {invalid && <FieldError errors={field.state.meta.errors} />}
-                </FieldSet>
+                </Field>
               )
             }}
           </form.Field>
-
-          <FieldSet>
-            <div className="flex items-center justify-between pb-1">
-              <FieldLegend variant="label">协议筛选</FieldLegend>
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground underline cursor-pointer"
-                  onClick={() => form.setFieldValue('protocols', [...protocols])}
-                >
-                  全选
-                </button>
-                <span className="text-muted-foreground">·</span>
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground underline cursor-pointer"
-                  onClick={() => form.setFieldValue('protocols', [])}
-                >
-                  留空 (全部)
-                </button>
-              </div>
-            </div>
-            <div className="option-grid protocols">
-              {protocols.map((item) => (
-                <Field key={item} orientation="horizontal" className="cursor-pointer">
-                  <Checkbox
-                    id={`protocol-${item}`}
-                    checked={selectedProtocols.includes(item)}
-                    onCheckedChange={() => form.setFieldValue('protocols', toggle(selectedProtocols, item))}
-                  />
-                  <FieldLabel htmlFor={`protocol-${item}`} className="cursor-pointer uppercase font-mono text-xs">
-                    {item}
-                  </FieldLabel>
-                </Field>
-              ))}
-            </div>
-            <FieldDescription>未勾选任何协议时默认包含全部协议节点。</FieldDescription>
-          </FieldSet>
 
           <form.Field name="tags">
             {(field) => {
