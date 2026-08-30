@@ -99,9 +99,7 @@ export function ProfileDetailPage() {
             <div className="flex items-center gap-2.5">
               <h1>{profile?.name || '配置详情'}</h1>
             </div>
-            <p>
-              最后生成于 {formatDate(profile?.compiledAt || null)}
-            </p>
+            <p>最后生成于 {formatDate(profile?.compiledAt || null)}</p>
           </div>
         </div>
 
