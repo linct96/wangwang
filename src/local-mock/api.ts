@@ -166,6 +166,14 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       stale: false,
     } as T
   }
+  if (pathname === '/rule-set-presets/sync' && method === 'POST') {
+    return {
+      items: RULE_SET_PRESETS,
+      updatedAt: new Date().toISOString(),
+      revision: 'local',
+      stale: false,
+    } as T
+  }
 
   if (pathname === '/auth/status' && method === 'GET') {
     const initialized = localStorage.getItem('wangwang:local-admin') === '1'

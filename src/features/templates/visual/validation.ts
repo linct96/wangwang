@@ -1,7 +1,11 @@
-import type { ProxyGroupDraft, RuleDraft, VisualIssue, VisualTemplateDraft } from './model'
+import type { ProxyGroupDraft, RuleDraft, RuleProviderDraft, VisualIssue, VisualTemplateDraft } from './model'
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
+
+export function resolvePresetNoResolve(provider: RuleProviderDraft | undefined, requested: boolean) {
+  return Boolean(requested && provider?.kind === 'structured' && provider.behavior === 'ipcidr')
+}
 
 export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft, 'ruleProviders'>) {
   if (rule.kind !== 'structured') return false

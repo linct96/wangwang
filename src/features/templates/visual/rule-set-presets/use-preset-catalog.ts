@@ -10,7 +10,10 @@ const CACHE_TTL = 10 * 60 * 1000
 function loadCatalog(force = false) {
   if (!force && cachedCatalog && Date.now() - cachedAt < CACHE_TTL) return Promise.resolve(cachedCatalog)
   if (inFlightRequest) return inFlightRequest
-  inFlightRequest = api<RuleSetPresetCatalogResponse>('/rule-set-presets/catalog')
+  inFlightRequest = api<RuleSetPresetCatalogResponse>(
+    force ? '/rule-set-presets/sync' : '/rule-set-presets/catalog',
+    force ? { method: 'POST' } : undefined,
+  )
     .then((data) => {
       cachedCatalog = data
       cachedAt = Date.now()
