@@ -5,7 +5,6 @@ export type BuiltinTemplate = {
   name: string
   description: string
   yaml: string
-  revision: number
 }
 
 const minimalYaml = `mixed-port: 7890
@@ -14,6 +13,23 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
+# GEOIP 使用 DAT 数据
+# true: geoip.dat
+# false: country.mmdb
+geodata-mode: true
+
+# GEO 数据自动更新
+geo-auto-update: true
+
+# 更新周期，单位：小时
+geo-update-interval: 24
+
+# GEO 数据源
+geox-url:
+  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
   respect-rules: true
@@ -94,6 +110,23 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
+# GEOIP 使用 DAT 数据
+# true: geoip.dat
+# false: country.mmdb
+geodata-mode: true
+
+# GEO 数据自动更新
+geo-auto-update: true
+
+# 更新周期，单位：小时
+geo-update-interval: 24
+
+# GEO 数据源
+geox-url:
+  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
   respect-rules: true
@@ -175,6 +208,23 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
+# GEOIP 使用 DAT 数据
+# true: geoip.dat
+# false: country.mmdb
+geodata-mode: true
+
+# GEO 数据自动更新
+geo-auto-update: true
+
+# 更新周期，单位：小时
+geo-update-interval: 24
+
+# GEO 数据源
+geox-url:
+  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
   respect-rules: true
@@ -284,21 +334,18 @@ export const builtinTemplates: BuiltinTemplate[] = [
     name: '精简规则模板',
     description: '基础 DNS / 国内直连 / 自动选择',
     yaml: minimalYaml,
-    revision: 2,
   },
   {
     id: 'builtin:standard',
     name: '标准规则模板',
     description: '常用分流规则 / 国内直连 / 国外代理',
     yaml: standardYaml,
-    revision: 2,
   },
   {
     id: 'builtin:full',
     name: '完全规则模板',
     description: '完整规则 / AI / Google / Telegram 等',
     yaml: fullYaml,
-    revision: 2,
   },
 ]
 
