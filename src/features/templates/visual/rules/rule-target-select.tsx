@@ -8,12 +8,17 @@ export function RuleTargetSelect({
   className,
 }: {
   groups: ProxyGroupDraft[]
-  value: RuleTargetDraft
+  value?: RuleTargetDraft
   onChange: (value: RuleTargetDraft) => void
   className?: string
 }) {
-  const selected =
-    value.kind === 'group' ? `group:${value.groupId}` : value.kind === 'builtin' ? value.value : `raw:${value.value}`
+  const selected = value
+    ? value.kind === 'group'
+      ? `group:${value.groupId}`
+      : value.kind === 'builtin'
+        ? value.value
+        : `raw:${value.value}`
+    : undefined
 
   return (
     <Select
@@ -29,7 +34,7 @@ export function RuleTargetSelect({
       }
     >
       <SelectTrigger className={className}>
-        <SelectValue />
+        <SelectValue placeholder="请选择目标策略" />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
@@ -42,7 +47,7 @@ export function RuleTargetSelect({
             ))}
           <SelectItem value="DIRECT">DIRECT</SelectItem>
           <SelectItem value="REJECT">REJECT</SelectItem>
-          {value.kind === 'raw' && <SelectItem value={`raw:${value.value}`}>{value.value}（高级）</SelectItem>}
+          {value?.kind === 'raw' && <SelectItem value={`raw:${value.value}`}>{value.value}（高级）</SelectItem>}
         </SelectGroup>
       </SelectContent>
     </Select>

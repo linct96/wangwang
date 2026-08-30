@@ -159,8 +159,8 @@ export function targetLabel(target: RuleTargetDraft, groups: ProxyGroupDraft[] =
   return groups.find((group) => group.id === target.groupId)?.name || '未知代理组'
 }
 
-export function ruleProviderLabel(provider: RuleProviderDraft) {
+export function ruleProviderLabel(provider: RuleProviderDraft, includeFormat = true) {
   if (provider.kind === 'raw') return '高级 YAML'
   const behavior = { domain: 'Domain', ipcidr: 'IP-CIDR', classical: 'Classical' }[provider.behavior]
-  return [behavior, provider.format?.toUpperCase()].filter(Boolean).join(' · ')
+  return includeFormat ? [behavior, provider.format?.toUpperCase()].filter(Boolean).join(' · ') : behavior
 }

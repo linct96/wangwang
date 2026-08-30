@@ -417,7 +417,7 @@ export function RuleSetPresetDialog({
                         </div>
                       )}
 
-                      {mode === 'provider-and-rule' && selection.target && (
+                      {mode === 'provider-and-rule' && (
                         <div className="space-y-2">
                           <span className="text-xs font-medium">目标策略</span>
                           <RuleTargetSelect
