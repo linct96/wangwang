@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, Database, LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -28,8 +29,6 @@ import type {
   RuleSetPresetSource,
 } from './types'
 import { useRuleSetPresetCatalog } from './use-preset-catalog'
-
-const MAX_VISIBLE_PRESETS = 200
 
 const categoryLabels: Record<RuleSetPresetCategory, string> = {
   common: '常用',
@@ -132,7 +131,14 @@ export function RuleSetPresetDialog({
             .some((value) => value!.toLowerCase().includes(keyword))),
     )
   }, [category, presets, query, source])
-  const visiblePresets = filtered.slice(0, MAX_VISIBLE_PRESETS)
+  const listRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 86,
+    getItemKey: (index) => filtered[index].id,
+    overscan: 8,
+  })
 
   function show() {
     setQuery('')
@@ -309,160 +315,171 @@ export function RuleSetPresetDialog({
             </div>
           )}
 
-          <div className="max-h-[min(56vh,520px)] space-y-2 overflow-y-auto pr-1">
-            {visiblePresets.map((preset) => {
-              const selection = selections[preset.id]
-              const existingProvider = findPresetProvider(draft.ruleProviders, preset)
-              const providerConflict = Boolean(existingProvider && !providerMatchesPreset(existingProvider, preset))
-              const differences = existingProvider ? providerDifferences(existingProvider, preset) : []
-              const existingRule = existingProvider ? findProviderRule(draft.rules, existingProvider.id) : undefined
-              const ruleDifferenceLabels =
-                selection &&
-                existingProvider &&
-                existingRule?.kind === 'structured' &&
-                existingRule.type === 'RULE-SET' &&
-                selection.target
-                  ? ruleDifferences(
-                      existingRule,
-                      existingProvider.id,
-                      selection.target,
-                      resolvePresetNoResolve(
-                        existingProvider && selection.providerConflict === 'keep'
-                          ? existingProvider
-                          : createProviderFromPreset(preset, selection.providerId),
-                        selection.noResolve ?? preset.noResolve ?? false,
-                      ),
-                    )
-                  : []
-              const ruleConflict = Boolean(
-                selection &&
-                existingProvider &&
-                existingRule?.kind === 'structured' &&
-                existingRule.type === 'RULE-SET' &&
-                selection.target &&
-                !ruleMatchesSelection(
-                  existingRule,
-                  existingProvider.id,
-                  selection.target,
-                  resolvePresetNoResolve(
-                    existingProvider && selection.providerConflict === 'keep'
-                      ? existingProvider
-                      : createProviderFromPreset(preset, selection.providerId),
-                    selection.noResolve ?? preset.noResolve ?? false,
+          <div ref={listRef} className="max-h-[min(56vh,520px)] overflow-y-auto pr-1">
+            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const preset = filtered[virtualItem.index]
+                const selection = selections[preset.id]
+                const existingProvider = findPresetProvider(draft.ruleProviders, preset)
+                const providerConflict = Boolean(existingProvider && !providerMatchesPreset(existingProvider, preset))
+                const differences = existingProvider ? providerDifferences(existingProvider, preset) : []
+                const existingRule = existingProvider ? findProviderRule(draft.rules, existingProvider.id) : undefined
+                const ruleDifferenceLabels =
+                  selection &&
+                  existingProvider &&
+                  existingRule?.kind === 'structured' &&
+                  existingRule.type === 'RULE-SET' &&
+                  selection.target
+                    ? ruleDifferences(
+                        existingRule,
+                        existingProvider.id,
+                        selection.target,
+                        resolvePresetNoResolve(
+                          existingProvider && selection.providerConflict === 'keep'
+                            ? existingProvider
+                            : createProviderFromPreset(preset, selection.providerId),
+                          selection.noResolve ?? preset.noResolve ?? false,
+                        ),
+                      )
+                    : []
+                const ruleConflict = Boolean(
+                  selection &&
+                  existingProvider &&
+                  existingRule?.kind === 'structured' &&
+                  existingRule.type === 'RULE-SET' &&
+                  selection.target &&
+                  !ruleMatchesSelection(
+                    existingRule,
+                    existingProvider.id,
+                    selection.target,
+                    resolvePresetNoResolve(
+                      existingProvider && selection.providerConflict === 'keep'
+                        ? existingProvider
+                        : createProviderFromPreset(preset, selection.providerId),
+                      selection.noResolve ?? preset.noResolve ?? false,
+                    ),
                   ),
-                ),
-              )
-              return (
-                <div key={preset.id} className="rounded-md border bg-card p-3">
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      id={`preset-${mode}-${preset.id}`}
-                      checked={Boolean(selection)}
-                      onCheckedChange={(checked) =>
-                        setSelections((current) => {
-                          if (checked === true) return { ...current, [preset.id]: initialSelection(preset, draft) }
-                          const { [preset.id]: _, ...rest } = current
-                          return rest
-                        })
-                      }
-                    />
-                    <label htmlFor={`preset-${mode}-${preset.id}`} className="min-w-0 flex-1 cursor-pointer">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <strong className="text-sm">{preset.name}</strong>
-                        <Badge variant="outline">{categoryLabels[preset.category]}</Badge>
-                        {existingProvider && (
-                          <Badge variant={providerConflict ? 'destructive' : 'secondary'}>
-                            {providerConflict ? '存在冲突' : '已存在'}
-                          </Badge>
-                        )}
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {sourceLabels[preset.source]} · {preset.description}
-                      </span>
-                      {existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET' && (
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          已配置：{targetLabel(existingRule.target, draft.groups)}
-                        </span>
-                      )}
-                    </label>
-                  </div>
+                )
+                return (
+                  <div
+                    key={virtualItem.key}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualItem.index}
+                    className="absolute top-0 left-0 w-full pb-2"
+                    style={{ transform: `translateY(${virtualItem.start}px)` }}
+                  >
+                    <div className="rounded-md border bg-card p-3">
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id={`preset-${mode}-${preset.id}`}
+                          checked={Boolean(selection)}
+                          onCheckedChange={(checked) =>
+                            setSelections((current) => {
+                              if (checked === true) return { ...current, [preset.id]: initialSelection(preset, draft) }
+                              const { [preset.id]: _, ...rest } = current
+                              return rest
+                            })
+                          }
+                        />
+                        <label htmlFor={`preset-${mode}-${preset.id}`} className="min-w-0 flex-1 cursor-pointer">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <strong className="text-sm">{preset.name}</strong>
+                            <Badge variant="outline">{categoryLabels[preset.category]}</Badge>
+                            {existingProvider && (
+                              <Badge variant={providerConflict ? 'destructive' : 'secondary'}>
+                                {providerConflict ? '存在冲突' : '已存在'}
+                              </Badge>
+                            )}
+                          </span>
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            {sourceLabels[preset.source]} · {preset.description}
+                          </span>
+                          {existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET' && (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              已配置：{targetLabel(existingRule.target, draft.groups)}
+                            </span>
+                          )}
+                        </label>
+                      </div>
 
-                  {selection && (providerConflict || mode === 'provider-and-rule') && (
-                    <div className="mt-3 space-y-3 border-t pt-3 pl-7">
-                      {providerConflict && existingProvider && (
-                        <div className="space-y-2 text-xs">
-                          <p className="text-destructive">已有同名规则集数据源，当前配置不会被静默覆盖。</p>
-                          <div className="overflow-hidden rounded-md border">
-                            {differences.map((difference) => (
-                              <div
-                                key={difference.label}
-                                className="grid grid-cols-[72px_1fr] gap-2 border-b p-2 last:border-b-0"
-                              >
-                                <span className="font-medium">{difference.label}</span>
-                                <span className="min-w-0 space-y-1 text-muted-foreground">
-                                  <span className="block break-all">当前：{difference.current}</span>
-                                  <span className="block break-all">预设：{difference.preset}</span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                          <Segmented
-                            value={selection.providerConflict}
-                            onChange={(value) => updateSelection(preset, { providerConflict: value })}
-                            options={[
-                              { value: 'keep', label: '保留现有' },
-                              { value: 'replace', label: '使用预设覆盖' },
-                            ]}
-                          />
-                        </div>
-                      )}
-
-                      {mode === 'provider-and-rule' && (
-                        <div className="space-y-2">
-                          <span className="text-xs font-medium">目标策略</span>
-                          <RuleTargetSelect
-                            groups={draft.groups}
-                            value={selection.target}
-                            onChange={(target) => updateSelection(preset, { target })}
-                            className="w-full"
-                          />
-                          {ruleConflict && existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET' && (
+                      {selection && (providerConflict || mode === 'provider-and-rule') && (
+                        <div className="mt-3 space-y-3 border-t pt-3 pl-7">
+                          {providerConflict && existingProvider && (
                             <div className="space-y-2 text-xs">
-                              <p className="text-destructive">
-                                已有分流规则配置不同（{ruleDifferenceLabels.join('、')}），请选择是否使用本次配置。
-                              </p>
+                              <p className="text-destructive">已有同名规则集数据源，当前配置不会被静默覆盖。</p>
+                              <div className="overflow-hidden rounded-md border">
+                                {differences.map((difference) => (
+                                  <div
+                                    key={difference.label}
+                                    className="grid grid-cols-[72px_1fr] gap-2 border-b p-2 last:border-b-0"
+                                  >
+                                    <span className="font-medium">{difference.label}</span>
+                                    <span className="min-w-0 space-y-1 text-muted-foreground">
+                                      <span className="block break-all">当前：{difference.current}</span>
+                                      <span className="block break-all">预设：{difference.preset}</span>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
                               <Segmented
-                                value={selection.ruleConflict}
-                                onChange={(value) => updateSelection(preset, { ruleConflict: value })}
+                                value={selection.providerConflict}
+                                onChange={(value) => updateSelection(preset, { providerConflict: value })}
                                 options={[
-                                  { value: 'keep', label: '保留当前' },
-                                  { value: 'replace', label: '使用本次配置' },
+                                  { value: 'keep', label: '保留现有' },
+                                  { value: 'replace', label: '使用预设覆盖' },
                                 ]}
                               />
                             </div>
                           )}
-                          {supportsNoResolve(preset, selection) && (
-                            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                              <Checkbox
-                                checked={selection.noResolve}
-                                onCheckedChange={(checked) => updateSelection(preset, { noResolve: checked === true })}
+
+                          {mode === 'provider-and-rule' && (
+                            <div className="space-y-2">
+                              <span className="text-xs font-medium">目标策略</span>
+                              <RuleTargetSelect
+                                groups={draft.groups}
+                                value={selection.target}
+                                onChange={(target) => updateSelection(preset, { target })}
+                                className="w-full"
                               />
-                              no-resolve
-                            </label>
+                              {ruleConflict &&
+                                existingRule?.kind === 'structured' &&
+                                existingRule.type === 'RULE-SET' && (
+                                  <div className="space-y-2 text-xs">
+                                    <p className="text-destructive">
+                                      已有分流规则配置不同（{ruleDifferenceLabels.join('、')}
+                                      ），请选择是否使用本次配置。
+                                    </p>
+                                    <Segmented
+                                      value={selection.ruleConflict}
+                                      onChange={(value) => updateSelection(preset, { ruleConflict: value })}
+                                      options={[
+                                        { value: 'keep', label: '保留当前' },
+                                        { value: 'replace', label: '使用本次配置' },
+                                      ]}
+                                    />
+                                  </div>
+                                )}
+                              {supportsNoResolve(preset, selection) && (
+                                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                                  <Checkbox
+                                    checked={selection.noResolve}
+                                    onCheckedChange={(checked) =>
+                                      updateSelection(preset, { noResolve: checked === true })
+                                    }
+                                  />
+                                  no-resolve
+                                </label>
+                              )}
+                            </div>
                           )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              )
-            })}
+                  </div>
+                )
+              })}
+            </div>
             {!filtered.length && <p className="py-10 text-center text-sm text-muted-foreground">没有匹配的规则集</p>}
-            {filtered.length > visiblePresets.length && (
-              <p className="py-3 text-center text-xs text-muted-foreground">
-                当前显示前 {MAX_VISIBLE_PRESETS} 项，请输入关键词继续查找
-              </p>
-            )}
           </div>
 
           <div className="dialog-actions">
