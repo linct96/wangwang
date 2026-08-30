@@ -68,9 +68,13 @@ app.get('/s/:profileId/:token/config.yaml', async (c) => {
     yaml = profile.compiledYaml
     c.executionCtx.waitUntil(c.env.KV.put(key, yaml))
   }
+  const filename = encodeURIComponent(`${profile.name}.yaml`).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
   return c.body(yaml, 200, {
     'Content-Type': 'text/yaml; charset=utf-8',
-    'Content-Disposition': `inline; filename="${profile.id}.yaml"`,
+    'Content-Disposition': `attachment; filename*=UTF-8''${filename}`,
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
   })
