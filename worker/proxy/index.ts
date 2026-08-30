@@ -143,7 +143,7 @@ export function parseEditableProxyYaml(text: string): ProxyConfig {
   return config
 }
 
-export async function parseProxyText(text: string): Promise<ParseResult> {
+export async function parseProxyText(text: string, nodeNameFilter: string | null = null): Promise<ParseResult> {
   if (!text.trim()) throw new Error('节点内容为空')
   if (new TextEncoder().encode(text).byteLength > MAX_TEXT_BYTES) throw new Error('节点内容超过 1 MiB')
 
@@ -179,8 +179,10 @@ export async function parseProxyText(text: string): Promise<ParseResult> {
     }
   }
 
+  const filter = nodeNameFilter ? new RegExp(nodeNameFilter) : null
   const deduplicated = new Map<string, ParsedNode>()
   for (const config of configs) {
+    if (filter?.test(config.name)) continue
     if (config.__warning) {
       if (warnings.length < 20)
         warnings.push(config.name ? `节点 "${config.name}"：${String(config.__warning)}` : String(config.__warning))
