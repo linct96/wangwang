@@ -13,18 +13,12 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-# GEOIP 使用 DAT 数据
-# true: geoip.dat
-# false: country.mmdb
 geodata-mode: true
 
-# GEO 数据自动更新
 geo-auto-update: true
 
-# 更新周期，单位：小时
 geo-update-interval: 24
 
-# GEO 数据源
 geox-url:
   geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
   geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
@@ -110,18 +104,12 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-# GEOIP 使用 DAT 数据
-# true: geoip.dat
-# false: country.mmdb
 geodata-mode: true
 
-# GEO 数据自动更新
 geo-auto-update: true
 
-# 更新周期，单位：小时
 geo-update-interval: 24
 
-# GEO 数据源
 geox-url:
   geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
   geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
@@ -208,18 +196,12 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-# GEOIP 使用 DAT 数据
-# true: geoip.dat
-# false: country.mmdb
 geodata-mode: true
 
-# GEO 数据自动更新
 geo-auto-update: true
 
-# 更新周期，单位：小时
 geo-update-interval: 24
 
-# GEO 数据源
 geox-url:
   geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
   geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
