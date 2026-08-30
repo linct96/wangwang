@@ -198,16 +198,6 @@
   color: var(--muted-foreground);
 }
 
-.mobile-toggle {
-  display: flex;
-}
-
-@media (min-width: 768px) {
-  .mobile-toggle {
-    display: none;
-  }
-}
-
 /* 移动端菜单与遮罩 */
 .mobile-nav {
   display: flex;
