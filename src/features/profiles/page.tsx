@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Check, Copy, FileCode2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { Copy, Eye, FileCode2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { ProfileDialog } from './profile-dialog'
 import '@/styles/profiles.css'
 
@@ -107,11 +108,8 @@ export function ProfilesPage() {
             <article className="profile-card" key={index} aria-hidden="true">
               <div className="profile-card-header">
                 <div className="profile-card-title-wrap">
-                  <Skeleton className="h-9 w-9 rounded-md" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-4 w-20" />
-                  </div>
+                  <Skeleton className="h-9 w-9 rounded-lg" />
+                  <Skeleton className="h-5 w-32" />
                 </div>
               </div>
               <div className="profile-card-body">
@@ -119,8 +117,11 @@ export function ProfilesPage() {
                 <Skeleton className="h-4 w-3/4" />
               </div>
               <div className="profile-card-footer">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-8 w-28" />
+                <Skeleton className="h-4 w-20" />
+                <div className="profile-action-buttons">
+                  <Skeleton className="h-7 w-16" />
+                  <Skeleton className="h-7 w-20" />
+                </div>
               </div>
             </article>
           ))}
@@ -142,11 +143,9 @@ export function ProfilesPage() {
                           <div className="profile-card-icon">
                             <FileCode2 className="size-4.5" />
                           </div>
-                          <div className="profile-card-title">
-                            <Link to="/profiles/$id" params={{ id: profile.id }} className="profile-name-link">
-                              {profile.name}
-                            </Link>
-                          </div>
+                          <h3 className="profile-name" title={profile.name}>
+                            {profile.name}
+                          </h3>
                         </div>
                         <div className="profile-header-actions">
                           <Switch
@@ -162,11 +161,15 @@ export function ProfilesPage() {
                               </IconButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                disabled={isCompiling}
+                                onClick={() => void triggerCompile(profile.id)}
+                              >
+                                <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
+                                {isCompiling ? '正在生成...' : '重新生成'}
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setEditingProfile(profile)}>
                                 <Pencil className="size-4 mr-2" /> 编辑设置
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => copySubscription(profile.subscriptionUrl)}>
-                                <Copy className="size-4 mr-2" /> 复制订阅
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -216,23 +219,20 @@ export function ProfilesPage() {
 
                       <div className="profile-card-footer">
                         <div className="profile-time-info">
-                          <span>{profile.compiledAt ? formatRelativeTime(profile.compiledAt) : '尚未生成'}</span>
+                          <span>
+                            {isCompiling
+                              ? '配置生成中...'
+                              : profile.compiledAt
+                                ? formatRelativeTime(profile.compiledAt)
+                                : '尚未生成'}
+                          </span>
                         </div>
                         <div className="profile-action-buttons">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isCompiling}
-                            onClick={() => void triggerCompile(profile.id)}
-                          >
-                            {isCompiling ? (
-                              <RefreshCw className="size-3.5 spin" />
-                            ) : status === 'success' ? (
-                              <Check className="size-3.5 text-emerald-500" />
-                            ) : (
-                              <RefreshCw className="size-3.5" />
-                            )}
-                            {isCompiling ? '生成中' : '重新生成'}
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to="/profiles/$id" params={{ id: profile.id }}>
+                              <Eye className="size-3.5" />
+                              查看
+                            </Link>
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => copySubscription(profile.subscriptionUrl)}>
                             <Copy className="size-3.5" />

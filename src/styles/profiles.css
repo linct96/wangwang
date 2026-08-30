@@ -29,15 +29,15 @@
 
   .profile-card-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
   }
 
   .profile-card-title-wrap {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    gap: 11px;
     min-width: 0;
     flex: 1;
   }
@@ -48,32 +48,31 @@
     justify-content: center;
     width: 36px;
     height: 36px;
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
     background: color-mix(in oklch, #3b82f6 12%, transparent);
     color: #3b82f6;
     flex-shrink: 0;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
-  .profile-card-title {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    flex: 1;
+  .profile-card:hover .profile-card-icon {
+    background: color-mix(in oklch, #3b82f6 18%, transparent);
   }
 
-  .profile-name-link {
+  .profile-name {
+    margin: 0;
     font-size: 15px;
-    font-weight: 650;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
     color: var(--foreground);
-    text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .profile-name-link:hover {
-    text-decoration: underline;
+    min-width: 0;
+    flex: 1;
   }
 
   .profile-header-actions {
