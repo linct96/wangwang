@@ -1,23 +1,35 @@
 import { Hono } from 'hono'
-import { ok } from '../http'
+import { fail, ok } from '../http'
 import { RULE_SET_PRESETS } from '../../src/features/templates/visual/rule-set-presets/catalog'
 import type { RuleSetPreset, RuleSetPresetCategory } from '../../src/features/templates/visual/rule-set-presets/types'
 
 type GitTreeItem = { path?: string; type?: 'blob' | 'tree'; sha?: string }
 type GitTree = { sha: string; tree: GitTreeItem[]; truncated?: boolean }
-type SourceSnapshot = { items: RuleSetPreset[]; updatedAt: string; revision: string; stale?: boolean }
+type SourceSnapshot = {
+  items: RuleSetPreset[]
+  updatedAt: string
+  checkedAt: string
+  revision: string
+  stale?: boolean
+}
 type StoredCatalog = {
   items: RuleSetPreset[]
   updatedAt: string
+  checkedAt?: string
   revision: string
+  version?: string
+  builtinRevision?: string
+  stale?: boolean
   sources?: { metacubex: SourceSnapshot; loyalsoldier: SourceSnapshot }
 }
 
-const CATALOG_KEY = 'rule-set-presets:catalog:v1'
+const CATALOG_KEY = 'rule-set-presets:catalog'
 const CATALOG_VERSION = 'v2'
 // 修改内置预设或生成逻辑时递增，确保上游 SHA 不变时也会重建 Catalog。
 const BUILTIN_CATALOG_REVISION = '2026-08-30-1'
 const MAX_AGE = 36 * 60 * 60 * 1000
+const SYNC_COOLDOWN = 5 * 60 * 1000
+const SYNC_COOLDOWN_KEY = 'rule-set-presets:sync:last'
 const META_REPO = 'MetaCubeX/meta-rules-dat'
 const LOYAL_REPO = 'Loyalsoldier/clash-rules'
 
@@ -107,14 +119,21 @@ function files(tree: GitTree, extension: string) {
 }
 
 function mergeBuiltins(items: RuleSetPreset[]) {
-  const builtinUrls = new Set(RULE_SET_PRESETS.map((item) => item.provider.url))
-  const names = new Set(RULE_SET_PRESETS.map((item) => item.provider.name))
+  const identities = new Set(
+    RULE_SET_PRESETS.flatMap((item) => [
+      `id:${item.id}`,
+      `config:${item.source}|${item.provider.url}|${item.provider.behavior}|${item.provider.format || ''}`,
+    ]),
+  )
   return [
     ...RULE_SET_PRESETS,
     ...items
       .filter((item) => {
-        if (builtinUrls.has(item.provider.url) || names.has(item.provider.name)) return false
-        names.add(item.provider.name)
+        const id = `id:${item.id}`
+        const config = `config:${item.source}|${item.provider.url}|${item.provider.behavior}|${item.provider.format || ''}`
+        if (identities.has(id) || identities.has(config)) return false
+        identities.add(id)
+        identities.add(config)
         return true
       })
       .sort((left, right) => left.name.localeCompare(right.name, 'en')),
@@ -128,11 +147,13 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
     githubTree(LOYAL_REPO, 'release', env.GITHUB_TOKEN),
   ])
   const previousSources = previous?.sources
+  const checkedAt = new Date().toISOString()
   const fallback = (source: 'metacubex' | 'loyalsoldier') =>
     previousSources?.[source] || {
       items: previous?.items.filter((item) => item.source === source) || [],
       revision: previous?.revision || '',
       updatedAt: previous?.updatedAt || new Date(0).toISOString(),
+      checkedAt,
       stale: true,
     }
   let metacubex = fallback('metacubex')
@@ -150,7 +171,8 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
           ...files(geoip, '.mrs').map((name) => metaPreset(name, 'ipcidr')),
         ],
         revision: `${metaResult.value.sha}:${metaGeo.sha}`,
-        updatedAt: new Date().toISOString(),
+        updatedAt: checkedAt,
+        checkedAt,
       }
     } catch {
       metacubex = { ...metacubex, stale: true }
@@ -160,15 +182,20 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
     loyalsoldier = {
       items: files(loyalResult.value, '.txt').map(loyalPreset),
       revision: loyalResult.value.sha,
-      updatedAt: new Date().toISOString(),
+      updatedAt: checkedAt,
+      checkedAt,
     }
   else loyalsoldier = { ...loyalsoldier, stale: true }
   if (!metacubex.items.length && !loyalsoldier.items.length) throw new Error('Rule-set preset sources unavailable')
-  const updatedAt = new Date().toISOString()
+  const updatedAt = [metacubex.updatedAt, loyalsoldier.updatedAt].sort().at(-1) || checkedAt
   const result = {
     items: mergeBuiltins([...metacubex.items, ...loyalsoldier.items]),
+    version: CATALOG_VERSION,
+    builtinRevision: BUILTIN_CATALOG_REVISION,
     revision: `${CATALOG_VERSION}:${BUILTIN_CATALOG_REVISION}:${metacubex.revision}:${loyalsoldier.revision}`,
     updatedAt,
+    checkedAt,
+    stale: Boolean(metacubex.stale || loyalsoldier.stale),
     sources: { metacubex, loyalsoldier },
   }
   await env.KV.put(CATALOG_KEY, JSON.stringify(result))
@@ -177,7 +204,9 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
 
 async function ruleSetPresetCatalog(env: Env) {
   const stored = await env.KV.get<StoredCatalog>(CATALOG_KEY, { type: 'json' })
-  if (stored && Date.now() - Date.parse(stored.updatedAt) < MAX_AGE) return { ...stored, stale: false }
+  const compatible = stored?.version === CATALOG_VERSION && stored.builtinRevision === BUILTIN_CATALOG_REVISION
+  if (stored && compatible && !stored.stale && Date.now() - Date.parse(stored.updatedAt) < MAX_AGE)
+    return { ...stored, stale: false }
   try {
     return { ...(await syncRuleSetPresetCatalog(env)), stale: false }
   } catch {
@@ -189,3 +218,14 @@ async function ruleSetPresetCatalog(env: Env) {
 export const ruleSetPresetsRouter = new Hono<{ Bindings: Env }>()
 
 ruleSetPresetsRouter.get('/catalog', async (c) => ok(c, await ruleSetPresetCatalog(c.env)))
+ruleSetPresetsRouter.post('/sync', async (c) => {
+  const now = Date.now()
+  const last = Number(await c.env.KV.get(SYNC_COOLDOWN_KEY))
+  if (last && now - last < SYNC_COOLDOWN) return ok(c, await ruleSetPresetCatalog(c.env))
+  try {
+    await c.env.KV.put(SYNC_COOLDOWN_KEY, String(now), { expirationTtl: Math.ceil(SYNC_COOLDOWN / 1000) })
+    return ok(c, { ...(await syncRuleSetPresetCatalog(c.env)), stale: false })
+  } catch {
+    return fail(c, 503, 'RULE_SET_PRESETS_UNAVAILABLE', '社区规则集同步失败')
+  }
+})

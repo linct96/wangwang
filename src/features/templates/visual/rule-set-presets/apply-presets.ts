@@ -1,5 +1,5 @@
 import type { RuleDraft, RuleSetRuleDraft, VisualTemplateDraft } from '../model'
-import { canUseNoResolve } from '../validation'
+import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
 import {
   createProviderFromPreset,
   findPresetProvider,
@@ -55,7 +55,7 @@ export function applyRuleSetPresets(
     if (!provider) continue
     const existingRule = findProviderRule(plannedRules, provider.id)
     if (existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET') {
-      const noResolve = selection.noResolve ?? preset.noResolve ?? false
+      const noResolve = resolvePresetNoResolve(provider, selection.noResolve ?? preset.noResolve ?? false)
       if (
         !ruleMatchesSelection(existingRule, provider.id, selection.target, noResolve) &&
         selection.ruleConflict === 'replace'
@@ -76,7 +76,7 @@ export function applyRuleSetPresets(
       type: 'RULE-SET',
       provider: { kind: 'provider', providerId: provider.id },
       target: selection.target,
-      noResolve: selection.noResolve ?? preset.noResolve ?? false,
+      noResolve: resolvePresetNoResolve(provider, selection.noResolve ?? preset.noResolve ?? false),
     }
     const planned = canUseNoResolve(rule, { ruleProviders }) ? rule : { ...rule, noResolve: false }
     additions.push(planned)

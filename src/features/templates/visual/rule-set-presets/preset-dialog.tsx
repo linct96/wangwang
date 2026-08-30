@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RuleTargetSelect } from '../rules'
-import { canUseNoResolve } from '../validation'
+import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
 import { newRule, newRuleProvider } from '../yaml-adapter'
 import { targetLabel, type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { RULE_SET_PRESETS } from './catalog'
@@ -234,7 +234,9 @@ export function RuleSetPresetDialog({
               {catalog.loading
                 ? '正在同步社区目录，内置预设可正常使用'
                 : catalog.error
-                  ? '社区目录加载失败，当前使用内置预设'
+                  ? catalog.data
+                    ? '社区目录刷新失败，当前使用上次加载的数据'
+                    : '社区目录加载失败，当前使用内置预设'
                   : catalog.data?.stale
                     ? '社区目录暂时使用上次同步的数据'
                     : null}
@@ -324,7 +326,12 @@ export function RuleSetPresetDialog({
                       existingRule,
                       existingProvider.id,
                       selection.target,
-                      Boolean(selection.noResolve ?? preset.noResolve),
+                      resolvePresetNoResolve(
+                        existingProvider && selection.providerConflict === 'keep'
+                          ? existingProvider
+                          : createProviderFromPreset(preset, selection.providerId),
+                        selection.noResolve ?? preset.noResolve ?? false,
+                      ),
                     )
                   : []
               const ruleConflict = Boolean(
@@ -337,7 +344,12 @@ export function RuleSetPresetDialog({
                   existingRule,
                   existingProvider.id,
                   selection.target,
-                  Boolean(selection.noResolve ?? preset.noResolve),
+                  resolvePresetNoResolve(
+                    existingProvider && selection.providerConflict === 'keep'
+                      ? existingProvider
+                      : createProviderFromPreset(preset, selection.providerId),
+                    selection.noResolve ?? preset.noResolve ?? false,
+                  ),
                 ),
               )
               return (
