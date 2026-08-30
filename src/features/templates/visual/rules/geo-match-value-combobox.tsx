@@ -1,21 +1,21 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
-import { geoLabel, searchGeoCatalog, type GeoCatalogType, type GeoDataset } from './geo-catalog'
+import { geoLabel, searchGeoCatalog, type GeoCatalogType, type GeoProvider } from './geo-catalog'
 import { useGeoCatalog } from './use-geo-catalog'
 
 export function GeoMatchValueCombobox({
   type,
   value,
-  dataset,
+  provider,
   onChange,
 }: {
   type: 'GEOSITE' | 'GEOIP'
   value?: string
-  dataset: GeoDataset
+  provider: GeoProvider
   onChange: (value: string) => void
 }) {
   const catalogType: GeoCatalogType = type.toLowerCase() as GeoCatalogType
-  const { data, error, loading } = useGeoCatalog(catalogType, dataset)
+  const { data, error, loading } = useGeoCatalog(catalogType, provider)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const items = searchGeoCatalog(data?.items || [], value || '')

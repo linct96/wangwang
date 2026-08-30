@@ -1,20 +1,20 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { type ProxyGroupDraft, type RuleDraft, type VisualIssue } from '../model'
 import { RuleCard } from './rule-card'
-import type { GeoDataset } from './geo-catalog'
+import type { GeoProvider } from './geo-catalog'
 
 export function RuleList({
   rules,
   groups,
   issues,
   onChange,
-  dataset = 'full',
+  provider = 'metacubex',
 }: {
   rules: RuleDraft[]
   groups: ProxyGroupDraft[]
   issues: VisualIssue[]
   onChange: (rules: RuleDraft[]) => void
-  dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
+  provider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
 }) {
   const firstMatch = rules.findIndex((rule) => rule.kind === 'structured' && rule.type === 'MATCH')
   return (
@@ -40,14 +40,14 @@ export function RuleList({
             groups={groups}
             isAfterMatch={firstMatch !== -1 && originalIndex > firstMatch}
             issues={issues.filter((issue) => issue.ruleId === rule.id)}
-            dataset={
-              typeof dataset === 'function' &&
+            provider={
+              typeof provider === 'function' &&
               rule.kind === 'structured' &&
               (rule.type === 'GEOSITE' || rule.type === 'GEOIP')
-                ? dataset(rule.type)
-                : typeof dataset === 'string'
-                  ? dataset
-                  : 'full'
+                ? provider(rule.type)
+                : typeof provider === 'string'
+                  ? provider
+                  : 'metacubex'
             }
             onSave={(next) => onChange(rules.map((item) => (item.id === rule.id ? next : item)))}
             onDelete={() => onChange(rules.filter((item) => item.id !== rule.id))}
