@@ -6,21 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RuleTargetSelect } from '../rules'
-import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
+import { canUseNoResolve } from '../validation'
 import { newRule, newRuleProvider } from '../yaml-adapter'
-import { targetLabel, type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
+import { type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { RULE_SET_PRESETS } from './catalog'
-import {
-  createProviderFromPreset,
-  findPresetProvider,
-  findProviderRule,
-  providerMatchesPreset,
-  ruleDifferences,
-  ruleMatchesSelection,
-} from './helpers'
+import { createProviderFromPreset } from './helpers'
 import type {
   ApplyRuleSetPresetOptions,
   RuleSetPreset,
@@ -61,42 +53,8 @@ function initialSelection(preset: RuleSetPreset, draft: VisualTemplateDraft): Ap
     providerId: newRuleProvider(draft.ruleProviders).id,
     ruleId: newRule(target || { kind: 'builtin', value: 'DIRECT' }).id,
     target,
-    providerConflict: 'keep',
-    ruleConflict: 'keep',
     noResolve: preset.noResolve ?? false,
   }
-}
-
-function providerDifferences(provider: VisualTemplateDraft['ruleProviders'][number], preset: RuleSetPreset) {
-  if (provider.kind === 'raw') return [{ label: '配置', current: '高级 YAML', preset: '结构化预设' }]
-  const expected = preset.provider
-  const values: Array<[string, unknown, unknown]> = [
-    ['类型', provider.type, expected.type],
-    ['行为', provider.behavior, expected.behavior],
-    ['格式', provider.format, expected.format],
-    ['URL', provider.url, expected.url],
-    ['缓存路径', provider.path, expected.path],
-    ['更新间隔', provider.interval, expected.interval],
-    [
-      '其他配置',
-      provider.proxy !== undefined ||
-      provider.pathInBundle !== undefined ||
-      provider.sizeLimit !== undefined ||
-      provider.header !== undefined ||
-      provider.payload !== undefined ||
-      Object.keys(provider.extras).length
-        ? '存在自定义字段'
-        : undefined,
-      undefined,
-    ],
-  ]
-  return values
-    .filter(([, current, next]) => current !== next)
-    .map(([label, current, next]) => ({
-      label,
-      current: current === undefined ? '未设置' : String(current),
-      preset: next === undefined ? '未设置' : String(next),
-    }))
 }
 
 export function RuleSetPresetDialog({
@@ -157,11 +115,7 @@ export function RuleSetPresetDialog({
   }
 
   function supportsNoResolve(preset: RuleSetPreset, selection: ApplyRuleSetPresetOptions) {
-    const existing = findPresetProvider(draft.ruleProviders, preset)
-    const provider =
-      existing && selection.providerConflict === 'keep'
-        ? existing
-        : createProviderFromPreset(preset, selection.providerId)
+    const provider = createProviderFromPreset(preset, selection.providerId)
     const rule: RuleSetRuleDraft = {
       kind: 'structured',
       id: 'preset-preview',
@@ -320,46 +274,6 @@ export function RuleSetPresetDialog({
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const preset = filtered[virtualItem.index]
                 const selection = selections[preset.id]
-                const existingProvider = findPresetProvider(draft.ruleProviders, preset)
-                const providerConflict = Boolean(existingProvider && !providerMatchesPreset(existingProvider, preset))
-                const differences = existingProvider ? providerDifferences(existingProvider, preset) : []
-                const existingRule = existingProvider ? findProviderRule(draft.rules, existingProvider.id) : undefined
-                const ruleDifferenceLabels =
-                  selection &&
-                  existingProvider &&
-                  existingRule?.kind === 'structured' &&
-                  existingRule.type === 'RULE-SET' &&
-                  selection.target
-                    ? ruleDifferences(
-                        existingRule,
-                        existingProvider.id,
-                        selection.target,
-                        resolvePresetNoResolve(
-                          existingProvider && selection.providerConflict === 'keep'
-                            ? existingProvider
-                            : createProviderFromPreset(preset, selection.providerId),
-                          selection.noResolve ?? preset.noResolve ?? false,
-                        ),
-                      )
-                    : []
-                const ruleConflict = Boolean(
-                  selection &&
-                  existingProvider &&
-                  existingRule?.kind === 'structured' &&
-                  existingRule.type === 'RULE-SET' &&
-                  selection.target &&
-                  !ruleMatchesSelection(
-                    existingRule,
-                    existingProvider.id,
-                    selection.target,
-                    resolvePresetNoResolve(
-                      existingProvider && selection.providerConflict === 'keep'
-                        ? existingProvider
-                        : createProviderFromPreset(preset, selection.providerId),
-                      selection.noResolve ?? preset.noResolve ?? false,
-                    ),
-                  ),
-                )
                 return (
                   <div
                     key={virtualItem.key}
@@ -385,93 +299,35 @@ export function RuleSetPresetDialog({
                           <span className="flex flex-wrap items-center gap-2">
                             <strong className="text-sm">{preset.name}</strong>
                             <Badge variant="outline">{categoryLabels[preset.category]}</Badge>
-                            {existingProvider && (
-                              <Badge variant={providerConflict ? 'destructive' : 'secondary'}>
-                                {providerConflict ? '存在冲突' : '已存在'}
-                              </Badge>
-                            )}
                           </span>
                           <span className="mt-1 block text-xs text-muted-foreground">
                             {sourceLabels[preset.source]} · {preset.description}
                           </span>
-                          {existingRule?.kind === 'structured' && existingRule.type === 'RULE-SET' && (
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              已配置：{targetLabel(existingRule.target, draft.groups)}
-                            </span>
-                          )}
                         </label>
                       </div>
 
-                      {selection && (providerConflict || mode === 'provider-and-rule') && (
+                      {selection && mode === 'provider-and-rule' && (
                         <div className="mt-3 space-y-3 border-t pt-3 pl-7">
-                          {providerConflict && existingProvider && (
-                            <div className="space-y-2 text-xs">
-                              <p className="text-destructive">已有同名规则集数据源，当前配置不会被静默覆盖。</p>
-                              <div className="overflow-hidden rounded-md border">
-                                {differences.map((difference) => (
-                                  <div
-                                    key={difference.label}
-                                    className="grid grid-cols-[72px_1fr] gap-2 border-b p-2 last:border-b-0"
-                                  >
-                                    <span className="font-medium">{difference.label}</span>
-                                    <span className="min-w-0 space-y-1 text-muted-foreground">
-                                      <span className="block break-all">当前：{difference.current}</span>
-                                      <span className="block break-all">预设：{difference.preset}</span>
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              <Segmented
-                                value={selection.providerConflict}
-                                onChange={(value) => updateSelection(preset, { providerConflict: value })}
-                                options={[
-                                  { value: 'keep', label: '保留现有' },
-                                  { value: 'replace', label: '使用预设覆盖' },
-                                ]}
-                              />
-                            </div>
-                          )}
-
-                          {mode === 'provider-and-rule' && (
-                            <div className="space-y-2">
-                              <span className="text-xs font-medium">目标策略</span>
-                              <RuleTargetSelect
-                                groups={draft.groups}
-                                value={selection.target}
-                                onChange={(target) => updateSelection(preset, { target })}
-                                className="w-full"
-                              />
-                              {ruleConflict &&
-                                existingRule?.kind === 'structured' &&
-                                existingRule.type === 'RULE-SET' && (
-                                  <div className="space-y-2 text-xs">
-                                    <p className="text-destructive">
-                                      已有分流规则配置不同（{ruleDifferenceLabels.join('、')}
-                                      ），请选择是否使用本次配置。
-                                    </p>
-                                    <Segmented
-                                      value={selection.ruleConflict}
-                                      onChange={(value) => updateSelection(preset, { ruleConflict: value })}
-                                      options={[
-                                        { value: 'keep', label: '保留当前' },
-                                        { value: 'replace', label: '使用本次配置' },
-                                      ]}
-                                    />
-                                  </div>
-                                )}
-                              {supportsNoResolve(preset, selection) && (
-                                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                                  <Checkbox
-                                    checked={selection.noResolve}
-                                    onCheckedChange={(checked) =>
-                                      updateSelection(preset, { noResolve: checked === true })
-                                    }
-                                  />
-                                  no-resolve
-                                </label>
-                              )}
-                            </div>
-                          )}
+                          <div className="space-y-2">
+                            <span className="text-xs font-medium">目标策略</span>
+                            <RuleTargetSelect
+                              groups={draft.groups}
+                              value={selection.target}
+                              onChange={(target) => updateSelection(preset, { target })}
+                              className="w-full"
+                            />
+                            {supportsNoResolve(preset, selection) && (
+                              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                                <Checkbox
+                                  checked={selection.noResolve}
+                                  onCheckedChange={(checked) =>
+                                    updateSelection(preset, { noResolve: checked === true })
+                                  }
+                                />
+                                no-resolve
+                              </label>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
