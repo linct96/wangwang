@@ -10,6 +10,7 @@ import { nodesRouter } from './routes/nodes'
 import { profilesRouter } from './routes/profiles'
 import { templatesRouter } from './routes/templates'
 import { geoRouter } from './routes/geo'
+import { ruleSetPresetsRouter } from './routes/rule-set-presets'
 import { validOrigin, verifySubscriptionToken } from './security'
 
 export const app = new Hono<{ Bindings: Env }>()
@@ -28,6 +29,7 @@ app.route('/api/nodes', nodesRouter)
 app.route('/api/profiles', profilesRouter)
 app.route('/api/templates', templatesRouter)
 app.route('/api/geo', geoRouter)
+app.route('/api/rule-set-presets', ruleSetPresetsRouter)
 
 app.get('/healthz', async (c) => {
   const result = await db(c.env).get<{ ok: number }>(sql`SELECT 1 AS ok`)

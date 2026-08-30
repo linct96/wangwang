@@ -24,6 +24,13 @@ export interface RuleSetPreset {
   keywords?: string[]
 }
 
+export interface RuleSetPresetCatalogResponse {
+  items: RuleSetPreset[]
+  updatedAt: string | null
+  revision: string | null
+  stale: boolean
+}
+
 export type RuleSetPresetMode = 'provider-only' | 'provider-and-rule'
 
 export interface ApplyRuleSetPresetOptions {

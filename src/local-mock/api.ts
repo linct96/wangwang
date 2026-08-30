@@ -1,4 +1,5 @@
 import type { ManualNodeConnection, Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
+import { RULE_SET_PRESETS } from '@/features/templates/visual/rule-set-presets/catalog'
 import { nanoid } from 'nanoid'
 import {
   editableProxyYaml,
@@ -153,6 +154,15 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       provider,
       items,
       updatedAt: new Date().toISOString(),
+      stale: false,
+    } as T
+  }
+
+  if (pathname === '/rule-set-presets/catalog' && method === 'GET') {
+    return {
+      items: RULE_SET_PRESETS,
+      updatedAt: new Date().toISOString(),
+      revision: 'local',
       stale: false,
     } as T
   }
