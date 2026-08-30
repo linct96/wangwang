@@ -1,13 +1,5 @@
 import { useState } from 'react'
-import {
-  ChevronDown,
-  Database,
-  Globe,
-  RotateCcw,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { ChevronDown, Database, Globe, Sparkles, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +9,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -28,6 +19,9 @@ import { cn } from '@/lib/utils'
 import type { GeoSettingsDraft, VisualIssue } from '../model'
 import {
   createEmptyGeoSettings,
+  createDomesticLiteGeoSettings,
+  createDomesticLoyalsoldierGeoSettings,
+  createDomesticRecommendedGeoSettings,
   createLiteGeoSettings,
   createLoyalsoldierGeoSettings,
   createRecommendedGeoSettings,
@@ -82,8 +76,7 @@ export function GeoSettingsPanel({
 }) {
   const [expanded, setExpanded] = useState(true)
 
-  const update = (patch: Partial<GeoSettingsDraft>) =>
-    onChange({ ...value, ...patch, geoxUrl: { ...value.geoxUrl } })
+  const update = (patch: Partial<GeoSettingsDraft>) => onChange({ ...value, ...patch, geoxUrl: { ...value.geoxUrl } })
 
   const updateUrl = (key: GeoUrlKey, url: string | null) => {
     onChange({
@@ -100,26 +93,9 @@ export function GeoSettingsPanel({
     toast.success(`已应用 ${label}`)
   }
 
-  const resetUrlsToRecommended = () => {
-    const recommended = createRecommendedGeoSettings()
-    onChange({
-      ...value,
-      geoxUrl: { ...recommended.geoxUrl },
-    })
-    toast.success('已恢复推荐数据下载地址')
-  }
-
-  const clearAllUrls = () => {
-    onChange({
-      ...value,
-      geoxUrl: {
-        geoip: null,
-        geosite: null,
-        mmdb: null,
-        asn: null,
-      },
-    })
-    toast.success('已清空自定义下载地址（将使用内核默认值）')
+  const applyUrlPreset = (presetFn: () => GeoSettingsDraft, label: string) => {
+    onChange({ ...value, geoxUrl: { ...presetFn().geoxUrl } })
+    toast.success(`已应用 ${label}`)
   }
 
   const activePreset = detectActivePreset(value)
@@ -158,61 +134,18 @@ export function GeoSettingsPanel({
 
             {/* 状态徽标组 */}
             <div className="template-geo-badges hidden sm:flex items-center gap-1.5 ml-1">
-              <Badge variant={mode === 'dat' ? 'secondary' : 'outline'}>
-                {mode === 'dat' ? 'DAT 格式' : 'MMDB 格式 (默认)'}
-              </Badge>
-              {isAutoUpdate ? (
-                <Badge variant="secondary">自动更新 · {value.geoUpdateInterval ?? 24}h</Badge>
-              ) : value.geoAutoUpdate === false ? (
-                <Badge variant="outline">手动更新</Badge>
-              ) : null}
-              {activePreset === 'metacubex-full' && <Badge variant="default">MetaCubeX 推荐</Badge>}
+              {activePreset === 'metacubex-full' && <Badge variant="default">MetaCubeX 全量</Badge>}
+              {activePreset === 'metacubex-full-domestic' && <Badge variant="default">MetaCubeX 国内直连</Badge>}
               {activePreset === 'metacubex-lite' && <Badge variant="default">MetaCubeX Lite</Badge>}
+              {activePreset === 'metacubex-lite-domestic' && <Badge variant="default">MetaCubeX Lite 国内直连</Badge>}
               {activePreset === 'loyalsoldier' && <Badge variant="default">Loyalsoldier</Badge>}
+              {activePreset === 'loyalsoldier-domestic' && <Badge variant="default">Loyalsoldier 国内直连</Badge>}
               {activePreset === 'custom' && <Badge variant="outline">自定义源</Badge>}
             </div>
           </div>
 
           {/* 右侧工具栏操作 */}
           <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="gap-1.5 text-sm font-medium">
-                  <Sparkles className="size-4 text-amber-500" />
-                  规则预设
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuLabel>推荐规则集</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => applyPreset(createRecommendedGeoSettings, 'MetaCubeX 全量推荐')}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-sm">MetaCubeX 全量 (推荐)</span>
-                    <span className="text-xs text-muted-foreground">DAT 模式 · 完整域名/IP数据库</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-sm">MetaCubeX 精简 (Lite)</span>
-                    <span className="text-xs text-muted-foreground">精简体积 · 内存占用更低</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-sm">Loyalsoldier 规则集</span>
-                    <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => applyPreset(createEmptyGeoSettings, '默认内核配置')}
-                >
-                  <Trash2 className="size-4 mr-1.5" />
-                  <span>清除/重置为默认</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {hasAnyCustomValue && (
               <IconButton
                 label="清除 GEO 自定义配置"
@@ -293,7 +226,10 @@ export function GeoSettingsPanel({
                   </div>
                 </div>
                 {intervalIssue && (
-                  <FieldError errors={[intervalIssue]} className="text-right text-xs animate-in fade-in-0 duration-150" />
+                  <FieldError
+                    errors={[intervalIssue]}
+                    className="text-right text-xs animate-in fade-in-0 duration-150"
+                  />
                 )}
               </div>
             </div>
@@ -308,27 +244,69 @@ export function GeoSettingsPanel({
                   <span className="text-sm font-semibold text-foreground">数据文件下载地址 (geox-url)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2.5 text-sm text-muted-foreground hover:text-foreground active:scale-[0.98] transition-all"
-                    onClick={resetUrlsToRecommended}
-                  >
-                    <RotateCcw className="size-3.5 mr-1.5" />
-                    恢复推荐地址
-                  </Button>
-                  {Object.values(value.geoxUrl).some(Boolean) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2.5 text-sm text-destructive hover:bg-destructive/10 active:scale-[0.98] transition-all"
-                      onClick={clearAllUrls}
-                    >
-                      清空自定义
-                    </Button>
-                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="gap-1.5 text-sm font-medium">
+                        <Sparkles className="size-4 text-amber-500" />
+                        下载地址预设
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-60">
+                      <DropdownMenuLabel>推荐下载地址</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={() => applyUrlPreset(createRecommendedGeoSettings, 'MetaCubeX 全量推荐')}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">MetaCubeX 全量 (推荐)</span>
+                          <span className="text-xs text-muted-foreground">完整域名/IP 数据库</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          applyUrlPreset(createDomesticRecommendedGeoSettings, 'MetaCubeX 全量推荐（国内直连）')
+                        }
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">MetaCubeX 全量（国内直连）</span>
+                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => applyUrlPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">MetaCubeX 精简 (Lite)</span>
+                          <span className="text-xs text-muted-foreground">精简体积 · 内存占用更低</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => applyUrlPreset(createDomesticLiteGeoSettings, 'MetaCubeX 精简版（国内直连）')}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">MetaCubeX 精简（国内直连）</span>
+                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => applyUrlPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">Loyalsoldier 规则集</span>
+                          <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          applyUrlPreset(createDomesticLoyalsoldierGeoSettings, 'Loyalsoldier 规则集（国内直连）')
+                        }
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">Loyalsoldier（国内直连）</span>
+                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
@@ -391,4 +369,3 @@ export function GeoSettingsPanel({
     </section>
   )
 }
-
