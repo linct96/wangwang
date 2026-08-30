@@ -186,11 +186,6 @@ export function VisualTemplateEditor({
         )}
       </section>
       <section className="template-visual-section">
-        {customGeo && (
-          <Alert className="mx-4 mt-4">
-            <AlertDescription>当前使用自定义 GEO 数据源，建议列表可能与实际数据库不同</AlertDescription>
-          </Alert>
-        )}
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
             <h2>分流规则</h2>
@@ -235,6 +230,11 @@ export function VisualTemplateEditor({
             </RuleDialog>
           </div>
         </header>
+        {customGeo && (
+          <Alert>
+            <AlertDescription>当前使用自定义 GEO 数据源，建议列表可能与实际数据库不同</AlertDescription>
+          </Alert>
+        )}
         <RuleList
           rules={draft.rules}
           groups={draft.groups}
