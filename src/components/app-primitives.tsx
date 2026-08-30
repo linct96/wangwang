@@ -1,6 +1,16 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,6 +67,49 @@ export function AppDialog({
         {children}
       </DialogContent>
     </DialogRoot>
+  )
+}
+
+export function AppConfirmDialog({
+  title,
+  description,
+  children,
+  confirmLabel = '确认',
+  busy = false,
+  onClose,
+  onConfirm,
+}: {
+  title: string
+  description: ReactNode
+  children?: ReactNode
+  confirmLabel?: string
+  busy?: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {children}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={busy}
+            onClick={(event) => {
+              event.preventDefault()
+              onConfirm()
+            }}
+          >
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
