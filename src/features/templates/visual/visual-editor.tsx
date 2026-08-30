@@ -1,4 +1,4 @@
-import { AlertTriangle, Plus } from 'lucide-react'
+import { AlertTriangle, LibraryBig, ListPlus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import {
 import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
 import { ProviderDialog, ProviderList } from './rule-providers'
+import { applyRuleSetPresets, insertRulesBeforeMatch, RULE_SET_PRESETS, RuleSetPresetDialog } from './rule-set-presets'
 
 export function VisualTemplateEditor({
   draft,
@@ -46,13 +47,10 @@ export function VisualTemplateEditor({
   }
 
   function addRule(rule: StructuredRuleDraft) {
-    if (firstMatchIndex !== -1 && rule.type !== 'MATCH') {
-      const nextRules = [...draft.rules]
-      nextRules.splice(firstMatchIndex, 0, rule)
-      update({ ...draft, rules: nextRules })
-    } else {
-      update({ ...draft, rules: [...draft.rules, rule] })
-    }
+    update({
+      ...draft,
+      rules: rule.type === 'MATCH' ? [...draft.rules, rule] : insertRulesBeforeMatch(draft.rules, [rule]),
+    })
   }
 
   function removeGroup(group: ProxyGroupDraft) {
@@ -143,16 +141,30 @@ export function VisualTemplateEditor({
             <h2>规则集数据源</h2>
             <span className="template-section-count">{draft.ruleProviders.length}</span>
           </div>
-          <ProviderDialog
-            providers={draft.ruleProviders}
-            groups={draft.groups}
-            onSave={(provider) => update({ ...draft, ruleProviders: [...draft.ruleProviders, provider] })}
-          >
-            <Button type="button">
-              <Plus data-icon="inline-start" />
-              添加数据源
-            </Button>
-          </ProviderDialog>
+          <div className="template-rule-header-right">
+            <RuleSetPresetDialog
+              mode="provider-only"
+              draft={draft}
+              onApply={(selections) =>
+                update(applyRuleSetPresets(draft, RULE_SET_PRESETS, selections, 'provider-only'))
+              }
+            >
+              <Button type="button" variant="outline">
+                <LibraryBig data-icon="inline-start" />
+                从预设添加
+              </Button>
+            </RuleSetPresetDialog>
+            <ProviderDialog
+              providers={draft.ruleProviders}
+              groups={draft.groups}
+              onSave={(provider) => update({ ...draft, ruleProviders: [...draft.ruleProviders, provider] })}
+            >
+              <Button type="button">
+                <Plus data-icon="inline-start" />
+                添加数据源
+              </Button>
+            </ProviderDialog>
+          </div>
         </header>
         {draft.ruleProviders.length ? (
           <ProviderList draft={draft} issues={issues} onChange={updateProviders} onDelete={removeProvider} />
@@ -197,6 +209,18 @@ export function VisualTemplateEditor({
             )}
           </div>
           <div className="template-rule-header-right">
+            <RuleSetPresetDialog
+              mode="provider-and-rule"
+              draft={draft}
+              onApply={(selections) =>
+                update(applyRuleSetPresets(draft, RULE_SET_PRESETS, selections, 'provider-and-rule'))
+              }
+            >
+              <Button type="button" variant="outline">
+                <ListPlus data-icon="inline-start" />
+                从规则集添加
+              </Button>
+            </RuleSetPresetDialog>
             <RuleDialog
               groups={draft.groups}
               ruleProviders={draft.ruleProviders}
