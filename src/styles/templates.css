@@ -985,6 +985,33 @@
       align-items: stretch;
     }
   }
+
+  .template-geo-card {
+    padding: 0;
+    overflow: hidden;
+  }
+  .template-geo-header {
+    padding: 0 14px;
+    min-height: 52px;
+    box-sizing: border-box;
+  }
+  .template-geo-badges {
+    flex-wrap: wrap;
+    min-height: 22px;
+  }
+  .template-geo-body {
+    background: color-mix(in oklch, var(--muted) 25%, var(--card));
+    transition: all 0.2s ease-in-out;
+  }
+  .template-geo-url-field {
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .template-geo-url-field:hover {
+    border-color: color-mix(in oklch, var(--border) 70%, var(--foreground));
+  }
 }
 
 .template-source-grid {
