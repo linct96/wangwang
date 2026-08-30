@@ -1,6 +1,14 @@
 import type { GeoSettingsDraft } from '../model'
 
-export type GeoPresetType = 'metacubex-full' | 'metacubex-lite' | 'loyalsoldier' | 'default' | 'custom'
+export type GeoPresetType =
+  | 'metacubex-full'
+  | 'metacubex-full-domestic'
+  | 'metacubex-lite'
+  | 'metacubex-lite-domestic'
+  | 'loyalsoldier'
+  | 'loyalsoldier-domestic'
+  | 'default'
+  | 'custom'
 
 export const METACUBEX_FULL_GEO_PRESET: GeoSettingsDraft = {
   geodataMode: true,
@@ -50,6 +58,18 @@ export const EMPTY_GEO_PRESET: GeoSettingsDraft = {
   },
 }
 
+const GH_PROXY_PREFIX = 'https://gh-proxy.com/'
+
+function createGhProxyGeoSettings(factory: () => GeoSettingsDraft): GeoSettingsDraft {
+  const settings = factory()
+  return {
+    ...settings,
+    geoxUrl: Object.fromEntries(
+      Object.entries(settings.geoxUrl).map(([key, url]) => [key, url ? `${GH_PROXY_PREFIX}${url}` : url]),
+    ) as GeoSettingsDraft['geoxUrl'],
+  }
+}
+
 export function createRecommendedGeoSettings(): GeoSettingsDraft {
   return { ...METACUBEX_FULL_GEO_PRESET, geoxUrl: { ...METACUBEX_FULL_GEO_PRESET.geoxUrl } }
 }
@@ -62,6 +82,18 @@ export function createLoyalsoldierGeoSettings(): GeoSettingsDraft {
   return { ...LOYALSOLDIER_GEO_PRESET, geoxUrl: { ...LOYALSOLDIER_GEO_PRESET.geoxUrl } }
 }
 
+export function createDomesticRecommendedGeoSettings(): GeoSettingsDraft {
+  return createGhProxyGeoSettings(createRecommendedGeoSettings)
+}
+
+export function createDomesticLiteGeoSettings(): GeoSettingsDraft {
+  return createGhProxyGeoSettings(createLiteGeoSettings)
+}
+
+export function createDomesticLoyalsoldierGeoSettings(): GeoSettingsDraft {
+  return createGhProxyGeoSettings(createLoyalsoldierGeoSettings)
+}
+
 export function createEmptyGeoSettings(): GeoSettingsDraft {
   return { ...EMPTY_GEO_PRESET, geoxUrl: { ...EMPTY_GEO_PRESET.geoxUrl } }
 }
@@ -70,40 +102,28 @@ function matchUrl(actual?: string | null, target?: string | null) {
   return (actual || null) === (target || null)
 }
 
+function matchGeoUrls(
+  geo: GeoSettingsDraft,
+  preset: GeoSettingsDraft,
+  keys: readonly (keyof GeoSettingsDraft['geoxUrl'])[] = ['geoip', 'geosite', 'mmdb', 'asn'],
+) {
+  return (
+    keys.some((key) => Boolean(preset.geoxUrl[key])) &&
+    keys.every((key) => matchUrl(geo.geoxUrl[key], preset.geoxUrl[key]))
+  )
+}
+
 export function detectActivePreset(geo: GeoSettingsDraft): GeoPresetType {
-  const isDefault =
-    geo.geodataMode == null &&
-    geo.geoAutoUpdate == null &&
-    geo.geoUpdateInterval == null &&
-    !Object.values(geo.geoxUrl).some(Boolean)
+  const isDefault = !Object.values(geo.geoxUrl).some(Boolean)
 
   if (isDefault) return 'default'
 
-  const matchFull =
-    geo.geodataMode === METACUBEX_FULL_GEO_PRESET.geodataMode &&
-    matchUrl(geo.geoxUrl.geoip, METACUBEX_FULL_GEO_PRESET.geoxUrl.geoip) &&
-    matchUrl(geo.geoxUrl.geosite, METACUBEX_FULL_GEO_PRESET.geoxUrl.geosite) &&
-    matchUrl(geo.geoxUrl.mmdb, METACUBEX_FULL_GEO_PRESET.geoxUrl.mmdb) &&
-    matchUrl(geo.geoxUrl.asn, METACUBEX_FULL_GEO_PRESET.geoxUrl.asn)
-
-  if (matchFull) return 'metacubex-full'
-
-  const matchLite =
-    geo.geodataMode === METACUBEX_LITE_GEO_PRESET.geodataMode &&
-    matchUrl(geo.geoxUrl.geoip, METACUBEX_LITE_GEO_PRESET.geoxUrl.geoip) &&
-    matchUrl(geo.geoxUrl.geosite, METACUBEX_LITE_GEO_PRESET.geoxUrl.geosite) &&
-    matchUrl(geo.geoxUrl.mmdb, METACUBEX_LITE_GEO_PRESET.geoxUrl.mmdb) &&
-    matchUrl(geo.geoxUrl.asn, METACUBEX_LITE_GEO_PRESET.geoxUrl.asn)
-
-  if (matchLite) return 'metacubex-lite'
-
-  const matchLoyal =
-    geo.geodataMode === LOYALSOLDIER_GEO_PRESET.geodataMode &&
-    matchUrl(geo.geoxUrl.geoip, LOYALSOLDIER_GEO_PRESET.geoxUrl.geoip) &&
-    matchUrl(geo.geoxUrl.geosite, LOYALSOLDIER_GEO_PRESET.geoxUrl.geosite)
-
-  if (matchLoyal) return 'loyalsoldier'
+  if (matchGeoUrls(geo, METACUBEX_FULL_GEO_PRESET)) return 'metacubex-full'
+  if (matchGeoUrls(geo, createDomesticRecommendedGeoSettings())) return 'metacubex-full-domestic'
+  if (matchGeoUrls(geo, METACUBEX_LITE_GEO_PRESET)) return 'metacubex-lite'
+  if (matchGeoUrls(geo, createDomesticLiteGeoSettings())) return 'metacubex-lite-domestic'
+  if (matchGeoUrls(geo, LOYALSOLDIER_GEO_PRESET, ['geoip', 'geosite'])) return 'loyalsoldier'
+  if (matchGeoUrls(geo, createDomesticLoyalsoldierGeoSettings(), ['geoip', 'geosite'])) return 'loyalsoldier-domestic'
 
   return 'custom'
 }
-

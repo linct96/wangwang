@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
 import { groupReferences } from './validation'
 import { findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
@@ -35,7 +34,7 @@ export function VisualTemplateEditor({
   customGeo?: boolean
 }) {
   const [ruleQuery, setRuleQuery] = useState('')
-  const blocking = issues.filter((issue) => issue.level === 'error')
+  const warnings = issues.filter((issue) => issue.level === 'warning')
   const update = (next: VisualTemplateDraft) => onChange(next)
 
   const firstMatchIndex = draft.rules.findIndex((r) => r.kind === 'structured' && r.type === 'MATCH')
@@ -111,22 +110,12 @@ export function VisualTemplateEditor({
   }
   return (
     <div className="template-visual-editor">
-      {issues.length > 0 && (
+      {warnings.length > 0 && (
         <Alert
-          variant={blocking.length ? 'destructive' : 'default'}
-          className={cn(
-            'template-visual-issues',
-            blocking.length
-              ? 'border-destructive/60 bg-destructive/10'
-              : 'border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100',
-          )}
+          variant="default"
+          className="template-visual-issues border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100"
         >
-          <AlertDescription>
-            {issues
-              .filter((issue) => issue.level === 'warning')
-              .map((issue) => issue.message)
-              .join('；')}
-          </AlertDescription>
+          <AlertDescription>{warnings.map((issue) => issue.message).join('；')}</AlertDescription>
         </Alert>
       )}
       <GeoSettingsPanel value={draft.geo} issues={issues} onChange={(geo) => update({ ...draft, geo })} />
