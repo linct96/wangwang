@@ -36,6 +36,11 @@ const ruleTypes: SupportedRuleType[] = [
   'MATCH',
 ]
 
+function valueAfterTypeChange(type: SupportedRuleType, nextType: SupportedRuleType, value?: string) {
+  if (nextType === 'MATCH') return undefined
+  return type.startsWith('DOMAIN') && nextType.startsWith('DOMAIN') ? value : type === nextType ? value : ''
+}
+
 function getRuleTypeMeta(type: string) {
   switch (type) {
     case 'DOMAIN':
@@ -207,7 +212,12 @@ export function RuleMatcher({
   if (mode === 'form') {
     return (
       <div className="template-matcher-form-group" onClick={(e) => e.stopPropagation()}>
-        <Select value={type} onValueChange={(t: SupportedRuleType) => onChange?.(t, t === 'MATCH' ? undefined : value)}>
+        <Select
+          value={type}
+          onValueChange={(nextType: SupportedRuleType) =>
+            onChange?.(nextType, valueAfterTypeChange(type, nextType, value))
+          }
+        >
           <SelectTrigger className="w-[155px] font-mono">
             <SelectValue />
           </SelectTrigger>
@@ -256,7 +266,7 @@ export function RuleMatcher({
       <Select
         value={type}
         onValueChange={(nextType: SupportedRuleType) => {
-          onSave?.(nextType, nextType === 'MATCH' ? undefined : value)
+          onSave?.(nextType, valueAfterTypeChange(type, nextType, value))
         }}
       >
         <SelectTrigger className="w-auto font-mono cursor-pointer select-none" title="点击切换规则类型">
