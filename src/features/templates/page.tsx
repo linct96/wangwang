@@ -14,6 +14,39 @@ import { formatDate } from '@/lib/format'
 import { TemplatePreview } from './template-preview'
 import '@/styles/templates.css'
 
+const builtinFallback: TemplateSummary[] = [
+  {
+    id: 'builtin:minimal',
+    name: '精简规则模板',
+    description: '基础 DNS / 国内直连 / 自动选择',
+    kind: 'builtin',
+    readOnly: true,
+    profileCount: 0,
+    createdAt: null,
+    updatedAt: null,
+  },
+  {
+    id: 'builtin:standard',
+    name: '标准规则模板',
+    description: '常用分流规则 / 国内直连 / 国外代理',
+    kind: 'builtin',
+    readOnly: true,
+    profileCount: 0,
+    createdAt: null,
+    updatedAt: null,
+  },
+  {
+    id: 'builtin:full',
+    name: '完全规则模板',
+    description: '完整规则 / AI / Google / Telegram 等',
+    kind: 'builtin',
+    readOnly: true,
+    profileCount: 0,
+    createdAt: null,
+    updatedAt: null,
+  },
+]
+
 export function TemplatesPage() {
   const navigate = useNavigate()
   const { data: templates, error, loading, reload } = useApi<TemplateSummary[]>('/templates')
@@ -24,9 +57,10 @@ export function TemplatesPage() {
   const [deleting, setDeleting] = useState<TemplateSummary>()
   const [choosingSource, setChoosingSource] = useState(false)
   const [busy, setBusy] = useState('')
-  const items = templates || []
-  const builtin = items.filter((template) => template.kind === 'builtin')
-  const custom = items.filter((template) => template.kind === 'custom')
+  const builtin =
+    templates?.filter((template) => template.kind === 'builtin') ??
+    builtinFallback
+  const custom = templates?.filter((template) => template.kind === 'custom') ?? []
 
   async function duplicate(template: TemplateSummary) {
     setBusy(template.id)
@@ -76,63 +110,118 @@ export function TemplatesPage() {
         </Button>
       </div>
       {error && <PageState loading={false} error={error} />}
-      {loading && !templates ? (
-        <section className="template-section" aria-busy="true" aria-label="正在加载模板">
+      <>
+        <section className="template-section">
           <div className="template-section-header">
-            <Skeleton className="h-6 w-24" />
+            <h2>内置模板</h2>
+            <span className="template-section-count">{builtin.length}</span>
           </div>
           <div className="template-grid">
-            {Array.from({ length: 6 }, (_, index) => (
-              <article className="template-card" key={index} aria-hidden="true">
+            {builtin.map((template) => (
+              <article className="template-card" key={template.id}>
                 <div className="template-card-body">
                   <header className="template-card-header">
-                    <Skeleton className="h-9 w-9 rounded-lg" />
-                    <div className="template-card-info space-y-2">
-                      <Skeleton className="h-5 w-32" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
+                    <div className="template-card-icon template-icon-builtin">
+                      <Zap className="size-4" />
+                    </div>
+                    <div className="template-card-info">
+                      <div className="template-card-title-row">
+                        <h3 title={template.name}>{template.name}</h3>
+                        <Badge variant="secondary">内置</Badge>
+                      </div>
+                      <p>{template.description || '开箱即用的预设规则模板'}</p>
                     </div>
                   </header>
                 </div>
                 <footer className="template-card-footer">
-                  <Skeleton className="h-4 w-20" />
-                  <div className="flex gap-1.5">
-                    <Skeleton className="h-7 w-16" />
-                    <Skeleton className="h-7 w-16" />
-                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                    <Zap className="size-3.5" />
+                    使用
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
+                    <Eye className="size-3.5" />
+                    预览
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy === template.id}
+                    onClick={() => void duplicate(template)}
+                  >
+                    <Copy className="size-3.5" />
+                    复制
+                  </Button>
                 </footer>
               </article>
             ))}
           </div>
         </section>
-      ) : templates ? (
-        <>
-          <section className="template-section">
-            <div className="template-section-header">
-              <h2>内置模板</h2>
-              <span className="template-section-count">{builtin.length}</span>
-            </div>
+
+        <section className="template-section">
+          <div className="template-section-header">
+            <h2>我的模板</h2>
+            <span className="template-section-count">{custom.length}</span>
+          </div>
+          {loading && !templates ? (
+            <section className="template-grid" aria-busy="true" aria-label="正在加载我的模板">
+              {Array.from({ length: 3 }, (_, index) => (
+                <article className="template-card" key={index} aria-hidden="true">
+                  <div className="template-card-body">
+                    <header className="template-card-header">
+                      <Skeleton className="h-9 w-9 rounded-lg" />
+                      <div className="template-card-info space-y-2">
+                        <Skeleton className="h-5 w-32" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    </header>
+                  </div>
+                  <footer className="template-card-footer">
+                    <Skeleton className="h-4 w-20" />
+                    <div className="flex gap-1.5">
+                      <Skeleton className="h-7 w-16" />
+                      <Skeleton className="h-7 w-16" />
+                    </div>
+                  </footer>
+                </article>
+              ))}
+            </section>
+          ) : custom.length ? (
             <div className="template-grid">
-              {builtin.map((template) => (
+              {custom.map((template) => (
                 <article className="template-card" key={template.id}>
                   <div className="template-card-body">
                     <header className="template-card-header">
-                      <div className="template-card-icon template-icon-builtin">
-                        <Zap className="size-4" />
+                      <div className="template-card-icon template-icon-custom">
+                        <FileCode2 className="size-4" />
                       </div>
                       <div className="template-card-info">
                         <div className="template-card-title-row">
                           <h3 title={template.name}>{template.name}</h3>
-                          <Badge variant="secondary">内置</Badge>
+                          <Badge variant="outline">自定义</Badge>
                         </div>
-                        <p>{template.description || '开箱即用的预设规则模板'}</p>
+                        <p>{template.description || '自定义 Mihomo YAML 规则模板'}</p>
                       </div>
                     </header>
+                    <div className="template-card-meta">
+                      <span className="template-meta-pill">{template.profileCount} 个配置使用</span>
+                      <time className="template-meta-time">{formatDate(template.updatedAt)}</time>
+                    </div>
                   </div>
                   <footer className="template-card-footer">
                     <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
                       <Zap className="size-3.5" />
                       使用
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void navigate({ to: '/templates/$id/edit', params: { id: template.id } })}
+                    >
+                      <Pencil className="size-3.5" />
+                      编辑
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
                       <Eye className="size-3.5" />
@@ -148,91 +237,29 @@ export function TemplatesPage() {
                       <Copy className="size-3.5" />
                       复制
                     </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleting(template)}
+                    >
+                      <Trash2 className="size-3.5" />
+                      删除
+                    </Button>
                   </footer>
                 </article>
               ))}
             </div>
-          </section>
-
-          <section className="template-section">
-            <div className="template-section-header">
-              <h2>我的模板</h2>
-              <span className="template-section-count">{custom.length}</span>
+          ) : (
+            <div className="empty-block">
+              <FileCode2 />
+              <strong>暂无自定义模板</strong>
+              <p className="text-xs text-muted-foreground mt-1">从内置模板复制或直接新建一个自定义规则模板</p>
             </div>
-            {custom.length ? (
-              <div className="template-grid">
-                {custom.map((template) => (
-                  <article className="template-card" key={template.id}>
-                    <div className="template-card-body">
-                      <header className="template-card-header">
-                        <div className="template-card-icon template-icon-custom">
-                          <FileCode2 className="size-4" />
-                        </div>
-                        <div className="template-card-info">
-                          <div className="template-card-title-row">
-                            <h3 title={template.name}>{template.name}</h3>
-                            <Badge variant="outline">自定义</Badge>
-                          </div>
-                          <p>{template.description || '自定义 Mihomo YAML 规则模板'}</p>
-                        </div>
-                      </header>
-                      <div className="template-card-meta">
-                        <span className="template-meta-pill">{template.profileCount} 个配置使用</span>
-                        <time className="template-meta-time">{formatDate(template.updatedAt)}</time>
-                      </div>
-                    </div>
-                    <footer className="template-card-footer">
-                      <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
-                        <Zap className="size-3.5" />
-                        使用
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void navigate({ to: '/templates/$id/edit', params: { id: template.id } })}
-                      >
-                        <Pencil className="size-3.5" />
-                        编辑
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
-                        <Eye className="size-3.5" />
-                        预览
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={busy === template.id}
-                        onClick={() => void duplicate(template)}
-                      >
-                        <Copy className="size-3.5" />
-                        复制
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleting(template)}
-                      >
-                        <Trash2 className="size-3.5" />
-                        删除
-                      </Button>
-                    </footer>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-block">
-                <FileCode2 />
-                <strong>暂无自定义模板</strong>
-                <p className="text-xs text-muted-foreground mt-1">从内置模板复制或直接新建一个自定义规则模板</p>
-              </div>
-            )}
-          </section>
-        </>
-      ) : null}
+          )}
+        </section>
+      </>
 
       {choosingSource && (
         <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
