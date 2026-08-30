@@ -20,6 +20,7 @@ import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
 import { validateVisualDraft } from './visual/validation'
 import { VisualTemplateEditor } from './visual/visual-editor'
 import type { VisualTemplateDraft } from './visual/model'
+import { detectGeoSource, inferGeoDataset } from './visual/rules/geo-catalog'
 import '@/styles/templates.css'
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
@@ -290,7 +291,13 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
               />
             ) : (
               visualDraft && (
-                <VisualTemplateEditor draft={visualDraft} issues={visualIssues} onChange={updateVisualDraft} />
+                <VisualTemplateEditor
+                  draft={visualDraft}
+                  issues={visualIssues}
+                  onChange={updateVisualDraft}
+                  dataset={(type) => inferGeoDataset(visualDraft.geo, type)}
+                  customGeo={detectGeoSource(yaml, 'GEOSITE').custom || detectGeoSource(yaml, 'GEOIP').custom}
+                />
               )
             )}
 

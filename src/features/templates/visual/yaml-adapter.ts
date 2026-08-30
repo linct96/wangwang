@@ -1,4 +1,5 @@
 import { isMap, parseDocument } from 'yaml'
+import type { Document, YAMLMap } from 'yaml'
 import type {
   ProxyGroupDraft,
   ProxyGroupMemberDraft,
@@ -11,6 +12,7 @@ import type {
   SupportedRuleType,
   VisualIssue,
   VisualTemplateDraft,
+  GeoSettingsDraft,
 } from './model'
 
 const CUSTOM_SOURCE_NODES = '__WANGWANG_CUSTOM_SOURCE_NODES__'
@@ -41,6 +43,43 @@ const GROUP_KEYS = new Set([
 export type VisualParseResult = {
   draft: VisualTemplateDraft
   warnings: VisualIssue[]
+}
+
+export function parseGeoSettings(root: Record<string, unknown>): { draft: GeoSettingsDraft; warnings: VisualIssue[] } {
+  const warnings: VisualIssue[] = []
+  const bool = (key: string, field: 'geodata-mode' | 'geo-auto-update') => {
+    const value = root[key]
+    if (value === undefined || typeof value === 'boolean') return value as boolean | undefined
+    warnings.push({
+      level: 'warning',
+      code: `GEO_${field === 'geodata-mode' ? 'GEODATA_MODE' : 'AUTO_UPDATE'}_INVALID`,
+      message: `${field} 必须是布尔值`,
+      geoField: field,
+    })
+    return undefined
+  }
+  const geox = object(root['geox-url']) ? (root['geox-url'] as Record<string, unknown>) : {}
+  const interval = root['geo-update-interval']
+  if (interval !== undefined && typeof interval !== 'number')
+    warnings.push({
+      level: 'warning',
+      code: 'GEO_UPDATE_INTERVAL_INVALID',
+      message: 'geo-update-interval 必须是数字',
+      geoField: 'geo-update-interval',
+    })
+  return {
+    draft: {
+      geodataMode: bool('geodata-mode', 'geodata-mode'),
+      geoAutoUpdate: bool('geo-auto-update', 'geo-auto-update'),
+      geoUpdateInterval: typeof interval === 'number' ? interval : undefined,
+      geoxUrl: Object.fromEntries(
+        ['geoip', 'geosite', 'mmdb', 'asn']
+          .filter((key) => typeof geox[key] === 'string')
+          .map((key) => [key, geox[key]]),
+      ),
+    },
+    warnings,
+  }
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -94,6 +133,7 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
     throw new Error('rules 必须是字符串数组')
 
   const rows = root['proxy-groups']
+  const geo = parseGeoSettings(root)
   const groupIds = new Map<string, string>()
   rows.forEach((row, index) => {
     if (!object(row) || typeof row.name !== 'string' || typeof row.type !== 'string')
@@ -138,6 +178,7 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
   })
   const rules = ((root.rules as string[] | undefined) || []).map((rule, index) => parseRule(rule, index, groupIds))
   const warnings: VisualIssue[] = [
+    ...geo.warnings,
     ...groups
       .filter((group) => group.kind === 'raw')
       .map((group) => ({
@@ -155,7 +196,35 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
         ruleId: rule.id,
       })),
   ]
-  return { draft: { groups, rules }, warnings }
+  return { draft: { geo: geo.draft, groups, rules }, warnings }
+}
+
+function applyOptionalRootField(doc: Document, key: string, value: unknown) {
+  if (value === undefined) return
+  if (value === null) doc.delete(key)
+  else doc.set(key, value)
+}
+
+function applyMapField(map: YAMLMap, key: string, value: unknown) {
+  if (value === undefined) return
+  if (value === null) map.delete(key)
+  else map.set(key, value)
+}
+
+export function applyGeoSettings(doc: Document, geo: GeoSettingsDraft) {
+  applyOptionalRootField(doc, 'geodata-mode', geo.geodataMode)
+  applyOptionalRootField(doc, 'geo-auto-update', geo.geoAutoUpdate)
+  applyOptionalRootField(doc, 'geo-update-interval', geo.geoUpdateInterval)
+  const value = geo.geoxUrl
+  if (!['geoip', 'geosite', 'mmdb', 'asn'].some((key) => value[key as keyof typeof value] !== undefined)) return
+  let node = doc.get('geox-url', true) as unknown
+  if (!isMap(node)) {
+    node = doc.createNode({}) as YAMLMap
+    doc.set('geox-url', node)
+  }
+  const map = node as YAMLMap
+  ;(['geoip', 'geosite', 'mmdb', 'asn'] as const).forEach((key) => applyMapField(map, key, value[key]))
+  if (!map.items.length) doc.delete('geox-url')
 }
 
 function targetValue(target: RuleTargetDraft, names: Map<string, string>) {
@@ -200,6 +269,7 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
+  applyGeoSettings(doc, draft.geo)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
   doc.set(
     'proxy-groups',
@@ -243,6 +313,7 @@ function renameRawValue(value: unknown, oldName: string, newName: string): unkno
 export function renameRawReferences(draft: VisualTemplateDraft, oldName: string, newName: string): VisualTemplateDraft {
   if (!oldName || oldName === newName) return draft
   return {
+    geo: draft.geo,
     groups: draft.groups.map((group) =>
       group.kind === 'raw'
         ? {

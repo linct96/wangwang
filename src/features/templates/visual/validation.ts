@@ -18,6 +18,31 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       issues.push(issue)
   }
   const names = new Map<string, ProxyGroupDraft[]>()
+  const geo = draft.geo
+  if (
+    geo.geoUpdateInterval !== undefined &&
+    geo.geoUpdateInterval !== null &&
+    (!Number.isInteger(geo.geoUpdateInterval) || geo.geoUpdateInterval <= 0)
+  )
+    add({
+      level: 'error',
+      code: 'GEO_UPDATE_INTERVAL_INVALID',
+      message: 'GEO 更新间隔必须是大于 0 的整数小时',
+      geoField: 'geo-update-interval',
+    })
+  for (const [field, value] of Object.entries(geo.geoxUrl)) {
+    if (value == null || value === '') continue
+    try {
+      if (!['http:', 'https:'].includes(new URL(value).protocol)) throw new Error()
+    } catch {
+      add({
+        level: 'error',
+        code: 'GEO_URL_INVALID',
+        message: `${field} 必须是 http 或 https URL`,
+        geoField: field as VisualIssue['geoField'],
+      })
+    }
+  }
   draft.groups.forEach((group) => names.set(group.name, [...(names.get(group.name) || []), group]))
   draft.groups.forEach((group) => {
     if (!group.name.trim())
