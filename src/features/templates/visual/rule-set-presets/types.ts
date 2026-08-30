@@ -29,6 +29,10 @@ export interface RuleSetPresetCatalogResponse {
   updatedAt: string | null
   revision: string | null
   stale: boolean
+  sources?: {
+    metacubex: { items: RuleSetPreset[]; updatedAt: string; revision: string; stale?: boolean }
+    loyalsoldier: { items: RuleSetPreset[]; updatedAt: string; revision: string; stale?: boolean }
+  }
 }
 
 export type RuleSetPresetMode = 'provider-only' | 'provider-and-rule'

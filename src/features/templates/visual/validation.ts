@@ -9,7 +9,7 @@ export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft
   if (rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider') return false
   const providerId = rule.provider.providerId
   const provider = draft.ruleProviders.find((item) => item.id === providerId)
-  return provider?.kind === 'structured' && provider.behavior !== 'domain'
+  return provider?.kind === 'structured' && provider.behavior === 'ipcidr'
 }
 
 export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualIssue[] = []) {
@@ -342,11 +342,19 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   if (draft.groups.some((group) => group.kind === 'raw'))
     add({ level: 'warning', code: 'RAW_GROUP_CYCLE', message: 'RAW 代理组未参与完整循环引用分析' })
   draft.ruleProviders.forEach((provider) => {
-    if (!ruleProviderReferences(draft, provider.id).length)
+    const references = ruleProviderReferences(draft, provider.id)
+    if (!references.length)
       add({
         level: 'warning',
         code: 'RULE_PROVIDER_UNUSED',
         message: `规则集数据源“${provider.name}”尚未被分流规则引用`,
+        providerId: provider.id,
+      })
+    else if (references.length > 1)
+      add({
+        level: 'error',
+        code: 'RULE_SET_PROVIDER_DUPLICATE',
+        message: `规则集数据源“${provider.name}”存在 ${references.length} 条 RULE-SET 规则，后续规则可能无法产生预期效果`,
         providerId: provider.id,
       })
   })
