@@ -8,6 +8,7 @@ import type { Profile, Source, TemplateDetail, TemplateId, TemplateSummary } fro
 import { AppDialog, PageState } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ProfileDialog } from '@/features/profiles/profile-dialog'
 import { formatDate } from '@/lib/format'
 import { TemplatePreview } from './template-preview'
@@ -74,8 +75,37 @@ export function TemplatesPage() {
           新建模板
         </Button>
       </div>
-      <PageState loading={loading && !templates} error={error} />
-      {templates && (
+      {error && <PageState loading={false} error={error} />}
+      {loading && !templates ? (
+        <section className="template-section" aria-busy="true" aria-label="正在加载模板">
+          <div className="template-section-header">
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <div className="template-grid">
+            {Array.from({ length: 6 }, (_, index) => (
+              <article className="template-card" key={index} aria-hidden="true">
+                <div className="template-card-body">
+                  <header className="template-card-header">
+                    <Skeleton className="h-9 w-9 rounded-lg" />
+                    <div className="template-card-info space-y-2">
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                  </header>
+                </div>
+                <footer className="template-card-footer">
+                  <Skeleton className="h-4 w-20" />
+                  <div className="flex gap-1.5">
+                    <Skeleton className="h-7 w-16" />
+                    <Skeleton className="h-7 w-16" />
+                  </div>
+                </footer>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : templates ? (
         <>
           <section className="template-section">
             <div className="template-section-header">
@@ -198,7 +228,7 @@ export function TemplatesPage() {
             )}
           </section>
         </>
-      )}
+      ) : null}
 
       {choosingSource && (
         <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
