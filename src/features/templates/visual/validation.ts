@@ -166,7 +166,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   const matchIndexes = draft.rules.flatMap((rule, index) =>
     rule.kind === 'structured' && rule.type === 'MATCH' ? [index] : [],
   )
-  if (matchIndexes.length > 1) add({ level: 'warning', code: 'MULTIPLE_MATCH', message: '存在多个 MATCH 兜底规则' })
+  if (matchIndexes.length > 1) add({ level: 'error', code: 'MULTIPLE_MATCH', message: '存在多个 MATCH 兜底规则' })
   if (matchIndexes.some((index) => index !== draft.rules.length - 1))
     add({ level: 'warning', code: 'MATCH_NOT_LAST', message: 'MATCH 规则不在最后' })
   const graph = new Map<string, string[]>()
