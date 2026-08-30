@@ -9,7 +9,7 @@ import { sourcesRouter } from './routes/sources'
 import { nodesRouter } from './routes/nodes'
 import { profilesRouter } from './routes/profiles'
 import { templatesRouter } from './routes/templates'
-import { constantTimeEqual, subscriptionToken, validOrigin } from './security'
+import { validOrigin, verifySubscriptionToken } from './security'
 
 export const app = new Hono<{ Bindings: Env }>()
 
@@ -53,15 +53,16 @@ app.get('/api/jobs/:id', async (c) => {
   return ok(c, job)
 })
 
-app.get('/s/:profileId/:token/config.yaml', async (c) => {
+app.get('/s/:token/config.yaml', async (c) => {
+  const token = await verifySubscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, c.req.param('token'))
+  if (!token) return c.notFound()
   const profile = await db(c.env)
     .select()
     .from(profiles)
-    .where(and(eq(profiles.id, c.req.param('profileId')), eq(profiles.enabled, true)))
+    .where(and(eq(profiles.id, token.profileId), eq(profiles.enabled, true)))
     .get()
   if (!profile?.compiledYaml) return c.notFound()
-  const expected = subscriptionToken()
-  if (!constantTimeEqual(expected, c.req.param('token'))) return c.notFound()
+  if (profile.tokenVersion !== token.tokenVersion) return c.notFound()
   const key = `profile:${profile.id}:revision:${profile.revision}`
   let yaml = await c.env.KV.get(key)
   if (!yaml) {

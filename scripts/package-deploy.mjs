@@ -43,7 +43,7 @@ await writeFile(
         queues: [{ binding: 'JOBS', type: 'producer' }],
       },
       requiredVars: [],
-      requiredSecrets: [],
+      requiredSecrets: ['SUBSCRIPTION_TOKEN_SECRET'],
     },
     null,
     2,

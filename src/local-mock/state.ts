@@ -152,7 +152,7 @@ function seedState(): LocalState {
       error: null,
       sourceIds: ['source-main'],
       excludedNodeIds: [],
-      subscriptionUrl: '/s/profile-daily/local-token/config.yaml',
+      subscriptionUrl: '/s/local-token/config.yaml',
     },
   ]
   const jobs: Job[] = [createJob('compile_profile', 'profile-daily', updatedAt)]

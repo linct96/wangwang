@@ -13,7 +13,7 @@
 
 ```text
 /admin/*              Cloudflare Access -> SPA / Hono API
-/s/:profile/:token    Hono -> D1 元数据 -> KV/D1 YAML
+/s/:token             Hono -> D1 元数据 -> KV/D1 YAML
 手动刷新               查询节点源 -> Queue
 Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 ```
@@ -63,7 +63,7 @@ Queue                  下载/解析/去重 -> D1 -> 重新生成配置
 - `POST /profiles/:id/compile`、`POST /profiles/:id/rotate-token`。
 - `GET /jobs/:id`。
 
-公开接口为 `GET /s/:profileId/:token/config.yaml`。成功返回 `text/yaml` 和 `Cache-Control: no-store`。
+公开接口为 `GET /s/:token/config.yaml`。成功返回 `text/yaml` 和 `Cache-Control: no-store`。
 
 响应格式为 `{ "data": ... }` 或 `{ "error": { "code": "...", "message": "..." } }`。异步操作返回 HTTP 202。
 
