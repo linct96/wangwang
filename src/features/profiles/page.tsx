@@ -100,7 +100,7 @@ export function ProfilesPage() {
         </Button>
       </div>
 
-      <PageState loading={loading && !profiles} error={error} />
+      {error && <PageState loading={false} error={error} />}
 
       {loading && !profiles ? (
         <section className="profile-grid">
