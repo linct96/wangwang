@@ -128,6 +128,25 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
   const state = readState()
   const body = parseBody(init)
 
+  if (pathname === '/geo/catalog' && method === 'GET') {
+    const rawType = url.searchParams.get('type')
+    const rawDataset = url.searchParams.get('dataset')
+    if (!['geosite', 'geoip'].includes(rawType || '') || !['full', 'lite'].includes(rawDataset || ''))
+      throw new Error('参数无效')
+    const type = rawType as 'geosite' | 'geoip'
+    const dataset = rawDataset as 'full' | 'lite'
+    const items =
+      type === 'geoip'
+        ? ['CN', 'JP', 'US', 'cloudflare', 'google', 'telegram']
+        : ['apple', 'category-ads-all', 'cn', 'google', 'google-gemini', 'openai', 'steam@cn', 'youtube']
+    return {
+      type,
+      dataset,
+      items,
+      source: { repository: 'MetaCubeX/meta-rules-dat', ref: 'meta', fetchedAt: new Date().toISOString() },
+    } as T
+  }
+
   if (pathname === '/auth/status' && method === 'GET') {
     const initialized = localStorage.getItem('wangwang:local-admin') === '1'
     return { initialized, authenticated: initialized } as T

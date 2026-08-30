@@ -1,6 +1,7 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { targetLabel, type ProxyGroupDraft, type RuleDraft, type VisualIssue } from '../model'
 import { RuleCard } from './rule-card'
+import type { GeoDataset } from './geo-catalog'
 
 export function RuleList({
   rules,
@@ -8,12 +9,14 @@ export function RuleList({
   issues,
   query,
   onChange,
+  dataset = 'full',
 }: {
   rules: RuleDraft[]
   groups: ProxyGroupDraft[]
   issues: VisualIssue[]
   query: string
   onChange: (rules: RuleDraft[]) => void
+  dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
 }) {
   const firstMatch = rules.findIndex((rule) => rule.kind === 'structured' && rule.type === 'MATCH')
   const filtered = rules
@@ -49,6 +52,15 @@ export function RuleList({
             groups={groups}
             isAfterMatch={firstMatch !== -1 && originalIndex > firstMatch}
             issues={issues.filter((issue) => issue.ruleId === rule.id)}
+            dataset={
+              typeof dataset === 'function' &&
+              rule.kind === 'structured' &&
+              (rule.type === 'GEOSITE' || rule.type === 'GEOIP')
+                ? dataset(rule.type)
+                : typeof dataset === 'string'
+                  ? dataset
+                  : 'full'
+            }
             onSave={(next) => onChange(rules.map((item) => (item.id === rule.id ? next : item)))}
             onDelete={() => onChange(rules.filter((item) => item.id !== rule.id))}
           />
