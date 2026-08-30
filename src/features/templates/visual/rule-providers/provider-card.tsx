@@ -1,11 +1,28 @@
 import { useState } from 'react'
-import { ChevronDown, Edit2, Eye, Trash2 } from 'lucide-react'
+import { ChevronDown, CircleAlert, Edit2, Eye, Trash2 } from 'lucide-react'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { ruleProviderLabel } from '../model'
 import type { ProxyGroupDraft, RuleProviderDraft, VisualIssue } from '../model'
 import { ProviderDialog } from './provider-dialog'
+
+function providerSourceLabel(provider: RuleProviderDraft) {
+  if (provider.kind === 'raw') return '高级 YAML'
+  if (provider.type === 'file') return '本地文件'
+  if (provider.type === 'inline') return '内联'
+
+  try {
+    const url = new URL(provider.url || '')
+    if (url.hostname !== 'raw.githubusercontent.com') return '自定义'
+    const path = url.pathname.toLowerCase()
+    if (path.startsWith('/metacubex/meta-rules-dat/')) return 'MetaCubeX'
+    if (path.startsWith('/loyalsoldier/clash-rules/')) return 'Loyalsoldier'
+  } catch {
+    // URL 合法性由现有表单校验负责。
+  }
+  return '自定义'
+}
 
 export function ProviderCard({
   provider,
@@ -26,6 +43,8 @@ export function ProviderCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [view, setView] = useState(false)
+  const duplicateNameIssue = issues.find((issue) => issue.code === 'PROVIDER_NAME_DUPLICATE')
+  const expandedIssues = issues.filter((issue) => issue !== duplicateNameIssue)
   const providerProxy = provider.kind === 'structured' ? provider.proxy : undefined
   const proxy = providerProxy
     ? providerProxy.kind === 'group'
@@ -44,7 +63,7 @@ export function ProviderCard({
         >
           <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
           <strong>{provider.name || '未命名数据源'}</strong>
-          <Badge variant="secondary">{provider.kind === 'raw' ? 'RAW' : provider.type.toUpperCase()}</Badge>
+          <Badge variant="secondary">{providerSourceLabel(provider)}</Badge>
           <span className="template-group-summary">
             {ruleProviderLabel(provider)} · {references} 条规则引用
           </span>
@@ -66,6 +85,12 @@ export function ProviderCard({
           </IconButton>
         </div>
       </header>
+      {duplicateNameIssue && (
+        <p className="flex items-center gap-1.5 pb-3 pl-7 text-xs text-destructive">
+          <CircleAlert className="size-3.5 shrink-0" />
+          名称重复，请将其中一个数据源改为唯一名称
+        </p>
+      )}
       {expanded && (
         <div className="template-group-expanded">
           {provider.kind === 'raw' ? (
@@ -95,8 +120,8 @@ export function ProviderCard({
               )}
             </div>
           )}
-          {issues.length > 0 && (
-            <p className="text-xs text-muted-foreground">{issues.map((issue) => issue.message).join('；')}</p>
+          {expandedIssues.length > 0 && (
+            <p className="text-xs text-muted-foreground">{expandedIssues.map((issue) => issue.message).join('；')}</p>
           )}
         </div>
       )}
