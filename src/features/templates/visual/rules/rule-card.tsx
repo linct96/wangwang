@@ -26,7 +26,6 @@ import type {
   ProxyGroupDraft,
   RuleDraft,
   RuleProviderDraft,
-  RuleTargetDraft,
   StructuredRuleDraft,
   SupportedRuleType,
   VisualIssue,
@@ -35,6 +34,7 @@ import { canUseNoResolve } from '../validation'
 import { RuleProviderCombobox } from '../rule-providers'
 import { GeoMatchValueCombobox } from './geo-match-value-combobox'
 import type { GeoProvider } from './geo-catalog'
+import { RuleTargetSelect } from './rule-target-select'
 
 const ruleTypes: SupportedRuleType[] = [
   'DOMAIN',
@@ -426,25 +426,6 @@ export function RuleCard({
   const typeMeta = rule.kind === 'structured' ? getRuleTypeMeta(rule.type) : getRuleTypeMeta('RAW')
   const TypeIcon = typeMeta.Icon
 
-  const targetValue =
-    rule.kind === 'structured'
-      ? rule.target.kind === 'group'
-        ? `group:${rule.target.groupId}`
-        : rule.target.kind === 'builtin'
-          ? rule.target.value
-          : `raw:${rule.target.value}`
-      : ''
-
-  function handleTargetChange(next: string) {
-    if (rule.kind !== 'structured') return
-    const newTarget: RuleTargetDraft = next.startsWith('group:')
-      ? { kind: 'group', groupId: next.slice(6) }
-      : next === 'DIRECT' || next === 'REJECT'
-        ? { kind: 'builtin', value: next }
-        : { kind: 'raw', value: next.slice(4) }
-    onSave({ ...rule, target: newTarget })
-  }
-
   const hasIssues = Boolean(issues && issues.length > 0)
 
   return (
@@ -506,30 +487,12 @@ export function RuleCard({
 
             <div className="template-rule-col-target">
               <div className="template-rule-target-wrapper" onClick={(e) => e.stopPropagation()}>
-                <Select value={targetValue} onValueChange={handleTargetChange}>
-                  <SelectTrigger
-                    className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
-                    title="点击切换目标策略"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {groups
-                        .filter((group) => group.name)
-                        .map((group) => (
-                          <SelectItem key={group.id} value={`group:${group.id}`}>
-                            {group.name}
-                          </SelectItem>
-                        ))}
-                      <SelectItem value="DIRECT">DIRECT</SelectItem>
-                      <SelectItem value="REJECT">REJECT</SelectItem>
-                      {rule.target.kind === 'raw' && (
-                        <SelectItem value={`raw:${rule.target.value}`}>{rule.target.value}（高级）</SelectItem>
-                      )}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <RuleTargetSelect
+                  groups={groups}
+                  value={rule.target}
+                  onChange={(target) => onSave({ ...rule, target })}
+                  className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
+                />
               </div>
 
               {rule.kind === 'structured' && canUseNoResolve(rule, { ruleProviders }) && (

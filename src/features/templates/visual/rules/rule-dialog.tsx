@@ -4,9 +4,9 @@ import { AppDialog } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { newRule } from '../yaml-adapter'
 import { changeStructuredRule, RuleMatcher, ruleMatcherValue, setRuleNoResolve } from './rule-card'
+import { RuleTargetSelect } from './rule-target-select'
 import { canUseNoResolve } from '../validation'
 import type { ProxyGroupDraft, RuleDraft, RuleProviderDraft, RuleTargetDraft, StructuredRuleDraft } from '../model'
 import type { GeoProvider } from './geo-catalog'
@@ -52,22 +52,6 @@ export function RuleDialog({
     onSave(form)
     setOpen(false)
   }
-  const targetValue =
-    form.target.kind === 'group'
-      ? `group:${form.target.groupId}`
-      : form.target.kind === 'builtin'
-        ? form.target.value
-        : `raw:${form.target.value}`
-  function setTarget(next: string) {
-    setForm({
-      ...form,
-      target: next.startsWith('group:')
-        ? { kind: 'group', groupId: next.slice(6) }
-        : next === 'DIRECT' || next === 'REJECT'
-          ? { kind: 'builtin', value: next }
-          : { kind: 'raw', value: next.slice(4) },
-    })
-  }
   return (
     <>
       {<span onClick={show}>{children}</span>}
@@ -100,25 +84,11 @@ export function RuleDialog({
             </Field>
             <Field>
               <FieldLabel>目标</FieldLabel>
-              <Select value={targetValue} onValueChange={setTarget}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups
-                    .filter((group) => group.name)
-                    .map((group) => (
-                      <SelectItem key={group.id} value={`group:${group.id}`}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  <SelectItem value="DIRECT">DIRECT</SelectItem>
-                  <SelectItem value="REJECT">REJECT</SelectItem>
-                  {form.target.kind === 'raw' && (
-                    <SelectItem value={`raw:${form.target.value}`}>{form.target.value}（高级）</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <RuleTargetSelect
+                groups={groups}
+                value={form.target}
+                onChange={(target) => setForm({ ...form, target })}
+              />
             </Field>
             {canUseNoResolve(form, { ruleProviders }) && (
               <Field orientation="horizontal">
