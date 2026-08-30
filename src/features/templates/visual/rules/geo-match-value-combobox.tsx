@@ -6,16 +6,16 @@ import { useGeoCatalog } from './use-geo-catalog'
 export function GeoMatchValueCombobox({
   type,
   value,
-  provider,
+  geoProvider,
   onChange,
 }: {
   type: 'GEOSITE' | 'GEOIP'
   value?: string
-  provider: GeoProvider
+  geoProvider: GeoProvider
   onChange: (value: string) => void
 }) {
   const catalogType: GeoCatalogType = type.toLowerCase() as GeoCatalogType
-  const { data, error, loading } = useGeoCatalog(catalogType, provider)
+  const { data, error, loading } = useGeoCatalog(catalogType, geoProvider)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const items = searchGeoCatalog(data?.items || [], value || '')

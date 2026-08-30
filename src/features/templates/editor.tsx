@@ -138,7 +138,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   function updateVisualDraft(nextDraft: VisualTemplateDraft) {
     try {
-      const nextYaml = applyVisualTemplate(yaml, nextDraft)
+      const nextYaml = applyVisualTemplate(yaml, nextDraft, visualDraft || undefined)
       setVisualDraft(nextDraft)
       setVisualIssues(validateVisualDraft(nextDraft))
       setYaml(nextYaml)
@@ -295,7 +295,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   draft={visualDraft}
                   issues={visualIssues}
                   onChange={updateVisualDraft}
-                  provider={(type) => inferGeoSource(visualDraft.geo, type).provider}
+                  geoProvider={(type) => inferGeoSource(visualDraft.geo, type).provider}
                   customGeo={
                     inferGeoSource(visualDraft.geo, 'GEOSITE').provider === 'custom' ||
                     inferGeoSource(visualDraft.geo, 'GEOIP').provider === 'custom'

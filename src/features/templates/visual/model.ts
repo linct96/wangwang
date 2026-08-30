@@ -1,6 +1,7 @@
 export type VisualTemplateDraft = {
   geo: GeoSettingsDraft
   groups: ProxyGroupDraft[]
+  ruleProviders: RuleProviderDraft[]
   rules: RuleDraft[]
 }
 
@@ -46,6 +47,43 @@ export type RawProxyGroupDraft = {
 
 export type ProxyGroupDraft = StructuredProxyGroupDraft | RawProxyGroupDraft
 
+export type RuleProviderType = 'http' | 'file' | 'inline'
+export type RuleProviderBehavior = 'domain' | 'ipcidr' | 'classical'
+export type RuleProviderFormat = 'yaml' | 'text' | 'mrs'
+
+export type RuleProviderProxyDraft =
+  | { kind: 'group'; groupId: string }
+  | { kind: 'builtin'; value: 'DIRECT' }
+  | { kind: 'raw'; value: string }
+
+export type StructuredRuleProviderDraft = {
+  kind: 'structured'
+  id: string
+  name: string
+  type: RuleProviderType
+  behavior: RuleProviderBehavior
+  format?: RuleProviderFormat
+  url?: string
+  path?: string
+  interval?: number
+  proxy?: RuleProviderProxyDraft
+  pathInBundle?: string
+  sizeLimit?: number
+  header?: Record<string, string[]>
+  payload?: string[]
+  extras: Record<string, unknown>
+}
+
+export type RawRuleProviderDraft = {
+  kind: 'raw'
+  id: string
+  name: string
+  reason?: string
+  rawYaml: string
+}
+
+export type RuleProviderDraft = StructuredRuleProviderDraft | RawRuleProviderDraft
+
 export type SupportedRuleType =
   | 'DOMAIN'
   | 'DOMAIN-SUFFIX'
@@ -54,6 +92,7 @@ export type SupportedRuleType =
   | 'GEOIP'
   | 'IP-CIDR'
   | 'IP-CIDR6'
+  | 'RULE-SET'
   | 'MATCH'
 
 export type RuleTargetDraft =
@@ -61,14 +100,33 @@ export type RuleTargetDraft =
   | { kind: 'builtin'; value: 'DIRECT' | 'REJECT' }
   | { kind: 'raw'; value: string }
 
-export type StructuredRuleDraft = {
+export type ValueRuleDraft = {
   kind: 'structured'
   id: string
-  type: SupportedRuleType
-  value?: string
+  type: Exclude<SupportedRuleType, 'RULE-SET' | 'MATCH'>
+  value: string
   target: RuleTargetDraft
   noResolve: boolean
 }
+
+export type RuleSetRuleDraft = {
+  kind: 'structured'
+  id: string
+  type: 'RULE-SET'
+  provider: { kind: 'provider'; providerId: string } | { kind: 'raw'; value: string }
+  target: RuleTargetDraft
+  noResolve: boolean
+}
+
+export type MatchRuleDraft = {
+  kind: 'structured'
+  id: string
+  type: 'MATCH'
+  target: RuleTargetDraft
+  noResolve: false
+}
+
+export type StructuredRuleDraft = ValueRuleDraft | RuleSetRuleDraft | MatchRuleDraft
 
 export type RawRuleDraft = {
   kind: 'raw'
@@ -83,6 +141,7 @@ export type VisualIssue = {
   code: string
   message: string
   groupId?: string
+  providerId?: string
   ruleId?: string
   geoField?: 'geodata-mode' | 'geo-auto-update' | 'geo-update-interval' | 'geoip' | 'geosite' | 'mmdb' | 'asn'
 }
@@ -98,4 +157,10 @@ export function targetLabel(target: RuleTargetDraft, groups: ProxyGroupDraft[] =
     return target.value
   }
   return groups.find((group) => group.id === target.groupId)?.name || '未知代理组'
+}
+
+export function ruleProviderLabel(provider: RuleProviderDraft) {
+  if (provider.kind === 'raw') return '高级 YAML'
+  const behavior = { domain: 'Domain', ipcidr: 'IP-CIDR', classical: 'Classical' }[provider.behavior]
+  return [behavior, provider.format?.toUpperCase()].filter(Boolean).join(' · ')
 }
