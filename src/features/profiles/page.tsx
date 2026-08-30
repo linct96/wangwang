@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
 import type { Profile, Source, TemplateSummary } from '@/api/types'
-import { IconButton, PageState, Status } from '@/components/app-primitives'
+import { IconButton, PageState } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -133,7 +133,6 @@ export function ProfilesPage() {
                 {items.map((profile) => {
                   const status = compileStatus[profile.id]
                   const isCompiling = status === 'loading'
-                  const isError = Boolean(profile.error)
                   const templateName = templateMap.get(profile.templateId) || profile.templateId
 
                   return (
@@ -147,10 +146,6 @@ export function ProfilesPage() {
                             <Link to="/profiles/$id" params={{ id: profile.id }} className="profile-name-link">
                               {profile.name}
                             </Link>
-                            <div className="profile-meta-row">
-                              <Status value={isError ? 'error' : profile.compiledAt ? 'ready' : 'idle'} />
-                              <span className="profile-meta-revision">v{profile.revision}</span>
-                            </div>
                           </div>
                         </div>
                         <div className="profile-header-actions">
