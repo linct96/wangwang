@@ -18,7 +18,7 @@ import {
 import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
 import { ProviderDialog, ProviderList } from './rule-providers'
-import { applyRuleSetPresets, insertRulesBeforeMatch, RULE_SET_PRESETS, RuleSetPresetDialog } from './rule-set-presets'
+import { applyRuleSetPresets, insertRulesBeforeMatch, RuleSetPresetDialog } from './rule-set-presets'
 
 export function VisualTemplateEditor({
   draft,
@@ -145,8 +145,8 @@ export function VisualTemplateEditor({
             <RuleSetPresetDialog
               mode="provider-only"
               draft={draft}
-              onApply={(selections) =>
-                update(applyRuleSetPresets(draft, RULE_SET_PRESETS, selections, 'provider-only'))
+              onApply={(selections, presets) =>
+                update(applyRuleSetPresets(draft, presets, selections, 'provider-only'))
               }
             >
               <Button type="button" variant="outline">
@@ -212,8 +212,8 @@ export function VisualTemplateEditor({
             <RuleSetPresetDialog
               mode="provider-and-rule"
               draft={draft}
-              onApply={(selections) =>
-                update(applyRuleSetPresets(draft, RULE_SET_PRESETS, selections, 'provider-and-rule'))
+              onApply={(selections, presets) =>
+                update(applyRuleSetPresets(draft, presets, selections, 'provider-and-rule'))
               }
             >
               <Button type="button" variant="outline">

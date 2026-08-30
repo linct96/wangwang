@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Database, Plus, Search } from 'lucide-react'
+import { AlertTriangle, Database, LoaderCircle, Plus, Search } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,9 @@ import type {
   RuleSetPresetMode,
   RuleSetPresetSource,
 } from './types'
+import { useRuleSetPresetCatalog } from './use-preset-catalog'
+
+const MAX_VISIBLE_PRESETS = 200
 
 const categoryLabels: Record<RuleSetPresetCategory, string> = {
   common: '常用',
@@ -105,7 +108,7 @@ export function RuleSetPresetDialog({
 }: {
   mode: RuleSetPresetMode
   draft: VisualTemplateDraft
-  onApply: (selections: ApplyRuleSetPresetOptions[]) => void
+  onApply: (selections: ApplyRuleSetPresetOptions[], presets: RuleSetPreset[]) => void
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -113,10 +116,12 @@ export function RuleSetPresetDialog({
   const [source, setSource] = useState<RuleSetPresetSource | 'all'>('all')
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
+  const catalog = useRuleSetPresetCatalog(open)
+  const presets = catalog.data?.items.length ? catalog.data.items : RULE_SET_PRESETS
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase()
-    return RULE_SET_PRESETS.filter(
+    return presets.filter(
       (preset) =>
         (source === 'all' || preset.source === source) &&
         (category === 'all' || preset.category === category) &&
@@ -125,7 +130,8 @@ export function RuleSetPresetDialog({
             .filter(Boolean)
             .some((value) => value!.toLowerCase().includes(keyword))),
     )
-  }, [category, query, source])
+  }, [category, presets, query, source])
+  const visiblePresets = filtered.slice(0, MAX_VISIBLE_PRESETS)
 
   function show() {
     setQuery('')
@@ -196,7 +202,7 @@ export function RuleSetPresetDialog({
               <SelectContent>
                 <SelectItem value="all">全部分类</SelectItem>
                 {Object.entries(categoryLabels)
-                  .filter(([value]) => RULE_SET_PRESETS.some((preset) => preset.category === value))
+                  .filter(([value]) => presets.some((preset) => preset.category === value))
                   .map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
@@ -206,8 +212,23 @@ export function RuleSetPresetDialog({
             </Select>
           </div>
 
+          {(catalog.loading || catalog.error || catalog.data?.stale) && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {catalog.loading ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : (
+                <AlertTriangle className="size-3.5 text-amber-500" />
+              )}
+              {catalog.loading
+                ? '正在同步社区目录，内置预设可正常使用'
+                : catalog.error
+                  ? '社区目录加载失败，当前使用内置预设'
+                  : '社区目录暂时使用上次同步的数据'}
+            </p>
+          )}
+
           <div className="max-h-[min(56vh,520px)] space-y-2 overflow-y-auto pr-1">
-            {filtered.map((preset) => {
+            {visiblePresets.map((preset) => {
               const selection = selections[preset.id]
               const existingProvider = findPresetProvider(draft.ruleProviders, preset)
               const providerConflict = Boolean(existingProvider && !providerMatchesPreset(existingProvider, preset))
@@ -255,7 +276,7 @@ export function RuleSetPresetDialog({
                     </label>
                   </div>
 
-                  {selection && (
+                  {selection && (providerConflict || mode === 'provider-and-rule') && (
                     <div className="mt-3 space-y-3 border-t pt-3 pl-7">
                       {providerConflict && existingProvider && (
                         <div className="space-y-2 text-xs">
@@ -327,6 +348,11 @@ export function RuleSetPresetDialog({
               )
             })}
             {!filtered.length && <p className="py-10 text-center text-sm text-muted-foreground">没有匹配的规则集</p>}
+            {filtered.length > visiblePresets.length && (
+              <p className="py-3 text-center text-xs text-muted-foreground">
+                当前显示前 {MAX_VISIBLE_PRESETS} 项，请输入关键词继续查找
+              </p>
+            )}
           </div>
 
           <div className="dialog-actions">
@@ -341,7 +367,7 @@ export function RuleSetPresetDialog({
               type="button"
               disabled={!selectedCount}
               onClick={() => {
-                onApply(Object.values(selections))
+                onApply(Object.values(selections), presets)
                 setOpen(false)
               }}
             >
