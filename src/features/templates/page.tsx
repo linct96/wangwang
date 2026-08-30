@@ -182,6 +182,10 @@ export function TemplatesPage() {
                       </div>
                     </div>
                     <footer className="template-card-footer">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                        <Zap className="size-3.5" />
+                        使用
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
