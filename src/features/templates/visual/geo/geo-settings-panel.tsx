@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldLabel } from '@/components/ui/field'
 import type { GeoSettingsDraft, VisualIssue } from '../model'
 import { createRecommendedGeoSettings } from './presets'
+import { inferGeoSource } from '../rules/geo-catalog'
 
 const fields = [
   ['geoip', 'GeoIP DAT', 'geodata-mode 使用 DAT 时用于 GEOIP'],
@@ -33,9 +34,7 @@ export function GeoSettingsPanel({
   const modeLabel = mode === 'dat' ? 'DAT' : mode === 'mmdb' ? 'MMDB' : 'Mihomo 默认'
   const updating =
     value.geoAutoUpdate === true ? '自动更新' : value.geoAutoUpdate === false ? '手动更新' : '默认更新策略'
-  const custom = Object.values(value.geoxUrl).some(
-    (url) => url && !/(geoip|geosite|country|GeoLite2)(-lite)?\.(dat|mmdb)/i.test(url),
-  )
+  const custom = inferGeoSource(value, 'GEOSITE').custom || inferGeoSource(value, 'GEOIP').custom
   const restoreUrls = () => onChange({ ...value, geoxUrl: { ...createRecommendedGeoSettings().geoxUrl } })
   return (
     <section className="template-visual-section">
