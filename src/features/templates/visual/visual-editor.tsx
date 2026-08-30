@@ -1,22 +1,14 @@
-import { useState, useMemo } from 'react'
-import { AlertTriangle, Plus, Search, X } from 'lucide-react'
+import { AlertTriangle, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { groupReferences } from './validation'
 import { findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
 import { RuleDialog } from './rules/rule-dialog'
-import {
-  targetLabel,
-  type ProxyGroupDraft,
-  type StructuredRuleDraft,
-  type VisualIssue,
-  type VisualTemplateDraft,
-} from './model'
+import { type ProxyGroupDraft, type StructuredRuleDraft, type VisualIssue, type VisualTemplateDraft } from './model'
 import type { GeoDataset } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
 
@@ -33,7 +25,6 @@ export function VisualTemplateEditor({
   dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
   customGeo?: boolean
 }) {
-  const [ruleQuery, setRuleQuery] = useState('')
   const warnings = issues.filter((issue) => issue.level === 'warning')
   const update = (next: VisualTemplateDraft) => onChange(next)
 
@@ -56,21 +47,6 @@ export function VisualTemplateEditor({
       update({ ...draft, rules: [...draft.rules, rule] })
     }
   }
-
-  const filteredRulesWithIndex = useMemo(() => {
-    const query = ruleQuery.trim().toLowerCase()
-    return draft.rules
-      .map((rule, originalIndex) => ({ rule, originalIndex }))
-      .filter(({ rule }) => {
-        if (!query) return true
-        if (rule.kind === 'raw') return rule.raw.toLowerCase().includes(query)
-        const typeMatch = rule.type.toLowerCase().includes(query)
-        const valMatch = (rule.value || '').toLowerCase().includes(query)
-        const targetText = targetLabel(rule.target, draft.groups).toLowerCase()
-        const targetMatch = targetText.includes(query)
-        return typeMatch || valMatch || targetMatch
-      })
-  }, [draft.rules, draft.groups, ruleQuery])
 
   function removeGroup(group: ProxyGroupDraft) {
     const refs = groupReferences(draft, group.id)
@@ -140,9 +116,7 @@ export function VisualTemplateEditor({
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
             <h2>规则</h2>
-            <span className="template-section-count">
-              {ruleQuery ? `${filteredRulesWithIndex.length} / ${draft.rules.length}` : draft.rules.length}
-            </span>
+            <span className="template-section-count">{draft.rules.length}</span>
             {hasMatchNotLast && (
               <Button
                 type="button"
@@ -157,27 +131,6 @@ export function VisualTemplateEditor({
             )}
           </div>
           <div className="template-rule-header-right">
-            {draft.rules.length >= 4 && (
-              <div className="template-rule-search-box">
-                <Search className="template-rule-search-icon" />
-                <Input
-                  placeholder="搜索规则 (类型/域名/目标)..."
-                  value={ruleQuery}
-                  onChange={(e) => setRuleQuery(e.target.value)}
-                  className="template-rule-search-input"
-                />
-                {ruleQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setRuleQuery('')}
-                    className="template-rule-search-clear"
-                    title="清除搜索"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
             <RuleDialog groups={draft.groups} rules={draft.rules} dataset={dataset} onSave={(rule) => addRule(rule)}>
               <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
@@ -190,7 +143,6 @@ export function VisualTemplateEditor({
           rules={draft.rules}
           groups={draft.groups}
           issues={issues}
-          query={ruleQuery}
           onChange={(rules) => update({ ...draft, rules })}
           dataset={dataset}
         />
