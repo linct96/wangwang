@@ -9,20 +9,20 @@ import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
 import { RuleDialog } from './rules/rule-dialog'
 import { type ProxyGroupDraft, type StructuredRuleDraft, type VisualIssue, type VisualTemplateDraft } from './model'
-import type { GeoDataset } from './rules/geo-catalog'
+import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
 
 export function VisualTemplateEditor({
   draft,
   issues,
   onChange,
-  dataset = 'full',
+  provider = 'metacubex',
   customGeo = false,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
   onChange: (draft: VisualTemplateDraft) => void
-  dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
+  provider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
   customGeo?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
@@ -131,7 +131,7 @@ export function VisualTemplateEditor({
             )}
           </div>
           <div className="template-rule-header-right">
-            <RuleDialog groups={draft.groups} rules={draft.rules} dataset={dataset} onSave={(rule) => addRule(rule)}>
+            <RuleDialog groups={draft.groups} rules={draft.rules} provider={provider} onSave={(rule) => addRule(rule)}>
               <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
                 添加规则
@@ -144,7 +144,7 @@ export function VisualTemplateEditor({
           groups={draft.groups}
           issues={issues}
           onChange={(rules) => update({ ...draft, rules })}
-          dataset={dataset}
+          provider={provider}
         />
       </section>
     </div>

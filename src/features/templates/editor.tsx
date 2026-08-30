@@ -295,9 +295,10 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   draft={visualDraft}
                   issues={visualIssues}
                   onChange={updateVisualDraft}
-                  dataset={(type) => inferGeoSource(visualDraft.geo, type).dataset}
+                  provider={(type) => inferGeoSource(visualDraft.geo, type).provider}
                   customGeo={
-                    inferGeoSource(visualDraft.geo, 'GEOSITE').custom || inferGeoSource(visualDraft.geo, 'GEOIP').custom
+                    inferGeoSource(visualDraft.geo, 'GEOSITE').provider === 'custom' ||
+                    inferGeoSource(visualDraft.geo, 'GEOIP').provider === 'custom'
                   }
                 />
               )

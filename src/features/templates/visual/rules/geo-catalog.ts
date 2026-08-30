@@ -1,45 +1,53 @@
 import { parse } from 'yaml'
 import type { GeoSettingsDraft } from '../model'
 export type GeoCatalogType = 'geosite' | 'geoip'
-export type GeoDataset = 'full' | 'lite'
-export function detectGeoSource(yaml: string, type: 'GEOSITE' | 'GEOIP'): { dataset: GeoDataset; custom: boolean } {
+export type GeoProvider = 'metacubex' | 'metacubex-lite' | 'loyalsoldier' | 'custom'
+export type GeoCatalogResponse = {
+  provider: Exclude<GeoProvider, 'custom'>
+  type: GeoCatalogType
+  items: string[]
+  updatedAt: string
+  stale: boolean
+}
+export function detectGeoSource(yaml: string, type: 'GEOSITE' | 'GEOIP'): { provider: GeoProvider } {
   let config: Record<string, unknown> = {}
   try {
     config = (parse(yaml) || {}) as Record<string, unknown>
   } catch {
-    return { dataset: 'full', custom: false }
+    return { provider: 'custom' }
   }
   const geodataMode = config['geodata-mode'] === true
   const geox = (config['geox-url'] || {}) as Record<string, unknown>
   const source = type === 'GEOSITE' ? String(geox.geosite || '') : String(geox[geodataMode ? 'geoip' : 'mmdb'] || '')
-  const lite =
-    type === 'GEOSITE' ? /geosite-lite\.dat/i.test(source) : /geoip-lite\.dat|country-lite\.mmdb/i.test(source)
-  const known =
-    type === 'GEOSITE' ? /geosite(?:-lite)?\.dat/i : geodataMode ? /geoip(?:-lite)?\.dat/i : /country(?:-lite)?\.mmdb/i
-  return { dataset: lite ? 'lite' : 'full', custom: Boolean(source) && !known.test(source) }
+  return { provider: inferProvider(source, type) }
 }
-export function detectGeoDataset(yaml: string, type: 'GEOSITE' | 'GEOIP'): GeoDataset {
-  return detectGeoSource(yaml, type).dataset
+function inferProvider(source: string, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
+  if (!source) return 'custom'
+  const match = /github\.com\/([^/]+)\/([^/?#]+)/i.exec(source)
+  if (!match) return 'custom'
+  const owner = match[1].toLowerCase(),
+    repo = match[2].toLowerCase()
+  if (owner === 'metacubex' && repo === 'meta-rules-dat') {
+    const file = source.split(/[/?#]/).filter(Boolean).at(-1)?.toLowerCase() || ''
+    return (
+      type === 'GEOSITE' ? file === 'geosite-lite.dat' : file === 'geoip-lite.dat' || file === 'country-lite.mmdb'
+    )
+      ? 'metacubex-lite'
+      : 'metacubex'
+  }
+  if (owner === 'loyalsoldier' && repo === 'v2ray-rules-dat') return 'loyalsoldier'
+  return 'custom'
 }
-export function inferGeoDataset(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): GeoDataset {
-  return inferGeoSource(geo, type).dataset
+export function detectGeoProvider(yaml: string, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
+  return detectGeoSource(yaml, type).provider
 }
-export function inferGeoSource(
-  geo: GeoSettingsDraft,
-  type: 'GEOSITE' | 'GEOIP',
-): { dataset: GeoDataset; custom: boolean } {
+export function inferGeoProvider(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
+  return inferGeoSource(geo, type).provider
+}
+export function inferGeoSource(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): { provider: GeoProvider } {
   const mode = geo.geodataMode === true
   const source = type === 'GEOSITE' ? geo.geoxUrl.geosite : geo.geoxUrl[mode ? 'geoip' : 'mmdb']
-  if (!source) return { dataset: 'full', custom: false }
-  const lite =
-    type === 'GEOSITE'
-      ? /geosite-lite\.dat/i.test(source)
-      : /(?:geoip|country)-lite\.dat|country-lite\.mmdb/i.test(source)
-  const known =
-    type === 'GEOSITE'
-      ? /geosite(?:-lite)?\.dat/i
-      : /(?:geoip|country)(?:-lite)?\.(?:dat|mmdb)|GeoLite2(?:-ASN)?\.mmdb/i
-  return { dataset: lite ? 'lite' : 'full', custom: !known.test(source) }
+  return { provider: inferProvider(source || '', type) }
 }
 export function searchGeoCatalog(items: string[], query: string) {
   const q = query.trim().toLowerCase()

@@ -23,7 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import type { ProxyGroupDraft, RuleDraft, RuleTargetDraft, SupportedRuleType, VisualIssue } from '../model'
 import { GeoMatchValueCombobox } from './geo-match-value-combobox'
-import type { GeoDataset } from './geo-catalog'
+import type { GeoProvider } from './geo-catalog'
 
 const ruleTypes: SupportedRuleType[] = [
   'DOMAIN',
@@ -198,7 +198,7 @@ export function RuleMatcher({
   onChange,
   onKeyDown,
   placeholder = '输入匹配值 (如 google.com)',
-  dataset = 'full',
+  provider = 'metacubex',
 }: {
   type: SupportedRuleType
   value?: string
@@ -207,7 +207,7 @@ export function RuleMatcher({
   onChange?: (type: SupportedRuleType, value?: string) => void
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
   placeholder?: string
-  dataset?: GeoDataset
+  provider?: GeoProvider
 }) {
   if (mode === 'form') {
     return (
@@ -245,7 +245,7 @@ export function RuleMatcher({
           <GeoMatchValueCombobox
             type={type}
             value={value}
-            dataset={dataset}
+            provider={provider}
             onChange={(next) => onChange?.(type, next)}
           />
         ) : (
@@ -293,7 +293,12 @@ export function RuleMatcher({
       {type === 'MATCH' ? (
         <span className="template-rule-match-desc text-xs">兜底规则（MATCH）</span>
       ) : type === 'GEOSITE' || type === 'GEOIP' ? (
-        <GeoMatchValueCombobox type={type} value={value} dataset={dataset} onChange={(next) => onSave?.(type, next)} />
+        <GeoMatchValueCombobox
+          type={type}
+          value={value}
+          provider={provider || 'custom'}
+          onChange={(next) => onSave?.(type, next)}
+        />
       ) : (
         <InlineValueEdit
           value={value || ''}
@@ -313,7 +318,7 @@ export function RuleCard({
   issues,
   onSave,
   onDelete,
-  dataset = 'full',
+  provider = 'metacubex',
 }: {
   rule: RuleDraft
   groups: ProxyGroupDraft[]
@@ -322,7 +327,7 @@ export function RuleCard({
   issues?: VisualIssue[]
   onSave: (rule: RuleDraft) => void
   onDelete: () => void
-  dataset?: GeoDataset
+  provider?: GeoProvider
 }) {
   const { ref, handleRef, isDragging } = useSortable({
     id: rule.id,
@@ -398,7 +403,7 @@ export function RuleCard({
                 mode="inline"
                 type={rule.type}
                 value={rule.value}
-                dataset={dataset}
+                provider={provider}
                 onSave={(nextType, nextValue) =>
                   onSave({
                     ...rule,
