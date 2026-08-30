@@ -1,11 +1,14 @@
-import { isMap, parseDocument } from 'yaml'
-import type { Document, YAMLMap } from 'yaml'
+import { isAlias, isMap, isPair, isScalar, isSeq, parseDocument } from 'yaml'
+import type { Document, Node, Pair, YAMLMap } from 'yaml'
 import type {
   ProxyGroupDraft,
   ProxyGroupMemberDraft,
   RuleDraft,
+  RuleProviderDraft,
+  RuleProviderProxyDraft,
   RuleTargetDraft,
   StructuredProxyGroupDraft,
+  StructuredRuleProviderDraft,
   StructuredRuleDraft,
   SupportedLoadBalanceStrategy,
   SupportedProxyGroupType,
@@ -27,6 +30,22 @@ const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'IP-CIDR6',
 ])
 const NO_RESOLVE_TYPES = new Set<SupportedRuleType>(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
+const PROVIDER_TYPES = new Set(['http', 'file', 'inline'])
+const PROVIDER_BEHAVIORS = new Set(['domain', 'ipcidr', 'classical'])
+const PROVIDER_FORMATS = new Set(['yaml', 'text', 'mrs'])
+const PROVIDER_KEYS = new Set([
+  'type',
+  'behavior',
+  'format',
+  'url',
+  'path',
+  'interval',
+  'proxy',
+  'path-in-bundle',
+  'size-limit',
+  'header',
+  'payload',
+])
 const GROUP_KEYS = new Set([
   'name',
   'type',
@@ -104,19 +123,130 @@ function parseMember(value: string, groupIds: Map<string, string>): ProxyGroupMe
   return groupId ? { kind: 'group', groupId } : { kind: 'raw', value }
 }
 
-function parseRule(value: string, index: number, groupIds: Map<string, string>): RuleDraft {
+function parseProviderProxy(value: unknown, groupIds: Map<string, string>): RuleProviderProxyDraft | undefined {
+  if (typeof value !== 'string') return undefined
+  const groupId = groupIds.get(value)
+  if (groupId) return { kind: 'group', groupId }
+  if (value === 'DIRECT') return { kind: 'builtin', value }
+  return { kind: 'raw', value }
+}
+
+function scalarValue(value: unknown) {
+  return isScalar(value) ? String(value.value) : String(value)
+}
+
+function hasUnsafeProviderNode(node: unknown): boolean {
+  if (!node) return false
+  if (isAlias(node)) return true
+  if (isPair(node))
+    return scalarValue(node.key) === '<<' || hasUnsafeProviderNode(node.key) || hasUnsafeProviderNode(node.value)
+  if (isMap(node) || isSeq(node)) return Boolean(node.tag) || node.items.some((item) => hasUnsafeProviderNode(item))
+  return isScalar(node) && Boolean(node.tag)
+}
+
+function parseRuleProviders(
+  doc: Document,
+  root: Record<string, unknown>,
+  groupIds: Map<string, string>,
+): { providers: RuleProviderDraft[]; providerIds: Map<string, string> } {
+  const node = doc.get('rule-providers', true)
+  if (node === undefined) return { providers: [], providerIds: new Map() }
+  if (!isMap(node) || !object(root['rule-providers'])) throw new Error('rule-providers 必须是对象')
+  const rows = root['rule-providers'] as Record<string, unknown>
+  const providerIds = new Map<string, string>()
+  const providers = node.items.map((pair, index): RuleProviderDraft => {
+    const name = scalarValue(pair.key)
+    const id = runtimeId('provider', index)
+    providerIds.set(name, id)
+    const value = rows[name]
+    const raw = (reason: string): RuleProviderDraft => ({
+      kind: 'raw',
+      id,
+      name,
+      reason,
+      rawYaml: pair.value ? String(pair.value) : '',
+    })
+    if (hasUnsafeProviderNode(pair.key) || hasUnsafeProviderNode(pair.value)) return raw('yaml-merge')
+    if (!object(value)) return raw('unsupported-node')
+    if (!PROVIDER_TYPES.has(String(value.type)) || !PROVIDER_BEHAVIORS.has(String(value.behavior)))
+      return raw('unsupported-fields')
+    if (value.format !== undefined && !PROVIDER_FORMATS.has(String(value.format))) return raw('unsupported-fields')
+    const stringFields = ['url', 'path', 'proxy', 'path-in-bundle']
+    const numberFields = ['interval', 'size-limit']
+    const validHeader =
+      value.header === undefined ||
+      (object(value.header) &&
+        Object.values(value.header).every(
+          (item) =>
+            typeof item === 'string' || (Array.isArray(item) && item.every((entry) => typeof entry === 'string')),
+        ))
+    if (
+      stringFields.some((key) => value[key] !== undefined && typeof value[key] !== 'string') ||
+      numberFields.some((key) => value[key] !== undefined && typeof value[key] !== 'number') ||
+      (value.payload !== undefined &&
+        (!Array.isArray(value.payload) || value.payload.some((item) => typeof item !== 'string'))) ||
+      !validHeader
+    )
+      return raw('unsupported-fields')
+    const header = object(value.header)
+      ? Object.fromEntries(
+          Object.entries(value.header).map(([key, item]) => [
+            key,
+            Array.isArray(item) ? item.map(String) : [String(item)],
+          ]),
+        )
+      : undefined
+    const provider: StructuredRuleProviderDraft = {
+      kind: 'structured',
+      id,
+      name,
+      type: value.type as StructuredRuleProviderDraft['type'],
+      behavior: value.behavior as StructuredRuleProviderDraft['behavior'],
+      format: value.type === 'inline' ? undefined : (value.format as StructuredRuleProviderDraft['format']),
+      url: typeof value.url === 'string' ? value.url : undefined,
+      path: typeof value.path === 'string' ? value.path : undefined,
+      interval: typeof value.interval === 'number' ? value.interval : undefined,
+      proxy: parseProviderProxy(value.proxy, groupIds),
+      pathInBundle: typeof value['path-in-bundle'] === 'string' ? value['path-in-bundle'] : undefined,
+      sizeLimit: typeof value['size-limit'] === 'number' ? value['size-limit'] : undefined,
+      header,
+      payload: Array.isArray(value.payload) ? value.payload.map(String) : undefined,
+      extras: Object.fromEntries(Object.entries(value).filter(([key]) => !PROVIDER_KEYS.has(key))),
+    }
+    return provider
+  })
+  return { providers, providerIds }
+}
+
+function parseRule(
+  value: string,
+  index: number,
+  groupIds: Map<string, string>,
+  providerIds: Map<string, string>,
+): RuleDraft {
   const tokens = value.split(',')
   const type = tokens[0] as SupportedRuleType
   const id = runtimeId('rule', index)
   if (type === 'MATCH' && tokens.length === 2)
     return { kind: 'structured', id, type, target: parseTarget(tokens[1], groupIds), noResolve: false }
+  if (type === 'RULE-SET' && (tokens.length === 3 || (tokens.length === 4 && tokens[3] === 'no-resolve'))) {
+    const providerId = providerIds.get(tokens[1])
+    return {
+      kind: 'structured',
+      id,
+      type,
+      provider: providerId ? { kind: 'provider', providerId } : { kind: 'raw', value: tokens[1] },
+      target: parseTarget(tokens[2], groupIds),
+      noResolve: tokens[3] === 'no-resolve',
+    }
+  }
   if (!VALUE_RULE_TYPES.has(type)) return { kind: 'raw', id, raw: value }
   const noResolve = tokens.length === 4 && tokens[3] === 'no-resolve' && NO_RESOLVE_TYPES.has(type)
   if (tokens.length !== 3 && !noResolve) return { kind: 'raw', id, raw: value }
   return {
     kind: 'structured',
     id,
-    type,
+    type: type as Exclude<SupportedRuleType, 'RULE-SET' | 'MATCH'>,
     value: tokens[1],
     target: parseTarget(tokens[2], groupIds),
     noResolve,
@@ -176,7 +306,10 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
         typeof value.strategy === 'string' ? (value.strategy as SupportedLoadBalanceStrategy) : 'consistent-hashing'
     return group
   })
-  const rules = ((root.rules as string[] | undefined) || []).map((rule, index) => parseRule(rule, index, groupIds))
+  const { providers: ruleProviders, providerIds } = parseRuleProviders(doc, root, groupIds)
+  const rules = ((root.rules as string[] | undefined) || []).map((rule, index) =>
+    parseRule(rule, index, groupIds, providerIds),
+  )
   const warnings: VisualIssue[] = [
     ...geo.warnings,
     ...groups
@@ -195,8 +328,16 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
         message: '存在仅支持 YAML 编辑的高级规则',
         ruleId: rule.id,
       })),
+    ...ruleProviders
+      .filter((provider) => provider.kind === 'raw')
+      .map((provider) => ({
+        level: 'warning' as const,
+        code: 'RAW_RULE_PROVIDER',
+        message: `规则集数据源“${provider.name}”仅支持 YAML 编辑`,
+        providerId: provider.id,
+      })),
   ]
-  return { draft: { geo: geo.draft, groups, rules }, warnings }
+  return { draft: { geo: geo.draft, groups, ruleProviders, rules }, warnings }
 }
 
 function applyOptionalRootField(doc: Document, key: string, value: unknown) {
@@ -236,6 +377,101 @@ function memberValue(member: ProxyGroupMemberDraft, names: Map<string, string>) 
   return member.kind === 'group' ? names.get(member.groupId) || '' : member.value
 }
 
+function providerProxyValue(proxy: RuleProviderProxyDraft | undefined, names: Map<string, string>) {
+  if (!proxy) return undefined
+  return proxy.kind === 'group' ? names.get(proxy.groupId) || '' : proxy.value
+}
+
+function serializeRuleProvider(provider: StructuredRuleProviderDraft, groupNames: Map<string, string>) {
+  const value: Record<string, unknown> = {
+    ...provider.extras,
+    type: provider.type,
+    behavior: provider.behavior,
+  }
+  if (provider.type !== 'inline' && provider.format) value.format = provider.format
+  if (provider.url) value.url = provider.url
+  if (provider.path) value.path = provider.path
+  if (provider.interval !== undefined) value.interval = provider.interval
+  const proxy = providerProxyValue(provider.proxy, groupNames)
+  if (proxy) value.proxy = proxy
+  if (provider.pathInBundle) value['path-in-bundle'] = provider.pathInBundle
+  if (provider.sizeLimit !== undefined) value['size-limit'] = provider.sizeLimit
+  if (provider.header && Object.keys(provider.header).length) value.header = provider.header
+  if (provider.payload?.length) value.payload = provider.payload
+  return value
+}
+
+function pairKey(pair: Pair) {
+  return scalarValue(pair.key)
+}
+
+function providerContent(provider: StructuredRuleProviderDraft) {
+  const { id: _id, name: _name, ...content } = provider
+  return JSON.stringify(content)
+}
+
+function setProviderField(map: YAMLMap, key: string, value: unknown) {
+  if (value === undefined) map.delete(key)
+  else map.set(key, value)
+}
+
+function applyStructuredProviderFields(
+  map: YAMLMap,
+  provider: StructuredRuleProviderDraft,
+  previous: StructuredRuleProviderDraft | undefined,
+  groupNames: Map<string, string>,
+) {
+  const value = serializeRuleProvider(provider, groupNames)
+  PROVIDER_KEYS.forEach((key) => setProviderField(map, key, value[key]))
+  if (JSON.stringify(previous?.extras || {}) === JSON.stringify(provider.extras)) return
+  new Set([...Object.keys(previous?.extras || {}), ...Object.keys(provider.extras)]).forEach((key) =>
+    setProviderField(map, key, value[key]),
+  )
+}
+
+function applyRuleProviders(
+  doc: Document,
+  nextDraft: VisualTemplateDraft,
+  previousDraft: VisualTemplateDraft | undefined,
+  groupNames: Map<string, string>,
+) {
+  let node = doc.get('rule-providers', true)
+  if (node !== undefined && !isMap(node)) throw new Error('rule-providers 必须是对象')
+  if (!node) {
+    if (!nextDraft.ruleProviders.length) return
+    node = doc.createNode({}) as YAMLMap
+    doc.set('rule-providers', node)
+  }
+  const map = node as YAMLMap
+  const previousById = new Map(previousDraft?.ruleProviders.map((provider) => [provider.id, provider]))
+  const previousGroupNames = new Map(previousDraft?.groups.map((group) => [group.id, group.name]))
+  const nextIds = new Set(nextDraft.ruleProviders.map((provider) => provider.id))
+  previousDraft?.ruleProviders.forEach((provider) => {
+    if (!nextIds.has(provider.id)) map.delete(provider.name)
+  })
+  nextDraft.ruleProviders.forEach((provider) => {
+    const previous = previousById.get(provider.id)
+    const oldName = previous?.name || provider.name
+    const pair = map.items.find((item) => pairKey(item as Pair) === oldName) as Pair | undefined
+    if (pair && oldName !== provider.name) pair.key = doc.createNode(provider.name) as Node
+    if (provider.kind === 'raw') return
+    if (!pair || !isMap(pair.value)) {
+      const value = doc.createNode(serializeRuleProvider(provider, groupNames)) as Node
+      if (pair) pair.value = value
+      else map.set(provider.name, value)
+      return
+    }
+    const previousStructured = previous?.kind === 'structured' ? previous : undefined
+    const proxyChanged =
+      providerProxyValue(previousStructured?.proxy, previousGroupNames) !==
+      providerProxyValue(provider.proxy, groupNames)
+    if (!previousStructured || providerContent(previousStructured) !== providerContent(provider))
+      applyStructuredProviderFields(pair.value, provider, previousStructured, groupNames)
+    else if (proxyChanged) setProviderField(pair.value, 'proxy', providerProxyValue(provider.proxy, groupNames))
+  })
+  if (!map.items.length) doc.delete('rule-providers')
+}
+
 function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
   if (group.kind === 'raw') return group.raw
   const value: Record<string, unknown> = {
@@ -256,28 +492,34 @@ function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
   return value
 }
 
-function serializeRule(rule: RuleDraft, names: Map<string, string>) {
+function serializeRule(rule: RuleDraft, names: Map<string, string>, providerNames: Map<string, string>) {
   if (rule.kind === 'raw') return rule.raw
   const target = targetValue(rule.target, names)
   if (rule.type === 'MATCH') return `MATCH,${target}`
-  return [rule.type, rule.value || '', target, rule.noResolve && NO_RESOLVE_TYPES.has(rule.type) ? 'no-resolve' : '']
-    .filter(Boolean)
-    .join(',')
+  const value =
+    rule.type === 'RULE-SET'
+      ? rule.provider.kind === 'provider'
+        ? providerNames.get(rule.provider.providerId) || ''
+        : rule.provider.value
+      : rule.value
+  return [rule.type, value, target, rule.noResolve ? 'no-resolve' : ''].filter(Boolean).join(',')
 }
 
-export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft) {
+export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft, previousDraft?: VisualTemplateDraft) {
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
   applyGeoSettings(doc, draft.geo)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
+  const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
   doc.set(
     'proxy-groups',
     draft.groups.map((group) => serializeGroup(group, names)),
   )
+  applyRuleProviders(doc, draft, previousDraft, names)
   doc.set(
     'rules',
-    draft.rules.map((rule) => serializeRule(rule, names)),
+    draft.rules.map((rule) => serializeRule(rule, names, providerNames)),
   )
   return String(doc)
 }
@@ -327,6 +569,7 @@ export function renameRawReferences(draft: VisualTemplateDraft, oldName: string,
           }
         : group,
     ),
+    ruleProviders: draft.ruleProviders,
     rules: draft.rules.map((rule) => {
       if (rule.kind !== 'raw') return rule
       const raw = rule.raw
@@ -336,6 +579,13 @@ export function renameRawReferences(draft: VisualTemplateDraft, oldName: string,
       return raw === rule.raw ? rule : { ...rule, raw }
     }),
   }
+}
+
+export function findPotentialRawProviderReferences(draft: VisualTemplateDraft, providerName: string) {
+  const escaped = providerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`RULE-SET,\\s*${escaped}(?=\\s*[,)]|$)`)
+  const ruleIds = draft.rules.filter((rule) => rule.kind === 'raw' && pattern.test(rule.raw)).map((rule) => rule.id)
+  return { ruleIds, count: ruleIds.length }
 }
 
 export function uniqueName(base: string, groups: ProxyGroupDraft[]) {
@@ -364,4 +614,26 @@ export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[
 
 export function newRule(target: RuleTargetDraft): StructuredRuleDraft {
   return { kind: 'structured', id: runtimeId('rule', 0), type: 'DOMAIN', value: '', target, noResolve: false }
+}
+
+export function uniqueProviderName(base: string, providers: RuleProviderDraft[]) {
+  const names = new Set(providers.map((provider) => provider.name))
+  if (!names.has(base)) return base
+  let suffix = 2
+  while (names.has(`${base} ${suffix}`)) suffix += 1
+  return `${base} ${suffix}`
+}
+
+export function newRuleProvider(providers: RuleProviderDraft[]): StructuredRuleProviderDraft {
+  return {
+    kind: 'structured',
+    id: runtimeId('provider', providers.length),
+    name: uniqueProviderName('规则集数据源', providers),
+    type: 'http',
+    behavior: 'domain',
+    format: 'mrs',
+    interval: 86400,
+    url: '',
+    extras: {},
+  }
 }

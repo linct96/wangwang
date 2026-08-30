@@ -1,20 +1,22 @@
 import { DragDropProvider } from '@dnd-kit/react'
-import { type ProxyGroupDraft, type RuleDraft, type VisualIssue } from '../model'
+import { type ProxyGroupDraft, type RuleDraft, type RuleProviderDraft, type VisualIssue } from '../model'
 import { RuleCard } from './rule-card'
 import type { GeoProvider } from './geo-catalog'
 
 export function RuleList({
   rules,
   groups,
+  ruleProviders,
   issues,
   onChange,
-  provider = 'metacubex',
+  geoProvider = 'metacubex',
 }: {
   rules: RuleDraft[]
   groups: ProxyGroupDraft[]
+  ruleProviders: RuleProviderDraft[]
   issues: VisualIssue[]
   onChange: (rules: RuleDraft[]) => void
-  provider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
+  geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
 }) {
   const firstMatch = rules.findIndex((rule) => rule.kind === 'structured' && rule.type === 'MATCH')
   return (
@@ -38,15 +40,16 @@ export function RuleList({
             index={originalIndex}
             rule={rule}
             groups={groups}
+            ruleProviders={ruleProviders}
             isAfterMatch={firstMatch !== -1 && originalIndex > firstMatch}
             issues={issues.filter((issue) => issue.ruleId === rule.id)}
-            provider={
-              typeof provider === 'function' &&
+            geoProvider={
+              typeof geoProvider === 'function' &&
               rule.kind === 'structured' &&
               (rule.type === 'GEOSITE' || rule.type === 'GEOIP')
-                ? provider(rule.type)
-                : typeof provider === 'string'
-                  ? provider
+                ? geoProvider(rule.type)
+                : typeof geoProvider === 'string'
+                  ? geoProvider
                   : 'metacubex'
             }
             onSave={(next) => onChange(rules.map((item) => (item.id === rule.id ? next : item)))}

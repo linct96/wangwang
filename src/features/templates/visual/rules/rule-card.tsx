@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
   Zap,
+  Database,
 } from 'lucide-react'
 import { IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +22,17 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import type { ProxyGroupDraft, RuleDraft, RuleTargetDraft, SupportedRuleType, VisualIssue } from '../model'
+import type {
+  ProxyGroupDraft,
+  RuleDraft,
+  RuleProviderDraft,
+  RuleTargetDraft,
+  StructuredRuleDraft,
+  SupportedRuleType,
+  VisualIssue,
+} from '../model'
+import { canUseNoResolve } from '../validation'
+import { RuleProviderCombobox } from '../rule-providers'
 import { GeoMatchValueCombobox } from './geo-match-value-combobox'
 import type { GeoProvider } from './geo-catalog'
 
@@ -33,11 +44,13 @@ const ruleTypes: SupportedRuleType[] = [
   'GEOIP',
   'IP-CIDR',
   'IP-CIDR6',
+  'RULE-SET',
   'MATCH',
 ]
 
 function valueAfterTypeChange(type: SupportedRuleType, nextType: SupportedRuleType, value?: string) {
   if (nextType === 'MATCH') return undefined
+  if (nextType === 'RULE-SET' || type === 'RULE-SET') return ''
   return type.startsWith('DOMAIN') && nextType.startsWith('DOMAIN') ? value : type === nextType ? value : ''
 }
 
@@ -65,6 +78,12 @@ function getRuleTypeMeta(type: string) {
         colorClass: 'text-amber-600 dark:text-amber-400',
         Icon: Network,
       }
+    case 'RULE-SET':
+      return {
+        badgeClass: 'bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border-cyan-200 dark:border-cyan-900/60',
+        colorClass: 'text-cyan-700 dark:text-cyan-300',
+        Icon: Database,
+      }
     case 'MATCH':
       return {
         badgeClass: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800/60',
@@ -78,6 +97,51 @@ function getRuleTypeMeta(type: string) {
         Icon: Code,
       }
   }
+}
+
+export function changeStructuredRule(
+  rule: StructuredRuleDraft,
+  type: SupportedRuleType,
+  value: string | undefined,
+  ruleProviders: RuleProviderDraft[],
+): StructuredRuleDraft {
+  if (type === 'MATCH') return { kind: 'structured', id: rule.id, type, target: rule.target, noResolve: false }
+  if (type === 'RULE-SET') {
+    const provider = value
+      ? { kind: 'provider' as const, providerId: value }
+      : rule.type === 'RULE-SET'
+        ? rule.provider
+        : ruleProviders[0]
+          ? { kind: 'provider' as const, providerId: ruleProviders[0].id }
+          : { kind: 'raw' as const, value: '' }
+    const next: StructuredRuleDraft = {
+      kind: 'structured',
+      id: rule.id,
+      type,
+      provider,
+      target: rule.target,
+      noResolve: rule.noResolve,
+    }
+    return canUseNoResolve(next, { ruleProviders }) ? next : { ...next, noResolve: false }
+  }
+  return {
+    kind: 'structured',
+    id: rule.id,
+    type,
+    value: value || '',
+    target: rule.target,
+    noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(type) ? rule.noResolve : false,
+  }
+}
+
+export function ruleMatcherValue(rule: StructuredRuleDraft) {
+  if (rule.type === 'MATCH') return undefined
+  if (rule.type === 'RULE-SET') return rule.provider.kind === 'provider' ? rule.provider.providerId : undefined
+  return rule.value
+}
+
+export function setRuleNoResolve(rule: StructuredRuleDraft, noResolve: boolean): StructuredRuleDraft {
+  return rule.type === 'MATCH' ? rule : { ...rule, noResolve }
 }
 
 export function InlineValueEdit({
@@ -198,7 +262,9 @@ export function RuleMatcher({
   onChange,
   onKeyDown,
   placeholder = '输入匹配值 (如 google.com)',
-  provider = 'metacubex',
+  geoProvider = 'metacubex',
+  ruleProviders = [],
+  rawProviderValue,
 }: {
   type: SupportedRuleType
   value?: string
@@ -207,7 +273,9 @@ export function RuleMatcher({
   onChange?: (type: SupportedRuleType, value?: string) => void
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
   placeholder?: string
-  provider?: GeoProvider
+  geoProvider?: GeoProvider
+  ruleProviders?: RuleProviderDraft[]
+  rawProviderValue?: string
 }) {
   if (mode === 'form') {
     return (
@@ -241,11 +309,22 @@ export function RuleMatcher({
 
         {type === 'MATCH' ? (
           <div className="template-matcher-match-placeholder">兜底规则（MATCH）</div>
+        ) : type === 'RULE-SET' ? (
+          ruleProviders.length === 0 && !rawProviderValue ? (
+            <div className="template-matcher-match-placeholder">暂无规则集数据源，请先创建规则集数据源</div>
+          ) : (
+            <RuleProviderCombobox
+              providers={ruleProviders}
+              value={value}
+              rawValue={rawProviderValue}
+              onChange={(providerId) => onChange?.(type, providerId)}
+            />
+          )
         ) : type === 'GEOSITE' || type === 'GEOIP' ? (
           <GeoMatchValueCombobox
             type={type}
             value={value}
-            provider={provider}
+            geoProvider={geoProvider}
             onChange={(next) => onChange?.(type, next)}
           />
         ) : (
@@ -292,11 +371,18 @@ export function RuleMatcher({
 
       {type === 'MATCH' ? (
         <span className="template-rule-match-desc text-xs">兜底规则（MATCH）</span>
+      ) : type === 'RULE-SET' ? (
+        <RuleProviderCombobox
+          providers={ruleProviders}
+          value={value}
+          rawValue={rawProviderValue}
+          onChange={(providerId) => onSave?.(type, providerId)}
+        />
       ) : type === 'GEOSITE' || type === 'GEOIP' ? (
         <GeoMatchValueCombobox
           type={type}
           value={value}
-          provider={provider || 'custom'}
+          geoProvider={geoProvider || 'custom'}
           onChange={(next) => onSave?.(type, next)}
         />
       ) : (
@@ -313,21 +399,23 @@ export function RuleMatcher({
 export function RuleCard({
   rule,
   groups,
+  ruleProviders,
   index,
   isAfterMatch,
   issues,
   onSave,
   onDelete,
-  provider = 'metacubex',
+  geoProvider = 'metacubex',
 }: {
   rule: RuleDraft
   groups: ProxyGroupDraft[]
+  ruleProviders: RuleProviderDraft[]
   index: number
   isAfterMatch?: boolean
   issues?: VisualIssue[]
   onSave: (rule: RuleDraft) => void
   onDelete: () => void
-  provider?: GeoProvider
+  geoProvider?: GeoProvider
 }) {
   const { ref, handleRef, isDragging } = useSortable({
     id: rule.id,
@@ -402,16 +490,13 @@ export function RuleCard({
               <RuleMatcher
                 mode="inline"
                 type={rule.type}
-                value={rule.value}
-                provider={provider}
-                onSave={(nextType, nextValue) =>
-                  onSave({
-                    ...rule,
-                    type: nextType,
-                    value: nextValue,
-                    noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(nextType) ? rule.noResolve : false,
-                  })
+                value={ruleMatcherValue(rule)}
+                rawProviderValue={
+                  rule.type === 'RULE-SET' && rule.provider.kind === 'raw' ? rule.provider.value : undefined
                 }
+                ruleProviders={ruleProviders}
+                geoProvider={geoProvider}
+                onSave={(nextType, nextValue) => onSave(changeStructuredRule(rule, nextType, nextValue, ruleProviders))}
               />
             </div>
 
@@ -447,13 +532,13 @@ export function RuleCard({
                 </Select>
               </div>
 
-              {rule.kind === 'structured' && ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(rule.type) && (
+              {rule.kind === 'structured' && canUseNoResolve(rule, { ruleProviders }) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                       <Checkbox
                         checked={rule.noResolve}
-                        onCheckedChange={(checked) => onSave({ ...rule, noResolve: checked === true })}
+                        onCheckedChange={(checked) => onSave(setRuleNoResolve(rule, checked === true))}
                       />
                       <span>no-resolve</span>
                     </label>

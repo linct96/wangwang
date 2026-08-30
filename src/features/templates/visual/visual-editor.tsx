@@ -2,27 +2,34 @@ import { AlertTriangle, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { groupReferences } from './validation'
-import { findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
+import { groupReferences, ruleProviderReferences } from './validation'
+import { findPotentialRawProviderReferences, findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
 import { RuleDialog } from './rules/rule-dialog'
-import { type ProxyGroupDraft, type StructuredRuleDraft, type VisualIssue, type VisualTemplateDraft } from './model'
+import {
+  type ProxyGroupDraft,
+  type RuleProviderDraft,
+  type StructuredRuleDraft,
+  type VisualIssue,
+  type VisualTemplateDraft,
+} from './model'
 import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
+import { ProviderDialog, ProviderList } from './rule-providers'
 
 export function VisualTemplateEditor({
   draft,
   issues,
   onChange,
-  provider = 'metacubex',
+  geoProvider = 'metacubex',
   customGeo = false,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
   onChange: (draft: VisualTemplateDraft) => void
-  provider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
+  geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
   customGeo?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
@@ -51,9 +58,9 @@ export function VisualTemplateEditor({
   function removeGroup(group: ProxyGroupDraft) {
     const refs = groupReferences(draft, group.id)
     const raw = findPotentialRawReferences(draft, group.name)
-    if (refs.groups.length || refs.rules.length || raw.count) {
+    if (refs.groups.length || refs.rules.length || refs.ruleProviders.length || raw.count) {
       toast.error(
-        `该代理组被 ${refs.groups.length} 个代理组和 ${refs.rules.length} 条规则引用${raw.count ? '，或被高级配置引用' : ''}`,
+        `该代理组被 ${refs.groups.length} 个代理组、${refs.rules.length} 条规则和 ${refs.ruleProviders.length} 个规则集数据源引用${raw.count ? '，或被高级配置引用' : ''}`,
       )
       return
     }
@@ -61,6 +68,29 @@ export function VisualTemplateEditor({
       ...draft,
       groups: draft.groups.filter((item) => item.id !== group.id),
     })
+  }
+
+  function removeProvider(provider: RuleProviderDraft) {
+    const references = ruleProviderReferences(draft, provider.id)
+    const raw = findPotentialRawProviderReferences(draft, provider.name)
+    if (references.length || raw.count) {
+      toast.error(
+        references.length
+          ? `该规则集数据源被 ${references.length} 条分流规则引用，请先修改或删除相关规则`
+          : '该数据源可能被高级规则引用，请先检查 YAML',
+      )
+      return
+    }
+    update({ ...draft, ruleProviders: draft.ruleProviders.filter((item) => item.id !== provider.id) })
+  }
+
+  function updateProviders(ruleProviders: RuleProviderDraft[]) {
+    const renamed = ruleProviders.find((next) => {
+      const previous = draft.ruleProviders.find((item) => item.id === next.id)
+      return previous && previous.name !== next.name && findPotentialRawProviderReferences(draft, previous.name).count
+    })
+    if (renamed) toast.warning('高级规则可能仍引用数据源旧名称，请检查 YAML')
+    update({ ...draft, ruleProviders })
   }
 
   function updateGroups(groups: ProxyGroupDraft[]) {
@@ -108,6 +138,42 @@ export function VisualTemplateEditor({
         <GroupList groups={draft.groups} onChange={updateGroups} onDelete={removeGroup} />
       </section>
       <section className="template-visual-section">
+        <header className="template-visual-toolbar">
+          <div className="template-rule-header-left">
+            <h2>规则集数据源</h2>
+            <span className="template-section-count">{draft.ruleProviders.length}</span>
+          </div>
+          <ProviderDialog
+            providers={draft.ruleProviders}
+            groups={draft.groups}
+            onSave={(provider) => update({ ...draft, ruleProviders: [...draft.ruleProviders, provider] })}
+          >
+            <Button type="button">
+              <Plus data-icon="inline-start" />
+              添加数据源
+            </Button>
+          </ProviderDialog>
+        </header>
+        {draft.ruleProviders.length ? (
+          <ProviderList draft={draft} issues={issues} onChange={updateProviders} onDelete={removeProvider} />
+        ) : (
+          <div className="rounded-md border border-dashed px-4 py-8 text-center">
+            <p className="text-sm font-medium">暂无规则集数据源</p>
+            <p className="mt-1 text-sm text-muted-foreground">创建后即可通过 RULE-SET 在分流规则中引用。</p>
+            <ProviderDialog
+              providers={draft.ruleProviders}
+              groups={draft.groups}
+              onSave={(provider) => update({ ...draft, ruleProviders: [provider] })}
+            >
+              <Button type="button" variant="outline" size="sm" className="mt-4">
+                <Plus data-icon="inline-start" />
+                添加规则集数据源
+              </Button>
+            </ProviderDialog>
+          </div>
+        )}
+      </section>
+      <section className="template-visual-section">
         {customGeo && (
           <Alert className="mx-4 mt-4">
             <AlertDescription>当前使用自定义 GEO 数据源，建议列表可能与实际数据库不同</AlertDescription>
@@ -115,7 +181,7 @@ export function VisualTemplateEditor({
         )}
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
-            <h2>规则</h2>
+            <h2>分流规则</h2>
             <span className="template-section-count">{draft.rules.length}</span>
             {hasMatchNotLast && (
               <Button
@@ -131,7 +197,13 @@ export function VisualTemplateEditor({
             )}
           </div>
           <div className="template-rule-header-right">
-            <RuleDialog groups={draft.groups} rules={draft.rules} provider={provider} onSave={(rule) => addRule(rule)}>
+            <RuleDialog
+              groups={draft.groups}
+              ruleProviders={draft.ruleProviders}
+              rules={draft.rules}
+              geoProvider={geoProvider}
+              onSave={(rule) => addRule(rule)}
+            >
               <Button type="button" size="default">
                 <Plus data-icon="inline-start" />
                 添加规则
@@ -142,9 +214,10 @@ export function VisualTemplateEditor({
         <RuleList
           rules={draft.rules}
           groups={draft.groups}
+          ruleProviders={draft.ruleProviders}
           issues={issues}
           onChange={(rules) => update({ ...draft, rules })}
-          provider={provider}
+          geoProvider={geoProvider}
         />
       </section>
     </div>

@@ -6,26 +6,29 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { newRule } from '../yaml-adapter'
-import { RuleMatcher } from './rule-card'
-import type { ProxyGroupDraft, RuleDraft, RuleTargetDraft, StructuredRuleDraft } from '../model'
+import { changeStructuredRule, RuleMatcher, ruleMatcherValue, setRuleNoResolve } from './rule-card'
+import { canUseNoResolve } from '../validation'
+import type { ProxyGroupDraft, RuleDraft, RuleProviderDraft, RuleTargetDraft, StructuredRuleDraft } from '../model'
 import type { GeoProvider } from './geo-catalog'
 
 const builtinTarget = (value: 'DIRECT' | 'REJECT'): RuleTargetDraft => ({ kind: 'builtin', value })
 
 export function RuleDialog({
   groups,
+  ruleProviders,
   rules,
   value,
   onSave,
   children,
-  provider = 'metacubex',
+  geoProvider = 'metacubex',
 }: {
   groups: ProxyGroupDraft[]
+  ruleProviders: RuleProviderDraft[]
   rules: RuleDraft[]
   value?: StructuredRuleDraft
   onSave: (rule: StructuredRuleDraft) => void
   children: React.ReactNode
-  provider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
+  geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
 }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<StructuredRuleDraft>(() => value || newRule(builtinTarget('DIRECT')))
@@ -38,8 +41,12 @@ export function RuleDialog({
       toast.error('已有 MATCH 兜底规则')
       return
     }
-    if (form.type !== 'MATCH' && !form.value?.trim()) {
+    if (form.type !== 'MATCH' && form.type !== 'RULE-SET' && !form.value.trim()) {
       toast.error('匹配值不能为空')
+      return
+    }
+    if (form.type === 'RULE-SET' && form.provider.kind === 'raw' && !form.provider.value) {
+      toast.error('请先创建并选择规则集数据源')
       return
     }
     onSave(form)
@@ -72,24 +79,21 @@ export function RuleDialog({
         >
           <FieldGroup>
             <Field>
-              <FieldLabel>匹配条件 (类型与值)</FieldLabel>
+              <FieldLabel>{form.type === 'RULE-SET' ? '规则集数据源' : '匹配条件 (类型与值)'}</FieldLabel>
               <RuleMatcher
                 mode="form"
                 type={form.type}
-                value={form.value}
-                onChange={(t, v) =>
-                  setForm({
-                    ...form,
-                    type: t,
-                    value: v,
-                    noResolve: ['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(t) ? form.noResolve : false,
-                  })
+                value={ruleMatcherValue(form)}
+                rawProviderValue={
+                  form.type === 'RULE-SET' && form.provider.kind === 'raw' ? form.provider.value : undefined
                 }
-                provider={
-                  typeof provider === 'function' && (form.type === 'GEOSITE' || form.type === 'GEOIP')
-                    ? provider(form.type)
-                    : typeof provider === 'string'
-                      ? provider
+                ruleProviders={ruleProviders}
+                onChange={(t, v) => setForm(changeStructuredRule(form, t, v, ruleProviders))}
+                geoProvider={
+                  typeof geoProvider === 'function' && (form.type === 'GEOSITE' || form.type === 'GEOIP')
+                    ? geoProvider(form.type)
+                    : typeof geoProvider === 'string'
+                      ? geoProvider
                       : 'metacubex'
                 }
               />
@@ -116,11 +120,11 @@ export function RuleDialog({
                 </SelectContent>
               </Select>
             </Field>
-            {['GEOIP', 'IP-CIDR', 'IP-CIDR6'].includes(form.type) && (
+            {canUseNoResolve(form, { ruleProviders }) && (
               <Field orientation="horizontal">
                 <Checkbox
                   checked={form.noResolve}
-                  onCheckedChange={(checked) => setForm({ ...form, noResolve: checked === true })}
+                  onCheckedChange={(checked) => setForm(setRuleNoResolve(form, checked === true))}
                 />
                 <FieldLabel>no-resolve</FieldLabel>
               </Field>

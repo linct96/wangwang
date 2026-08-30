@@ -1,7 +1,16 @@
-import type { ProxyGroupDraft, VisualIssue, VisualTemplateDraft } from './model'
+import type { ProxyGroupDraft, RuleDraft, VisualIssue, VisualTemplateDraft } from './model'
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
+
+export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft, 'ruleProviders'>) {
+  if (rule.kind !== 'structured') return false
+  if (NO_RESOLVE_TYPES.has(rule.type)) return true
+  if (rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider') return false
+  const providerId = rule.provider.providerId
+  const provider = draft.ruleProviders.find((item) => item.id === providerId)
+  return provider?.kind === 'structured' && provider.behavior !== 'domain'
+}
 
 export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualIssue[] = []) {
   const issues = [...initial]
@@ -11,6 +20,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         (item) =>
           item.code === issue.code &&
           item.groupId === issue.groupId &&
+          item.providerId === issue.providerId &&
           item.ruleId === issue.ruleId &&
           item.message === issue.message,
       )
@@ -126,18 +136,151 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
           groupId: group.id,
         })
   }
+  const providerNames = new Map<string, number>()
+  const providerPaths = new Map<string, number>()
+  draft.ruleProviders.forEach((provider) => {
+    providerNames.set(provider.name, (providerNames.get(provider.name) || 0) + 1)
+    if (provider.kind === 'structured' && provider.path)
+      providerPaths.set(provider.path, (providerPaths.get(provider.path) || 0) + 1)
+  })
+  draft.ruleProviders.forEach((provider) => {
+    if (!provider.name.trim())
+      add({ level: 'error', code: 'PROVIDER_NAME_EMPTY', message: '规则集数据源名称不能为空', providerId: provider.id })
+    if ((providerNames.get(provider.name) || 0) > 1)
+      add({
+        level: 'error',
+        code: 'PROVIDER_NAME_DUPLICATE',
+        message: `规则集数据源名称重复：${provider.name}`,
+        providerId: provider.id,
+      })
+    if (provider.kind === 'raw') {
+      add({
+        level: 'warning',
+        code: 'RAW_RULE_PROVIDER',
+        message: `规则集数据源“${provider.name}”仅支持 YAML 编辑`,
+        providerId: provider.id,
+      })
+      return
+    }
+    if (provider.type === 'http') {
+      if (!provider.url?.trim())
+        add({
+          level: 'error',
+          code: 'PROVIDER_HTTP_URL_EMPTY',
+          message: `规则集数据源“${provider.name}”的 URL 不能为空`,
+          providerId: provider.id,
+        })
+      else
+        try {
+          if (!['http:', 'https:'].includes(new URL(provider.url).protocol)) throw new Error()
+        } catch {
+          add({
+            level: 'error',
+            code: 'PROVIDER_HTTP_URL_INVALID',
+            message: `规则集数据源“${provider.name}”的 URL 无效`,
+            providerId: provider.id,
+          })
+        }
+      if (!Number.isInteger(provider.interval) || (provider.interval || 0) <= 0)
+        add({
+          level: 'error',
+          code: 'PROVIDER_INTERVAL_INVALID',
+          message: `规则集数据源“${provider.name}”的更新间隔必须是正整数`,
+          providerId: provider.id,
+        })
+    }
+    if (provider.type === 'file' && !provider.path?.trim())
+      add({
+        level: 'error',
+        code: 'PROVIDER_FILE_PATH_EMPTY',
+        message: `规则集数据源“${provider.name}”的文件路径不能为空`,
+        providerId: provider.id,
+      })
+    if (provider.type === 'inline' && !provider.payload?.some((item) => item.trim()))
+      add({
+        level: 'error',
+        code: 'PROVIDER_INLINE_PAYLOAD_EMPTY',
+        message: `规则集数据源“${provider.name}”至少需要一条规则内容`,
+        providerId: provider.id,
+      })
+    if (provider.path && (providerPaths.get(provider.path) || 0) > 1)
+      add({
+        level: 'error',
+        code: 'PROVIDER_PATH_DUPLICATE',
+        message: `规则集数据源缓存路径重复：${provider.path}`,
+        providerId: provider.id,
+      })
+    if (provider.format === 'mrs' && provider.behavior === 'classical')
+      add({
+        level: 'error',
+        code: 'PROVIDER_MRS_CLASSICAL_INVALID',
+        message: 'Classical 不支持 MRS 格式',
+        providerId: provider.id,
+      })
+    if (provider.proxy?.kind === 'group') {
+      const groupId = provider.proxy.groupId
+      if (!draft.groups.some((group) => group.id === groupId))
+        add({
+          level: 'error',
+          code: 'PROVIDER_PROXY_MISSING',
+          message: `规则集数据源“${provider.name}”引用了不存在的下载代理`,
+          providerId: provider.id,
+        })
+    }
+    if (provider.proxy?.kind === 'raw')
+      add({
+        level: 'warning',
+        code: 'PROVIDER_PROXY_MISSING',
+        message: `规则集数据源“${provider.name}”的下载代理“${provider.proxy.value}”无法映射到代理组`,
+        providerId: provider.id,
+      })
+    if (Object.keys(provider.extras).length)
+      add({
+        level: 'warning',
+        code: 'RULE_PROVIDER_UNKNOWN_FIELDS',
+        message: `规则集数据源“${provider.name}”包含高级字段，保存时会保留`,
+        providerId: provider.id,
+      })
+  })
   draft.rules.forEach((rule, index) => {
     if (rule.kind === 'raw') {
       add({ level: 'warning', code: 'RAW_RULE', message: '存在仅支持 YAML 编辑的高级规则', ruleId: rule.id })
       return
     }
-    if (rule.type !== 'MATCH' && !rule.value?.trim())
+    if (rule.type !== 'MATCH' && rule.type !== 'RULE-SET' && !rule.value.trim())
       add({
         level: 'error',
         code: 'RULE_VALUE_EMPTY',
         message: `第 ${index + 1} 条规则的匹配值不能为空`,
         ruleId: rule.id,
       })
+    if (rule.type === 'RULE-SET') {
+      if (rule.provider.kind === 'raw')
+        add({
+          level: 'error',
+          code: 'RULE_SET_PROVIDER_MISSING',
+          message: `第 ${index + 1} 条规则引用了不存在的数据源“${rule.provider.value}”`,
+          ruleId: rule.id,
+        })
+      else {
+        const providerId = rule.provider.providerId
+        const provider = draft.ruleProviders.find((item) => item.id === providerId)
+        if (!provider)
+          add({
+            level: 'error',
+            code: 'RULE_SET_PROVIDER_MISSING',
+            message: `第 ${index + 1} 条规则引用了不存在的规则集数据源`,
+            ruleId: rule.id,
+          })
+        else if (provider.kind === 'raw')
+          add({
+            level: 'warning',
+            code: 'RULE_SET_RAW_PROVIDER_REFERENCE',
+            message: `第 ${index + 1} 条规则引用了高级 YAML 数据源`,
+            ruleId: rule.id,
+          })
+      }
+    }
     if (rule.target.kind === 'group') {
       const targetGroupId = rule.target.groupId
       if (!draft.groups.some((group) => group.id === targetGroupId))
@@ -155,10 +298,10 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         message: `第 ${index + 1} 条规则的目标“${rule.target.value}”无法映射到代理组`,
         ruleId: rule.id,
       })
-    if (rule.noResolve && !NO_RESOLVE_TYPES.has(rule.type))
+    if (rule.noResolve && !canUseNoResolve(rule, draft))
       add({
         level: 'error',
-        code: 'RULE_NO_RESOLVE_INVALID',
+        code: rule.type === 'RULE-SET' ? 'RULE_SET_NO_RESOLVE_INVALID' : 'RULE_NO_RESOLVE_INVALID',
         message: `${rule.type} 不支持 no-resolve`,
         ruleId: rule.id,
       })
@@ -198,6 +341,15 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   draft.groups.forEach((group) => dfs(group.id, []))
   if (draft.groups.some((group) => group.kind === 'raw'))
     add({ level: 'warning', code: 'RAW_GROUP_CYCLE', message: 'RAW 代理组未参与完整循环引用分析' })
+  draft.ruleProviders.forEach((provider) => {
+    if (!ruleProviderReferences(draft, provider.id).length)
+      add({
+        level: 'warning',
+        code: 'RULE_PROVIDER_UNUSED',
+        message: `规则集数据源“${provider.name}”尚未被分流规则引用`,
+        providerId: provider.id,
+      })
+  })
   return issues
 }
 
@@ -211,5 +363,19 @@ export function groupReferences(draft: VisualTemplateDraft, groupId: string) {
     rules: draft.rules.filter(
       (rule) => rule.kind === 'structured' && rule.target.kind === 'group' && rule.target.groupId === groupId,
     ),
+    ruleProviders: draft.ruleProviders.filter(
+      (provider) =>
+        provider.kind === 'structured' && provider.proxy?.kind === 'group' && provider.proxy.groupId === groupId,
+    ),
   }
+}
+
+export function ruleProviderReferences(draft: VisualTemplateDraft, providerId: string) {
+  return draft.rules.filter(
+    (rule) =>
+      rule.kind === 'structured' &&
+      rule.type === 'RULE-SET' &&
+      rule.provider.kind === 'provider' &&
+      rule.provider.providerId === providerId,
+  )
 }
