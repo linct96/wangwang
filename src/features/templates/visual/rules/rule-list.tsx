@@ -1,5 +1,5 @@
 import { DragDropProvider } from '@dnd-kit/react'
-import { targetLabel, type ProxyGroupDraft, type RuleDraft, type VisualIssue } from '../model'
+import { type ProxyGroupDraft, type RuleDraft, type VisualIssue } from '../model'
 import { RuleCard } from './rule-card'
 import type { GeoDataset } from './geo-catalog'
 
@@ -7,28 +7,16 @@ export function RuleList({
   rules,
   groups,
   issues,
-  query,
   onChange,
   dataset = 'full',
 }: {
   rules: RuleDraft[]
   groups: ProxyGroupDraft[]
   issues: VisualIssue[]
-  query: string
   onChange: (rules: RuleDraft[]) => void
   dataset?: GeoDataset | ((type: 'GEOSITE' | 'GEOIP') => GeoDataset)
 }) {
   const firstMatch = rules.findIndex((rule) => rule.kind === 'structured' && rule.type === 'MATCH')
-  const filtered = rules
-    .map((rule, originalIndex) => ({ rule, originalIndex }))
-    .filter(({ rule }) => {
-      if (!query) return true
-      const target = rule.kind === 'structured' ? targetLabel(rule.target, groups) : ''
-      return (rule.kind === 'raw' ? rule.raw : `${rule.type} ${rule.value || ''} ${target}`)
-        .toLowerCase()
-        .includes(query.toLowerCase())
-    })
-
   return (
     <DragDropProvider
       onDragEnd={(event) => {
@@ -44,7 +32,7 @@ export function RuleList({
       }}
     >
       <div className="template-visual-list">
-        {filtered.map(({ rule, originalIndex }) => (
+        {rules.map((rule, originalIndex) => (
           <RuleCard
             key={rule.id}
             index={originalIndex}

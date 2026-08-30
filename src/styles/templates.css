@@ -395,50 +395,6 @@
     background: color-mix(in oklch, #f59e0b 18%, transparent);
     color: #92400e;
   }
-  .template-rule-search-box {
-    position: relative;
-    display: flex;
-    align-items: center;
-  }
-  .template-rule-search-icon {
-    position: absolute;
-    left: 8px;
-    width: 14px;
-    height: 14px;
-    color: var(--muted-foreground);
-    pointer-events: none;
-  }
-  .template-rule-search-input {
-    height: 32px;
-    width: 180px;
-    padding-left: 28px;
-    padding-right: 26px;
-    font-size: 12px;
-  }
-  @media (min-width: 640px) {
-    .template-rule-search-input {
-      width: 220px;
-    }
-  }
-  .template-rule-search-clear {
-    position: absolute;
-    right: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--muted-foreground);
-    cursor: pointer;
-    padding: 0;
-  }
-  .template-rule-search-clear:hover {
-    color: var(--foreground);
-    background: var(--muted);
-  }
   .template-rule-row {
     min-width: 0;
     display: flex;
@@ -958,12 +914,6 @@
     .template-rule-header-right {
       width: 100%;
       justify-content: space-between;
-    }
-    .template-rule-search-box {
-      flex: 1;
-    }
-    .template-rule-search-input {
-      width: 100%;
     }
   }
   @media (max-width: 520px) {
