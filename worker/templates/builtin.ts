@@ -16,15 +16,48 @@ ipv6: false
 unified-delay: true
 dns:
   enable: true
-  ipv6: false
+  respect-rules: true
   enhanced-mode: fake-ip
+  listen: 0.0.0.0:1053
+  prefer-h3: false
+  ipv6: false
   fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localdomain'
+    - localhost
+    - '*.ntp.org'
+    - +.stun.*.*
+    - +.stun.*.*.*
+    - +.stun.*.*.*.*
+    - +.stun.*.*.*.*.*
+    - '*.n.n.srv.nintendo.net'
+    - +.stun.playstation.net
+    - '*.xboxlive.com'
   default-nameserver:
     - 223.5.5.5
-    - 1.1.1.1
+    - 119.29.29.29
+    - 180.184.101.101
+    - 114.114.114.114
   nameserver:
+    - https://doh.pub/dns-query
+    - tls://dot.pub
     - https://dns.alidns.com/dns-query
-    - https://1.1.1.1/dns-query
+    - tls://dns.alidns.com
+    - https://nas.ip33.com/dns-query
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 180.184.101.101
+  nameserver-policy:
+    'geosite:cn,private':
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+    'geosite:geolocation-!cn':
+      - 'tcp://1.1.1.1'
+      - 'tcp://8.8.8.8'
+      - 'https://dns.google/dns-query'
 proxy-groups:
   - name: 🚀 节点选择
     type: select
@@ -55,10 +88,86 @@ rules:
   - MATCH,🚀 节点选择
 `
 
-const standardYaml = minimalYaml.replace(
-  '  - MATCH,🚀 节点选择\n',
-  '  - GEOSITE,geolocation-!cn,🚀 节点选择\n  - MATCH,🚀 节点选择\n',
-)
+const standardYaml = `mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+unified-delay: true
+dns:
+  enable: true
+  respect-rules: true
+  enhanced-mode: fake-ip
+  listen: 0.0.0.0:1053
+  prefer-h3: false
+  ipv6: false
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localdomain'
+    - localhost
+    - '*.ntp.org'
+    - +.stun.*.*
+    - +.stun.*.*.*
+    - +.stun.*.*.*.*
+    - +.stun.*.*.*.*.*
+    - '*.n.n.srv.nintendo.net'
+    - +.stun.playstation.net
+    - '*.xboxlive.com'
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 180.184.101.101
+    - 114.114.114.114
+  nameserver:
+    - https://doh.pub/dns-query
+    - tls://dot.pub
+    - https://dns.alidns.com/dns-query
+    - tls://dns.alidns.com
+    - https://nas.ip33.com/dns-query
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 180.184.101.101
+  nameserver-policy:
+    'geosite:cn,private':
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+    'geosite:geolocation-!cn':
+      - 'tcp://1.1.1.1'
+      - 'tcp://8.8.8.8'
+      - 'https://dns.google/dns-query'
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+      - DIRECT
+  - name: ⚡ 自动选择
+    type: url-test
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: ♻️ 故障转移
+    type: fallback
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    proxies:
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+rules:
+  - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,private,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
+  - GEOSITE,cn,DIRECT
+  - GEOIP,CN,DIRECT,no-resolve
+  - GEOSITE,geolocation-!cn,🚀 节点选择
+  - MATCH,🚀 节点选择
+`
 
 const fullYaml = `mixed-port: 7890
 allow-lan: false
@@ -68,15 +177,48 @@ ipv6: false
 unified-delay: true
 dns:
   enable: true
-  ipv6: false
+  respect-rules: true
   enhanced-mode: fake-ip
+  listen: 0.0.0.0:1053
+  prefer-h3: false
+  ipv6: false
   fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '*.localdomain'
+    - localhost
+    - '*.ntp.org'
+    - +.stun.*.*
+    - +.stun.*.*.*
+    - +.stun.*.*.*.*
+    - +.stun.*.*.*.*.*
+    - '*.n.n.srv.nintendo.net'
+    - +.stun.playstation.net
+    - '*.xboxlive.com'
   default-nameserver:
     - 223.5.5.5
-    - 1.1.1.1
+    - 119.29.29.29
+    - 180.184.101.101
+    - 114.114.114.114
   nameserver:
+    - https://doh.pub/dns-query
+    - tls://dot.pub
     - https://dns.alidns.com/dns-query
-    - https://1.1.1.1/dns-query
+    - tls://dns.alidns.com
+    - https://nas.ip33.com/dns-query
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 180.184.101.101
+  nameserver-policy:
+    'geosite:cn,private':
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+    'geosite:geolocation-!cn':
+      - 'tcp://1.1.1.1'
+      - 'tcp://8.8.8.8'
+      - 'https://dns.google/dns-query'
 proxy-groups:
   - name: 🚀 节点选择
     type: select
