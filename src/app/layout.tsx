@@ -48,7 +48,7 @@ export function Layout() {
             </div>
             <ThemeToggle className="theme-toggle-btn" />
             <IconButton
-              className="mobile-toggle"
+              className="md:hidden"
               label={mobileMenuOpen ? '关闭菜单' : '打开菜单'}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
