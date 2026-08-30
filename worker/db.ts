@@ -83,7 +83,6 @@ export const templates = sqliteTable('templates', {
   name: text('name').notNull(),
   description: text('description'),
   yaml: text('yaml').notNull(),
-  revision: integer('revision').notNull().default(1),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })

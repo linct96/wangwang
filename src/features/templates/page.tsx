@@ -147,7 +147,6 @@ export function TemplatesPage() {
                         </div>
                       </header>
                       <div className="template-card-meta">
-                        <span className="template-meta-pill">v{template.revision}</span>
                         <span className="template-meta-pill">{template.profileCount} 个配置使用</span>
                         <time className="template-meta-time">{formatDate(template.updatedAt)}</time>
                       </div>

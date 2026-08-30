@@ -1,4 +1,4 @@
-import { count, desc, eq } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
@@ -67,7 +67,7 @@ export const templatesRouter = new Hono<{ Bindings: Env }>()
 
 templatesRouter.get('/', async (c) => {
   const [custom, counts] = await Promise.all([
-    db(c.env).select().from(templates).orderBy(desc(templates.updatedAt)),
+    db(c.env).select().from(templates).orderBy(asc(templates.updatedAt)),
     profileCounts(c.env),
   ])
   return ok(c, [
@@ -90,7 +90,6 @@ templatesRouter.post('/', async (c) => {
     name: input.name,
     description: input.description || null,
     yaml: input.yaml,
-    revision: 1,
     createdAt: now,
     updatedAt: now,
   }
@@ -135,7 +134,6 @@ templatesRouter.post('/:id/duplicate', async (c) => {
     name: `${source.name} 副本`,
     description: source.description || null,
     yaml: source.yaml,
-    revision: 1,
     createdAt: now,
     updatedAt: now,
   }
@@ -171,7 +169,6 @@ templatesRouter.patch('/:id', async (c) => {
     .set({
       ...input,
       description: input.description === undefined ? undefined : input.description,
-      revision: current.revision + 1,
       updatedAt: new Date(),
     })
     .where(eq(templates.id, id))
