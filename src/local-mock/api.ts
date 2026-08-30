@@ -648,7 +648,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       state.profiles.find((item) => item.id === rotateMatch[1]),
       '配置不存在',
     )
-    profile.subscriptionUrl = `/s/${profile.id}/${crypto.randomUUID()}/config.yaml`
+    profile.subscriptionUrl = `/s/${crypto.randomUUID()}/config.yaml`
     writeState(state)
     return { subscriptionUrl: profile.subscriptionUrl } as T
   }
@@ -717,7 +717,7 @@ export function buildProfile(
     error: null,
     sourceIds,
     excludedNodeIds: current?.excludedNodeIds || [],
-    subscriptionUrl: current?.subscriptionUrl || `/s/${id}/local-token/config.yaml`,
+    subscriptionUrl: current?.subscriptionUrl || `/s/local-token/config.yaml`,
   }
   profile.compiledYaml = compileYaml(profile.templateId, localProfileNodes(state, profile), state.templates)
   return profile

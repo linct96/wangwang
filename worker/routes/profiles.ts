@@ -75,13 +75,13 @@ export async function profileView(
     .select({ id: profileNodeExclusions.nodeId })
     .from(profileNodeExclusions)
     .where(eq(profileNodeExclusions.profileId, profile.id))
-  const token = subscriptionToken()
+  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     sourceIds: sourceRows.map((item) => item.id),
     excludedNodeIds: exclusionRows.map((item) => item.id),
-    subscriptionUrl: `${origin}/s/${profile.id}/${token}/config.yaml`,
+    subscriptionUrl: `${origin}/s/${token}/config.yaml`,
   }
 }
 
@@ -199,6 +199,6 @@ profilesRouter.post('/:id/rotate-token', async (c) => {
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   const tokenVersion = current.tokenVersion + 1
   await db(c.env).update(profiles).set({ tokenVersion, updatedAt: new Date() }).where(eq(profiles.id, id))
-  const token = subscriptionToken()
-  return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${id}/${token}/config.yaml` })
+  const token = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, id, tokenVersion)
+  return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${token}/config.yaml` })
 })
