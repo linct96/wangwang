@@ -1,8 +1,17 @@
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation } from '@dnd-kit/react/sortable'
-import { type ProxyGroupDraft, type RuleDraft, type RuleProviderDraft, type VisualIssue } from '../model'
+import {
+  type ProxyGroupDraft,
+  type RuleDraft,
+  type RuleProviderDraft,
+  type VisualChangeMeta,
+  type VisualIssue,
+} from '../model'
 import { RuleCard } from './rule-card'
 import type { GeoProvider } from './geo-catalog'
+
+const EMPTY_ISSUES: VisualIssue[] = []
 
 export function RuleList({
   rules,
@@ -16,9 +25,35 @@ export function RuleList({
   groups: ProxyGroupDraft[]
   ruleProviders: RuleProviderDraft[]
   issues: VisualIssue[]
-  onChange: (rules: RuleDraft[]) => void
+  onChange: (rules: RuleDraft[], meta?: VisualChangeMeta) => void
   geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
 }) {
+  const rulesRef = useRef(rules)
+  const onChangeRef = useRef(onChange)
+  useLayoutEffect(() => {
+    rulesRef.current = rules
+    onChangeRef.current = onChange
+  }, [rules, onChange])
+
+  const issuesByRuleId = useMemo(() => {
+    const map = new Map<string, VisualIssue[]>()
+    for (const issue of issues) {
+      if (!issue.ruleId) continue
+      const current = map.get(issue.ruleId)
+      if (current) current.push(issue)
+      else map.set(issue.ruleId, [issue])
+    }
+    return map
+  }, [issues])
+
+  const handleSave = useCallback((id: string, next: RuleDraft) => {
+    onChangeRef.current(rulesRef.current.map((rule) => (rule.id === id ? next : rule)))
+  }, [])
+
+  const handleDelete = useCallback((id: string) => {
+    onChangeRef.current(rulesRef.current.filter((rule) => rule.id !== id))
+  }, [])
+
   const firstMatch = rules.findIndex((rule) =>
     rule.kind === 'structured' ? rule.type === 'MATCH' : rule.raw.split(',', 1)[0].trim() === 'MATCH',
   )
@@ -33,7 +68,7 @@ export function RuleList({
         const next = [...rules]
         const [moved] = next.splice(from, 1)
         next.splice(to, 0, moved)
-        onChange(next)
+        onChange(next, { type: 'reorder', scope: 'rules' })
       }}
     >
       <div className="template-visual-list">
@@ -45,7 +80,7 @@ export function RuleList({
             groups={groups}
             ruleProviders={ruleProviders}
             isAfterMatch={firstMatch !== -1 && originalIndex > firstMatch}
-            issues={issues.filter((issue) => issue.ruleId === rule.id)}
+            issues={issuesByRuleId.get(rule.id) ?? EMPTY_ISSUES}
             geoProvider={
               typeof geoProvider === 'function' &&
               rule.kind === 'structured' &&
@@ -55,8 +90,8 @@ export function RuleList({
                   ? geoProvider
                   : 'metacubex'
             }
-            onSave={(next) => onChange(rules.map((item) => (item.id === rule.id ? next : item)))}
-            onDelete={() => onChange(rules.filter((item) => item.id !== rule.id))}
+            onSave={handleSave}
+            onDelete={handleDelete}
           />
         ))}
       </div>

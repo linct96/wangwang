@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
 import {
   AlertCircle,
@@ -396,7 +396,7 @@ export function RuleMatcher({
   )
 }
 
-export function RuleCard({
+export const RuleCard = memo(function RuleCard({
   rule,
   groups,
   ruleProviders,
@@ -413,8 +413,8 @@ export function RuleCard({
   index: number
   isAfterMatch?: boolean
   issues?: VisualIssue[]
-  onSave: (rule: RuleDraft) => void
-  onDelete: () => void
+  onSave: (id: string, rule: RuleDraft) => void
+  onDelete: (id: string) => void
   geoProvider?: GeoProvider
 }) {
   const { ref, handleRef, isDragging } = useSortable({
@@ -462,7 +462,7 @@ export function RuleCard({
             <InlineValueEdit
               value={rule.raw}
               placeholder="输入完整规则内容..."
-              onSave={(nextRaw) => onSave({ ...rule, raw: nextRaw })}
+              onSave={(nextRaw) => onSave(rule.id, { ...rule, raw: nextRaw })}
             />
           </div>
         ) : (
@@ -477,7 +477,9 @@ export function RuleCard({
                 }
                 ruleProviders={ruleProviders}
                 geoProvider={geoProvider}
-                onSave={(nextType, nextValue) => onSave(changeStructuredRule(rule, nextType, nextValue, ruleProviders))}
+                onSave={(nextType, nextValue) =>
+                  onSave(rule.id, changeStructuredRule(rule, nextType, nextValue, ruleProviders))
+                }
               />
             </div>
 
@@ -490,7 +492,7 @@ export function RuleCard({
                 <RuleTargetSelect
                   groups={groups}
                   value={rule.target}
-                  onChange={(target) => onSave({ ...rule, target })}
+                  onChange={(target) => onSave(rule.id, { ...rule, target })}
                   className="w-full min-w-[130px] max-w-[200px] cursor-pointer select-none"
                 />
               </div>
@@ -501,7 +503,7 @@ export function RuleCard({
                     <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                       <Checkbox
                         checked={rule.noResolve}
-                        onCheckedChange={(checked) => onSave(setRuleNoResolve(rule, checked === true))}
+                        onCheckedChange={(checked) => onSave(rule.id, setRuleNoResolve(rule, checked === true))}
                       />
                       <span>no-resolve</span>
                     </label>
@@ -522,10 +524,10 @@ export function RuleCard({
       )}
 
       <div className="template-rule-actions">
-        <IconButton label="删除规则" onClick={onDelete}>
+        <IconButton label="删除规则" onClick={() => onDelete(rule.id)}>
           <Trash2 />
         </IconButton>
       </div>
     </article>
   )
-}
+})

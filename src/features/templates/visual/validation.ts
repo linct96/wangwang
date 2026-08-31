@@ -1,4 +1,4 @@
-import type { ProxyGroupDraft, RuleDraft, RuleProviderDraft, VisualIssue, VisualTemplateDraft } from './model'
+import type { RuleDraft, RuleProviderDraft, VisualIssue, VisualTemplateDraft } from './model'
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
@@ -7,31 +7,45 @@ export function resolvePresetNoResolve(provider: RuleProviderDraft | undefined, 
   return Boolean(requested && provider?.kind === 'structured' && provider.behavior === 'ipcidr')
 }
 
-export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft, 'ruleProviders'>) {
+function canUseNoResolveWithProvider(rule: RuleDraft, provider: RuleProviderDraft | undefined) {
   if (rule.kind !== 'structured') return false
   if (NO_RESOLVE_TYPES.has(rule.type)) return true
   if (rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider') return false
+  return provider?.kind === 'structured' && provider.behavior === 'ipcidr'
+}
+
+export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft, 'ruleProviders'>) {
+  if (rule.kind !== 'structured' || rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider')
+    return canUseNoResolveWithProvider(rule, undefined)
   const providerId = rule.provider.providerId
   const provider = draft.ruleProviders.find((item) => item.id === providerId)
-  return provider?.kind === 'structured' && provider.behavior === 'ipcidr'
+  return canUseNoResolveWithProvider(rule, provider)
 }
 
 export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualIssue[] = []) {
   const issues = [...initial]
+  const issueKeys = new Set(
+    initial.map((issue) =>
+      JSON.stringify([issue.code, issue.groupId, issue.providerId, issue.ruleId, issue.geoField, issue.message]),
+    ),
+  )
   const add = (issue: VisualIssue) => {
-    if (
-      !issues.some(
-        (item) =>
-          item.code === issue.code &&
-          item.groupId === issue.groupId &&
-          item.providerId === issue.providerId &&
-          item.ruleId === issue.ruleId &&
-          item.message === issue.message,
-      )
-    )
-      issues.push(issue)
+    const key = JSON.stringify([
+      issue.code,
+      issue.groupId,
+      issue.providerId,
+      issue.ruleId,
+      issue.geoField,
+      issue.message,
+    ])
+    if (issueKeys.has(key)) return
+    issueKeys.add(key)
+    issues.push(issue)
   }
-  const names = new Map<string, ProxyGroupDraft[]>()
+  const groupById = new Map(draft.groups.map((group) => [group.id, group]))
+  const providerById = new Map(draft.ruleProviders.map((provider) => [provider.id, provider]))
+  const groupNameCounts = new Map<string, number>()
+  draft.groups.forEach((group) => groupNameCounts.set(group.name, (groupNameCounts.get(group.name) || 0) + 1))
   const geo = draft.geo
   if (
     geo.geoUpdateInterval !== undefined &&
@@ -57,11 +71,10 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       })
     }
   }
-  draft.groups.forEach((group) => names.set(group.name, [...(names.get(group.name) || []), group]))
   draft.groups.forEach((group) => {
     if (!group.name.trim())
       add({ level: 'error', code: 'GROUP_NAME_EMPTY', message: '代理组名称不能为空', groupId: group.id })
-    if ((names.get(group.name) || []).length > 1)
+    if ((groupNameCounts.get(group.name) || 0) > 1)
       add({ level: 'error', code: 'GROUP_NAME_DUPLICATE', message: `代理组名称重复：${group.name}`, groupId: group.id })
     if (group.kind === 'raw') {
       add({ level: 'warning', code: 'RAW_GROUP', message: `代理组“${group.name}”仅支持 YAML 编辑`, groupId: group.id })
@@ -132,7 +145,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   for (const group of draft.groups) {
     if (group.kind !== 'structured') continue
     for (const member of group.members)
-      if (member.kind === 'group' && !draft.groups.some((item) => item.id === member.groupId))
+      if (member.kind === 'group' && !groupById.has(member.groupId))
         add({
           level: 'error',
           code: 'GROUP_MEMBER_MISSING',
@@ -223,7 +236,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       })
     if (provider.proxy?.kind === 'group') {
       const groupId = provider.proxy.groupId
-      if (!draft.groups.some((group) => group.id === groupId))
+      if (!groupById.has(groupId))
         add({
           level: 'error',
           code: 'PROVIDER_PROXY_MISSING',
@@ -246,11 +259,14 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         providerId: provider.id,
       })
   })
+  const providerReferenceCounts = new Map<string, number>()
+  let matchCount = 0
   draft.rules.forEach((rule, index) => {
     if (rule.kind === 'raw') {
       add({ level: 'warning', code: 'RAW_RULE', message: '存在仅支持 YAML 编辑的高级规则', ruleId: rule.id })
       return
     }
+    if (rule.type === 'MATCH') matchCount += 1
     if (rule.type !== 'MATCH' && rule.type !== 'RULE-SET' && !rule.value.trim())
       add({
         level: 'error',
@@ -268,7 +284,8 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         })
       else {
         const providerId = rule.provider.providerId
-        const provider = draft.ruleProviders.find((item) => item.id === providerId)
+        const provider = providerById.get(providerId)
+        providerReferenceCounts.set(providerId, (providerReferenceCounts.get(providerId) || 0) + 1)
         if (!provider)
           add({
             level: 'error',
@@ -287,7 +304,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     }
     if (rule.target.kind === 'group') {
       const targetGroupId = rule.target.groupId
-      if (!draft.groups.some((group) => group.id === targetGroupId))
+      if (!groupById.has(targetGroupId))
         add({
           level: 'error',
           code: 'RULE_TARGET_MISSING',
@@ -302,7 +319,11 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         message: `第 ${index + 1} 条规则的目标“${rule.target.value}”无法映射到代理组`,
         ruleId: rule.id,
       })
-    if (rule.noResolve && !canUseNoResolve(rule, draft))
+    const noResolveProvider =
+      rule.type === 'RULE-SET' && rule.provider.kind === 'provider'
+        ? providerById.get(rule.provider.providerId)
+        : undefined
+    if (rule.noResolve && !canUseNoResolveWithProvider(rule, noResolveProvider))
       add({
         level: 'error',
         code: rule.type === 'RULE-SET' ? 'RULE_SET_NO_RESOLVE_INVALID' : 'RULE_NO_RESOLVE_INVALID',
@@ -310,10 +331,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         ruleId: rule.id,
       })
   })
-  const matchIndexes = draft.rules.flatMap((rule, index) =>
-    rule.kind === 'structured' && rule.type === 'MATCH' ? [index] : [],
-  )
-  if (matchIndexes.length > 1) add({ level: 'error', code: 'MULTIPLE_MATCH', message: '存在多个 MATCH 兜底规则' })
+  if (matchCount > 1) add({ level: 'error', code: 'MULTIPLE_MATCH', message: '存在多个 MATCH 兜底规则' })
   const graph = new Map<string, string[]>()
   draft.groups.forEach((group) =>
     graph.set(
@@ -327,9 +345,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     visited = new Set<string>()
   function dfs(id: string, path: string[]): boolean {
     if (visiting.has(id)) {
-      const cycle = [...path.slice(path.indexOf(id)), id].map(
-        (item) => draft.groups.find((group) => group.id === item)?.name || item,
-      )
+      const cycle = [...path.slice(path.indexOf(id)), id].map((item) => groupById.get(item)?.name || item)
       add({ level: 'error', code: 'GROUP_CYCLE', message: `代理组存在循环引用：${cycle.join(' → ')}`, groupId: id })
       return true
     }
@@ -344,19 +360,19 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   if (draft.groups.some((group) => group.kind === 'raw'))
     add({ level: 'warning', code: 'RAW_GROUP_CYCLE', message: 'RAW 代理组未参与完整循环引用分析' })
   draft.ruleProviders.forEach((provider) => {
-    const references = ruleProviderReferences(draft, provider.id)
-    if (!references.length)
+    const referenceCount = providerReferenceCounts.get(provider.id) || 0
+    if (!referenceCount)
       add({
         level: 'warning',
         code: 'RULE_PROVIDER_UNUSED',
         message: `规则集数据源“${provider.name}”尚未被分流规则引用`,
         providerId: provider.id,
       })
-    else if (references.length > 1)
+    else if (referenceCount > 1)
       add({
         level: 'error',
         code: 'RULE_SET_PROVIDER_DUPLICATE',
-        message: `规则集数据源“${provider.name}”存在 ${references.length} 条 RULE-SET 规则，后续规则可能无法产生预期效果`,
+        message: `规则集数据源“${provider.name}”存在 ${referenceCount} 条 RULE-SET 规则，后续规则可能无法产生预期效果`,
         providerId: provider.id,
       })
   })

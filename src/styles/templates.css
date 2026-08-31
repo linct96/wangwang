@@ -409,7 +409,6 @@
     opacity: 0.5;
     border-color: var(--border);
     background: var(--muted);
-    filter: grayscale(1);
   }
   .template-rule-issue {
     border-color: color-mix(in oklch, var(--destructive) 60%, var(--border));
