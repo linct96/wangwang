@@ -167,72 +167,74 @@ export function RuleSetPresetDialog({
             </div>
           </div>
 
-          {(catalog.loading || catalog.error || catalog.data?.stale || catalog.data?.updatedAt) && (
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-                <Checkbox
-                  aria-label="全选"
-                  checked={someFilteredSelected ? 'indeterminate' : allFilteredSelected}
-                  onCheckedChange={(checked) =>
-                    setSelections((current) => {
-                      const next = { ...current }
-                      filtered.forEach((preset) => {
-                        if (checked === true) {
-                          if (
-                            mode === 'provider-only' &&
-                            draft.ruleProviders.some((provider) => providerMatchesPreset(provider, preset))
-                          )
-                            return
-                          next[preset.id] = initialSelection(preset, draft)
-                        } else delete next[preset.id]
-                      })
-                      return next
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
+              <Checkbox
+                aria-label="全选"
+                checked={someFilteredSelected ? 'indeterminate' : allFilteredSelected}
+                onCheckedChange={(checked) =>
+                  setSelections((current) => {
+                    const next = { ...current }
+                    filtered.forEach((preset) => {
+                      if (checked === true) {
+                        if (
+                          mode === 'provider-only' &&
+                          draft.ruleProviders.some((provider) => providerMatchesPreset(provider, preset))
+                        )
+                          return
+                        next[preset.id] = initialSelection(preset, draft)
+                      } else delete next[preset.id]
                     })
-                  }
-                />
-                全选
-              </label>
-              <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
-                <Checkbox checked={preferGhProxy} onCheckedChange={(checked) => setPreferGhProxy(checked === true)} />
-                使用 gh-proxy 加速
-              </label>
-              {(catalog.loading || catalog.error || catalog.data?.stale) &&
-                (catalog.loading ? (
+                    return next
+                  })
+                }
+              />
+              全选
+            </label>
+            <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
+              <Checkbox checked={preferGhProxy} onCheckedChange={(checked) => setPreferGhProxy(checked === true)} />
+              使用 gh-proxy 加速
+            </label>
+            {(catalog.error || catalog.data?.stale) && <AlertTriangle className="size-3.5 text-amber-500" />}
+            {catalog.loading
+              ? '正在同步社区目录，内置预设可正常使用'
+              : catalog.error
+                ? catalog.data
+                  ? '社区目录刷新失败，当前使用上次加载的数据'
+                  : '社区目录加载失败，当前使用内置预设'
+                : catalog.data?.stale
+                  ? '社区目录暂时使用上次同步的数据'
+                  : null}
+            {staleSources.map((source) => (
+              <span key={source}>{source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 数据暂时使用上次同步结果</span>
+            ))}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {catalog.data?.updatedAt && !catalog.loading && (
+                <span>
+                  更新于{' '}
+                  {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={catalog.reload}
+                disabled={catalog.loading}
+              >
+                {catalog.loading ? (
                   <LoaderCircle className="size-3.5 animate-spin" />
                 ) : (
-                  <AlertTriangle className="size-3.5 text-amber-500" />
-                ))}
-              {catalog.loading
-                ? '正在同步社区目录，内置预设可正常使用'
-                : catalog.error
-                  ? catalog.data
-                    ? '社区目录刷新失败，当前使用上次加载的数据'
-                    : '社区目录加载失败，当前使用内置预设'
-                  : catalog.data?.stale
-                    ? '社区目录暂时使用上次同步的数据'
-                    : null}
-              {staleSources.map((source) => (
-                <span key={source}>
-                  {source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 数据暂时使用上次同步结果
-                </span>
-              ))}
-              {catalog.data?.updatedAt && !catalog.loading && (
-                <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <span>
-                    更新于{' '}
-                    {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2" onClick={catalog.reload}>
-                    <RefreshCw className="size-3.5" />
-                    刷新
-                  </Button>
-                </div>
-              )}
+                  <RefreshCw className="size-3.5" />
+                )}
+                {catalog.loading ? '刷新中' : '刷新'}
+              </Button>
             </div>
-          )}
+          </div>
 
           <div ref={listRef} className="max-h-[min(56vh,520px)] overflow-y-auto pr-1">
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
