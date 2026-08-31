@@ -1,6 +1,34 @@
-import type { RuleSetPreset, RuleSetPresetCategory } from './types'
+import type { StructuredRuleProviderDraft } from '../model'
+import type { RuleSetPreset, RuleSetPresetCategory, RuleSetPresetSource } from './types'
 
 const META_BASE = 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo'
+
+export function ruleSetPresetKey(
+  name: string,
+  source: RuleSetPresetSource,
+  behavior: StructuredRuleProviderDraft['behavior'],
+  format: NonNullable<StructuredRuleProviderDraft['format']>,
+) {
+  return `${name}-${source}-${behavior}-${format}`
+}
+
+export function ruleProviderPresetKey(provider: StructuredRuleProviderDraft) {
+  if (!provider.url || !provider.format) return
+  try {
+    const url = new URL(provider.url.replace('https://gh-proxy.com/', ''))
+    const source = url.pathname.startsWith('/MetaCubeX/meta-rules-dat/')
+      ? 'metacubex'
+      : url.pathname.startsWith('/Loyalsoldier/clash-rules/')
+        ? 'loyalsoldier'
+        : undefined
+    if (!source) return
+    const name = decodeURIComponent(url.pathname.split('/').at(-1) || '').replace(/\.[^.]+$/, '')
+    if (!name) return
+    return ruleSetPresetKey(name, source, provider.behavior, provider.format)
+  } catch {
+    return
+  }
+}
 
 function meta(
   id: string,
@@ -12,7 +40,7 @@ function meta(
 ): RuleSetPreset {
   const scope = behavior === 'ipcidr' ? 'geoip' : 'geosite'
   return {
-    id,
+    id: ruleSetPresetKey(file, 'metacubex', behavior, 'mrs'),
     name,
     category,
     source: 'metacubex',
@@ -32,7 +60,7 @@ function meta(
 
 function loyal(id: string, name: string, defaultTarget: 'DIRECT' | 'REJECT'): RuleSetPreset {
   return {
-    id,
+    id: ruleSetPresetKey(id, 'loyalsoldier', 'domain', 'yaml'),
     name,
     category: 'common',
     source: 'loyalsoldier',

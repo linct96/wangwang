@@ -90,14 +90,14 @@ proxy-groups:
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
 rule-providers:
-  category-ads-all:
+  category-ads-all-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
     path: ./ruleset/category-ads-all.mrs
     interval: 86400
-  private:
+  private-domain:
     type: http
     behavior: domain
     format: mrs
@@ -111,7 +111,7 @@ rule-providers:
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
     interval: 86400
-  cn:
+  cn-domain:
     type: http
     behavior: domain
     format: mrs
@@ -126,10 +126,10 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
-  - RULE-SET,category-ads-all,REJECT
-  - RULE-SET,private,DIRECT
+  - RULE-SET,category-ads-all-domain,REJECT
+  - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
-  - RULE-SET,cn,DIRECT
+  - RULE-SET,cn-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT,no-resolve
   - MATCH,🚀 节点选择
 `
@@ -217,14 +217,14 @@ proxy-groups:
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
 rule-providers:
-  category-ads-all:
+  category-ads-all-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
     path: ./ruleset/category-ads-all.mrs
     interval: 86400
-  private:
+  private-domain:
     type: http
     behavior: domain
     format: mrs
@@ -238,7 +238,7 @@ rule-providers:
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
     interval: 86400
-  cn:
+  cn-domain:
     type: http
     behavior: domain
     format: mrs
@@ -252,7 +252,7 @@ rule-providers:
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
     path: ./ruleset/cn-ip.mrs
     interval: 86400
-  geolocation-not-cn:
+  geolocation-not-cn-domain:
     type: http
     behavior: domain
     format: mrs
@@ -260,12 +260,12 @@ rule-providers:
     path: ./ruleset/geolocation-not-cn.mrs
     interval: 86400
 rules:
-  - RULE-SET,category-ads-all,REJECT
-  - RULE-SET,private,DIRECT
+  - RULE-SET,category-ads-all-domain,REJECT
+  - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
-  - RULE-SET,cn,DIRECT
+  - RULE-SET,cn-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT,no-resolve
-  - RULE-SET,geolocation-not-cn,🚀 节点选择
+  - RULE-SET,geolocation-not-cn-domain,🚀 节点选择
   - MATCH,🚀 节点选择
 `
 
@@ -370,14 +370,14 @@ proxy-groups:
     type: select
     proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
 rule-providers:
-  category-ads-all:
+  category-ads-all-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
     path: ./ruleset/category-ads-all.mrs
     interval: 86400
-  private:
+  private-domain:
     type: http
     behavior: domain
     format: mrs
@@ -391,21 +391,21 @@ rule-providers:
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
     interval: 86400
-  ai-not-cn:
+  ai-not-cn-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
     path: ./ruleset/ai-not-cn.mrs
     interval: 86400
-  google:
+  google-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
     path: ./ruleset/google.mrs
     interval: 86400
-  telegram:
+  telegram-domain:
     type: http
     behavior: domain
     format: mrs
@@ -419,35 +419,35 @@ rule-providers:
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
     path: ./ruleset/telegram-ip.mrs
     interval: 86400
-  youtube:
+  youtube-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
     path: ./ruleset/youtube.mrs
     interval: 86400
-  netflix:
+  netflix-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
     path: ./ruleset/netflix.mrs
     interval: 86400
-  spotify:
+  spotify-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
     path: ./ruleset/spotify.mrs
     interval: 86400
-  tiktok:
+  tiktok-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
     path: ./ruleset/tiktok.mrs
     interval: 86400
-  microsoft:
+  microsoft-domain:
     type: http
     behavior: domain
     format: mrs
@@ -455,18 +455,18 @@ rule-providers:
     path: ./ruleset/microsoft.mrs
     interval: 86400
 rules:
-  - RULE-SET,category-ads-all,REJECT
-  - RULE-SET,private,DIRECT
+  - RULE-SET,category-ads-all-domain,REJECT
+  - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
-  - RULE-SET,ai-not-cn,🤖 AI 服务
-  - RULE-SET,google,🔍 Google
-  - RULE-SET,telegram,✈️ Telegram
+  - RULE-SET,ai-not-cn-domain,🤖 AI 服务
+  - RULE-SET,google-domain,🔍 Google
+  - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
-  - RULE-SET,youtube,🎬 流媒体
-  - RULE-SET,netflix,🎬 流媒体
-  - RULE-SET,spotify,🎬 流媒体
-  - RULE-SET,tiktok,🎬 流媒体
-  - RULE-SET,microsoft,Ⓜ️ Microsoft
+  - RULE-SET,youtube-domain,🎬 流媒体
+  - RULE-SET,netflix-domain,🎬 流媒体
+  - RULE-SET,spotify-domain,🎬 流媒体
+  - RULE-SET,tiktok-domain,🎬 流媒体
+  - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
   - GEOSITE,apple,🍎 Apple
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT,no-resolve
