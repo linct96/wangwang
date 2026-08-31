@@ -19,7 +19,6 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-
   fake-ip-filter:
     - "*.lan"
     - "*.local"
@@ -37,8 +36,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://8.8.8.8/dns-query#🚀 节点选择"
-    - "https://1.1.1.1/dns-query#🚀 节点选择"
+    - "https://8.8.8.8/dns-query#RULES"
+    - "https://1.1.1.1/dns-query#RULES"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -52,7 +51,6 @@ dns:
     "rule-set:private-domain":
       - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
-
     "rule-set:cn-domain":
       - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
