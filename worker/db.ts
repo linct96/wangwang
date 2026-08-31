@@ -1,5 +1,26 @@
-import { relations } from 'drizzle-orm'
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { relations, sql } from 'drizzle-orm'
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+
+export const adminAccount = sqliteTable(
+  'admin_account',
+  {
+    id: integer('id').primaryKey(),
+    passwordHash: text('password_hash').notNull(),
+    passwordSalt: text('password_salt').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [check('admin_account_singleton_check', sql`${table.id} = 1`)],
+)
+
+export const adminSessions = sqliteTable(
+  'admin_sessions',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('admin_sessions_expiry_idx').on(table.expiresAt)],
+)
 
 export const sources = sqliteTable(
   'sources',
@@ -93,7 +114,6 @@ export const profiles = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    protocols: text('protocols', { mode: 'json' }).$type<string[]>().notNull().default([]),
     tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
     templateId: text('template_id').$type<TemplateId>().notNull().default('builtin:minimal'),
     tokenVersion: integer('token_version').notNull().default(1),

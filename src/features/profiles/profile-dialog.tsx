@@ -45,7 +45,6 @@ export function ProfileDialog({
       name: profile?.name || '',
       tags: profile?.tags.join(', ') || '',
       sourceIds: profile?.sourceIds || [],
-      protocols: profile?.protocols || [],
       templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {
@@ -61,7 +60,6 @@ export function ProfileDialog({
             context.addIssue({ code: 'custom', message: '单个标签不能超过 24 个字符' })
         }),
         sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源').max(20, '节点源不能超过 20 个'),
-        protocols: z.array(z.string()).max(20),
         templateId: z.custom<TemplateId>((val) => typeof val === 'string' && val.length > 0, '请选择订阅模板'),
       }),
     },
@@ -75,7 +73,6 @@ export function ProfileDialog({
             body: JSON.stringify({
               name: value.name,
               sourceIds: value.sourceIds,
-              protocols: value.protocols,
               tags: value.tags
                 .split(',')
                 .map((tag) => tag.trim())

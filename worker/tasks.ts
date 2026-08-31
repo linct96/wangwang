@@ -335,14 +335,7 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
       profileNodeExclusions,
       and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profile.id)),
     )
-    .where(
-      and(
-        eq(nodes.enabled, true),
-        eq(sources.enabled, true),
-        isNull(profileNodeExclusions.nodeId),
-        profile.protocols.length ? inArray(nodes.protocol, profile.protocols) : undefined,
-      ),
-    )
+    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true), isNull(profileNodeExclusions.nodeId)))
     .orderBy(asc(sourceNodes.position), asc(nodes.createdAt))
 
   const unique = new Map<string, (typeof selected)[number]>()

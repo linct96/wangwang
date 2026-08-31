@@ -44,6 +44,8 @@ const importProtocols = new Set<ManualNodeConnection['protocol']>([
   'tuic',
 ])
 
+const profileInputFields = new Set(['name', 'enabled', 'sourceIds', 'tags', 'excludedNodeIds', 'templateId'])
+
 function importedConnection(config: Record<string, unknown>): ManualNodeConnection {
   const ws = (config['ws-opts'] || {}) as { path?: string; headers?: { Host?: string } }
   const grpc = (config['grpc-opts'] || {}) as { 'grpc-service-name'?: string }
@@ -743,6 +745,7 @@ export function buildProfile(
   state: ReturnType<typeof readState>,
   current?: Profile,
 ): Profile {
+  if (Object.keys(body).some((key) => !profileInputFields.has(key))) throw new Error('请求参数无效')
   const id = current?.id || crypto.randomUUID()
   const name = typeof body.name === 'string' ? body.name.trim() : current?.name || '未命名配置'
   const sourceIds = Array.isArray(body.sourceIds) ? body.sourceIds.map(String) : current?.sourceIds || []
@@ -750,7 +753,6 @@ export function buildProfile(
     id,
     name,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : (current?.enabled ?? true),
-    protocols: Array.isArray(body.protocols) ? body.protocols.map(String) : current?.protocols || [],
     tags: Array.isArray(body.tags) ? body.tags.map(String) : current?.tags || [],
     templateId: (typeof body.templateId === 'string'
       ? body.templateId

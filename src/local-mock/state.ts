@@ -139,7 +139,6 @@ function seedState(): LocalState {
       id: 'profile-daily',
       name: '日常使用',
       enabled: true,
-      protocols: [],
       tags: [],
       templateId: 'builtin:minimal',
       revision: 3,
@@ -200,16 +199,12 @@ export function localNodeTags(state: LocalState, node: LocalNode) {
   ]
 }
 
-export function localProfileNodes(
-  state: LocalState,
-  profile: Pick<Profile, 'sourceIds' | 'protocols' | 'tags' | 'excludedNodeIds'>,
-) {
+export function localProfileNodes(state: LocalState, profile: Pick<Profile, 'sourceIds' | 'tags' | 'excludedNodeIds'>) {
   const enabledSources = new Set(state.sources.filter((source) => source.enabled).map((source) => source.id))
   return state.nodes
     .filter((node) => node.enabled)
     .filter((node) => node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)))
     .map((node) => ({ ...node, tags: localNodeTags(state, node) }))
-    .filter((node) => !profile.protocols.length || profile.protocols.includes(node.protocol))
     .filter((node) => !profile.tags.length || profile.tags.some((tag) => node.tags.includes(tag)))
     .filter((node) => !profile.excludedNodeIds.includes(node.id))
 }
