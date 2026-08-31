@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ba9b7a54-1293-40f1-b39b-a43e5cdce037",
+  "id": "c1105ff7-aae6-4a64-b64d-f9f866352d04",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "admin_account": {
@@ -506,13 +506,6 @@
         },
         "pending_url": {
           "name": "pending_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "content": {
-          "name": "content",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

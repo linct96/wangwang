@@ -81,7 +81,6 @@ CREATE TABLE `sources` (
 	`kind` text NOT NULL,
 	`url` text,
 	`pending_url` text,
-	`content` text,
 	`node_name_filter` text,
 	`node_tag` text,
 	`user_agent` text DEFAULT 'mihomo' NOT NULL,
