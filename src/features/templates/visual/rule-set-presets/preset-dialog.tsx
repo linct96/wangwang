@@ -11,6 +11,7 @@ import { newRule, newRuleProvider } from '../yaml-adapter'
 import { targetLabel, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { applyGhProxyToGithubUrl } from '../geo/presets'
 import { RULE_SET_PRESETS } from './catalog'
+import { providerMatchesPreset } from './apply-presets'
 import type {
   ApplyRuleSetPresetOptions,
   RuleSetPreset,
@@ -176,8 +177,14 @@ export function RuleSetPresetDialog({
                     setSelections((current) => {
                       const next = { ...current }
                       filtered.forEach((preset) => {
-                        if (checked === true) next[preset.id] = initialSelection(preset, draft)
-                        else delete next[preset.id]
+                        if (checked === true) {
+                          if (
+                            mode === 'provider-only' &&
+                            draft.ruleProviders.some((provider) => providerMatchesPreset(provider, preset))
+                          )
+                            return
+                          next[preset.id] = initialSelection(preset, draft)
+                        } else delete next[preset.id]
                       })
                       return next
                     })
@@ -233,6 +240,9 @@ export function RuleSetPresetDialog({
                 const preset = filtered[virtualItem.index]
                 const selection = selections[preset.id]
                 const configuredTarget = configuredTargets.get(preset.provider.name)
+                const configuredProvider = draft.ruleProviders.some((provider) =>
+                  providerMatchesPreset(provider, preset),
+                )
                 return (
                   <div
                     key={virtualItem.key}
@@ -246,6 +256,7 @@ export function RuleSetPresetDialog({
                         <Checkbox
                           id={`preset-${mode}-${preset.id}`}
                           checked={Boolean(selection)}
+                          disabled={mode === 'provider-only' && configuredProvider}
                           onCheckedChange={(checked) =>
                             setSelections((current) => {
                               if (checked === true) return { ...current, [preset.id]: initialSelection(preset, draft) }
@@ -269,12 +280,12 @@ export function RuleSetPresetDialog({
                               {sourceLabels[preset.source]} · {preset.description}
                             </span>
                           </span>
-                          {configuredTarget && (
+                          {(configuredTarget || (mode === 'provider-only' && configuredProvider)) && (
                             <span
                               className="max-w-[42%] shrink-0 truncate text-right text-xs text-muted-foreground"
-                              title={`已配置：${configuredTarget}`}
+                              title={`已配置${configuredTarget ? `：${configuredTarget}` : ''}`}
                             >
-                              已配置：{configuredTarget}
+                              已配置{configuredTarget ? `：${configuredTarget}` : ''}
                             </span>
                           )}
                         </label>
