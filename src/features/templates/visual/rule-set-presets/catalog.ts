@@ -13,18 +13,30 @@ export function ruleSetPresetKey(
 }
 
 export function ruleProviderPresetKey(provider: StructuredRuleProviderDraft) {
-  if (!provider.url || !provider.format) return
+  if (provider.type !== 'http' || !provider.url || !provider.format) return
   try {
     const url = new URL(provider.url.replace('https://gh-proxy.com/', ''))
-    const source = url.pathname.startsWith('/MetaCubeX/meta-rules-dat/')
-      ? 'metacubex'
-      : url.pathname.startsWith('/Loyalsoldier/clash-rules/')
-        ? 'loyalsoldier'
-        : undefined
-    if (!source) return
-    const name = decodeURIComponent(url.pathname.split('/').at(-1) || '').replace(/\.[^.]+$/, '')
-    if (!name) return
-    return ruleSetPresetKey(name, source, provider.behavior, provider.format)
+    if (url.protocol !== 'https:' || url.hostname !== 'raw.githubusercontent.com' || url.port) return
+
+    const meta = url.pathname.match(/^\/MetaCubeX\/meta-rules-dat\/meta\/geo\/(geosite|geoip)\/([^/]+)\.mrs$/)
+    if (meta) {
+      const behavior = meta[1] === 'geosite' ? 'domain' : 'ipcidr'
+      if (provider.behavior !== behavior || provider.format !== 'mrs') return
+      const name = decodeURIComponent(meta[2])
+      return name && !name.includes('/') ? ruleSetPresetKey(name, 'metacubex', behavior, 'mrs') : undefined
+    }
+
+    const loyal = url.pathname.match(/^\/Loyalsoldier\/clash-rules\/release\/([^/]+)\.txt$/)
+    if (!loyal || provider.format !== 'yaml') return
+    const name = decodeURIComponent(loyal[1])
+    if (!name || name.includes('/')) return
+    const behavior = ['telegramcidr', 'cncidr', 'lancidr'].includes(name)
+      ? 'ipcidr'
+      : name === 'applications'
+        ? 'classical'
+        : 'domain'
+    if (provider.behavior !== behavior) return
+    return ruleSetPresetKey(name, 'loyalsoldier', behavior, 'yaml')
   } catch {
     return
   }
