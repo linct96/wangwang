@@ -1,4 +1,4 @@
-import { AlertTriangle, LibraryBig, ListPlus, Plus } from 'lucide-react'
+import { LibraryBig, ListPlus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -35,16 +35,6 @@ export function VisualTemplateEditor({
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
   const update = (next: VisualTemplateDraft) => onChange(next)
-
-  const firstMatchIndex = draft.rules.findIndex((r) => r.kind === 'structured' && r.type === 'MATCH')
-  const hasMatchNotLast = firstMatchIndex !== -1 && firstMatchIndex !== draft.rules.length - 1
-
-  function fixMatchOrder() {
-    const nonMatchRules = draft.rules.filter((r) => !(r.kind === 'structured' && r.type === 'MATCH'))
-    const matchRules = draft.rules.filter((r) => r.kind === 'structured' && r.type === 'MATCH')
-    update({ ...draft, rules: [...nonMatchRules, ...matchRules] })
-    toast.success('已将 MATCH 兜底规则移至最末尾')
-  }
 
   function addRule(rule: StructuredRuleDraft) {
     update({
@@ -190,18 +180,6 @@ export function VisualTemplateEditor({
           <div className="template-rule-header-left">
             <h2>分流规则</h2>
             <span className="template-section-count">{draft.rules.length}</span>
-            {hasMatchNotLast && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="template-fix-match-btn"
-                onClick={fixMatchOrder}
-              >
-                <AlertTriangle className="size-3.5 mr-1 text-amber-500" />
-                将 MATCH 置底
-              </Button>
-            )}
           </div>
           <div className="template-rule-header-right">
             <RuleSetPresetDialog
