@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Replace, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { applyGhProxyToGithubUrl } from '../geo/presets'
 import { newRuleProvider } from '../yaml-adapter'
 import type {
   ProxyGroupDraft,
@@ -53,6 +54,15 @@ export function ProviderDialog({
   const setBehavior = (behavior: RuleProviderBehavior) => {
     if (behavior === 'classical' && form.format === 'mrs') toast.info('Classical 不支持 MRS，已切换为 YAML')
     setForm({ ...form, behavior, format: behavior === 'classical' && form.format === 'mrs' ? 'yaml' : form.format })
+  }
+  const applyGhProxy = () => {
+    const url = applyGhProxyToGithubUrl(form.url)
+    if (url === form.url) {
+      toast.info('没有可替换的 GitHub 地址')
+      return
+    }
+    setForm({ ...form, url })
+    toast.success('已使用 gh-proxy 替换 GitHub 地址')
   }
   const save = () => {
     const name = form.name.trim()
@@ -156,7 +166,13 @@ export function ProviderDialog({
             {form.type === 'http' && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field className="sm:col-span-2">
-                  <FieldLabel>URL</FieldLabel>
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldLabel>URL</FieldLabel>
+                    <Button type="button" variant="outline" size="xs" onClick={applyGhProxy}>
+                      <Replace data-icon="inline-start" />
+                      使用 gh-proxy
+                    </Button>
+                  </div>
                   <Input
                     value={form.url || ''}
                     placeholder="https://example.com/rules.mrs"

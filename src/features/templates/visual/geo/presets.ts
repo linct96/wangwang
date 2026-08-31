@@ -60,13 +60,15 @@ export const EMPTY_GEO_PRESET: GeoSettingsDraft = {
 
 const GH_PROXY_PREFIX = 'https://gh-proxy.com/'
 const GITHUB_PREFIX = 'https://github.com/'
+const GITHUB_RAW_PREFIX = 'https://raw.githubusercontent.com/'
+
+export function applyGhProxyToGithubUrl<T extends string | null | undefined>(url: T): T | string {
+  return url?.startsWith(GITHUB_PREFIX) || url?.startsWith(GITHUB_RAW_PREFIX) ? `${GH_PROXY_PREFIX}${url}` : url
+}
 
 export function applyGhProxyToGeoUrls(geoxUrl: GeoSettingsDraft['geoxUrl']): GeoSettingsDraft['geoxUrl'] {
   return Object.fromEntries(
-    Object.entries(geoxUrl).map(([key, url]) => [
-      key,
-      url?.startsWith(GITHUB_PREFIX) ? `${GH_PROXY_PREFIX}${url}` : url,
-    ]),
+    Object.entries(geoxUrl).map(([key, url]) => [key, applyGhProxyToGithubUrl(url)]),
   ) as GeoSettingsDraft['geoxUrl']
 }
 
