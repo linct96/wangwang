@@ -1,4 +1,11 @@
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Navigate, Outlet } from '@tanstack/react-router'
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Navigate,
+  Outlet,
+} from '@tanstack/react-router'
 import { Layout } from './layout'
 
 const DashboardPage = lazyRouteComponent(() => import('@/features/dashboard/page'), 'DashboardPage')
