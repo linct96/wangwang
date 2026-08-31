@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { fail, ok } from '../http'
-import { RULE_SET_PRESETS } from '../../src/features/templates/visual/rule-set-presets/catalog'
+import { RULE_SET_PRESETS, ruleSetPresetKey } from '../../src/features/templates/visual/rule-set-presets/catalog'
 import type { RuleSetPreset, RuleSetPresetCategory } from '../../src/features/templates/visual/rule-set-presets/types'
 
 type GitTreeItem = { path?: string; type?: 'blob' | 'tree'; sha?: string }
@@ -24,9 +24,9 @@ type StoredCatalog = {
 }
 
 const CATALOG_KEY = 'rule-set-presets:catalog'
-const CATALOG_VERSION = 'v2'
+const CATALOG_VERSION = 'v3'
 // 修改内置预设或生成逻辑时递增，确保上游 SHA 不变时也会重建 Catalog。
-const BUILTIN_CATALOG_REVISION = '2026-08-30-1'
+const BUILTIN_CATALOG_REVISION = '2026-08-31-1'
 const MAX_AGE = 36 * 60 * 60 * 1000
 const SYNC_COOLDOWN = 5 * 60 * 1000
 const SYNC_COOLDOWN_KEY = 'rule-set-presets:sync:last'
@@ -65,7 +65,7 @@ function metaPreset(name: string, behavior: 'domain' | 'ipcidr'): RuleSetPreset 
   const providerName = behavior === 'domain' ? name : `${name}-ip`
   const defaultTarget = name === 'cn' || name === 'private' ? 'DIRECT' : category(name) === 'ads' ? 'REJECT' : undefined
   return {
-    id: `community:metacubex:${scope}:${name}`,
+    id: ruleSetPresetKey(name, 'metacubex', behavior, 'mrs'),
     name: behavior === 'domain' ? name : `${name} IP`,
     source: 'metacubex',
     category: category(name),
@@ -92,7 +92,7 @@ function loyalPreset(name: string): RuleSetPreset {
       ? 'classical'
       : 'domain'
   return {
-    id: `community:loyalsoldier:${name}`,
+    id: ruleSetPresetKey(name, 'loyalsoldier', behavior, 'yaml'),
     name,
     source: 'loyalsoldier',
     category: category(name),
@@ -119,21 +119,13 @@ function files(tree: GitTree, extension: string) {
 }
 
 function mergeBuiltins(items: RuleSetPreset[]) {
-  const identities = new Set(
-    RULE_SET_PRESETS.flatMap((item) => [
-      `id:${item.id}`,
-      `config:${item.source}|${item.provider.url}|${item.provider.behavior}|${item.provider.format || ''}`,
-    ]),
-  )
+  const identities = new Set(RULE_SET_PRESETS.map((item) => item.id))
   return [
     ...RULE_SET_PRESETS,
     ...items
       .filter((item) => {
-        const id = `id:${item.id}`
-        const config = `config:${item.source}|${item.provider.url}|${item.provider.behavior}|${item.provider.format || ''}`
-        if (identities.has(id) || identities.has(config)) return false
-        identities.add(id)
-        identities.add(config)
+        if (identities.has(item.id)) return false
+        identities.add(item.id)
         return true
       })
       .sort((left, right) => left.name.localeCompare(right.name, 'en')),
