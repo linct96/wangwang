@@ -186,10 +186,7 @@ export function RuleSetPresetDialog({
                 全选
               </label>
               <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
-                <Checkbox
-                  checked={preferGhProxy}
-                  onCheckedChange={(checked) => setPreferGhProxy(checked === true)}
-                />
+                <Checkbox checked={preferGhProxy} onCheckedChange={(checked) => setPreferGhProxy(checked === true)} />
                 优先使用 gh-proxy 地址
               </label>
               {(catalog.loading || catalog.error || catalog.data?.stale) &&
