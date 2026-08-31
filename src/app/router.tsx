@@ -1,12 +1,14 @@
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Navigate, Outlet } from '@tanstack/react-router'
 import { Layout } from './layout'
-import { DashboardPage } from '@/features/dashboard/page'
-import { SourcesPage } from '@/features/sources/page'
-import { NodesPage } from '@/features/nodes/page'
-import { ProfilesPage } from '@/features/profiles/page'
-import { ProfileDetailPage } from '@/features/profiles/profile-detail'
-import { EditTemplatePage, NewTemplatePage } from '@/features/templates/editor'
-import { TemplatesPage } from '@/features/templates/page'
+
+const DashboardPage = lazyRouteComponent(() => import('@/features/dashboard/page'), 'DashboardPage')
+const SourcesPage = lazyRouteComponent(() => import('@/features/sources/page'), 'SourcesPage')
+const NodesPage = lazyRouteComponent(() => import('@/features/nodes/page'), 'NodesPage')
+const ProfilesPage = lazyRouteComponent(() => import('@/features/profiles/page'), 'ProfilesPage')
+const ProfileDetailPage = lazyRouteComponent(() => import('@/features/profiles/profile-detail'), 'ProfileDetailPage')
+const TemplatesPage = lazyRouteComponent(() => import('@/features/templates/page'), 'TemplatesPage')
+const NewTemplatePage = lazyRouteComponent(() => import('@/features/templates/editor'), 'NewTemplatePage')
+const EditTemplatePage = lazyRouteComponent(() => import('@/features/templates/editor'), 'EditTemplatePage')
 
 const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: () => <Navigate to="/dashboard" replace /> })
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: Layout })
