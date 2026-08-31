@@ -514,13 +514,6 @@ export function RuleCard({
         )}
       </div>
 
-      {isAfterMatch && (
-        <div className="template-rule-warning-pill shrink-0" title="该规则位于 MATCH 兜底规则之后，永远不会生效">
-          <AlertCircle className="size-3.5" />
-          <span>不可达</span>
-        </div>
-      )}
-
       {hasIssues && (
         <div className="template-rule-error-pill shrink-0" title={issues?.map((i) => i.message).join('\n')}>
           <AlertCircle className="size-3.5" />
