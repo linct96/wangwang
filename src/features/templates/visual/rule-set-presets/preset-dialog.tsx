@@ -91,7 +91,7 @@ export function RuleSetPresetDialog({
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
   const [appendTypeSuffix, setAppendTypeSuffix] = useState(true)
-  const [preferGhProxy, setPreferGhProxy] = useState(true)
+  const [preferGhProxy, setPreferGhProxy] = useState(false)
   const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>({ kind: 'builtin', value: 'DIRECT' })
   const catalog = useRuleSetPresetCatalog(open)
   const presets = catalog.data?.items.length ? catalog.data.items : RULE_SET_PRESETS
@@ -137,7 +137,7 @@ export function RuleSetPresetDialog({
     setCategory('all')
     setSelections({})
     setAppendTypeSuffix(true)
-    setPreferGhProxy(true)
+    setPreferGhProxy(false)
     setBulkTarget({ kind: 'builtin', value: 'DIRECT' })
     setOpen(true)
   }
