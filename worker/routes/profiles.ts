@@ -14,15 +14,16 @@ const templateIdSchema = z
     message: '订阅模板 ID 无效',
   })
 
-export const profileSchema = z.object({
-  name: z.string().trim().min(1).max(60),
-  enabled: z.boolean().default(true),
-  sourceIds: z.array(z.string()).min(1).max(20),
-  protocols: z.array(z.string().trim().min(1).max(20)).max(20).default([]),
-  tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
-  excludedNodeIds: z.array(z.string()).max(1000).default([]),
-  templateId: templateIdSchema.default('builtin:minimal'),
-})
+export const profileSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    enabled: z.boolean().default(true),
+    sourceIds: z.array(z.string()).min(1).max(20),
+    tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
+    excludedNodeIds: z.array(z.string()).max(1000).default([]),
+    templateId: templateIdSchema.default('builtin:minimal'),
+  })
+  .strict()
 
 export const profileUpdateSchema = profileSchema.partial()
 
@@ -105,7 +106,6 @@ profilesRouter.post('/', async (c) => {
     id: crypto.randomUUID(),
     name: input.name,
     enabled: input.enabled,
-    protocols: [...new Set(input.protocols)],
     tags: [...new Set(input.tags)],
     templateId: input.templateId as TemplateId,
     createdAt: now,
@@ -145,7 +145,6 @@ profilesRouter.patch('/:id', async (c) => {
     .update(profiles)
     .set({
       ...values,
-      protocols: values.protocols ? [...new Set(values.protocols)] : undefined,
       tags: values.tags ? [...new Set(values.tags)] : undefined,
       templateId: values.templateId as TemplateId | undefined,
       updatedAt: new Date(),

@@ -110,7 +110,6 @@ export type Profile = {
   id: string
   name: string
   enabled: boolean
-  protocols: string[]
   tags: string[]
   templateId: TemplateId
   revision: number

@@ -203,19 +203,6 @@ export function ProfilesPage() {
                             ))}
                           </div>
                         </div>
-
-                        {profile.protocols.length > 0 && (
-                          <div className="profile-info-item">
-                            <span className="profile-info-label">协议筛选</span>
-                            <div className="profile-tags-wrap">
-                              {profile.protocols.map((proto) => (
-                                <span key={proto} className="profile-pill uppercase font-mono text-[11px]">
-                                  {proto}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
 
                       <div className="profile-card-footer">

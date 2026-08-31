@@ -216,21 +216,6 @@ export function ProfileDetailPage() {
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">协议筛选</span>
-                  <div className="meta-tags">
-                    {profile.protocols.length > 0 ? (
-                      profile.protocols.map((p) => (
-                        <span key={p} className="profile-pill uppercase font-mono text-[11px]">
-                          {p}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted-foreground">全部允许</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="meta-row">
                   <span className="meta-label">标签筛选</span>
                   <div className="meta-tags">
                     {profile.tags.length > 0 ? (
