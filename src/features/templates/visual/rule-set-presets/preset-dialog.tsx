@@ -159,16 +159,7 @@ export function RuleSetPresetDialog({
           contentClassName="template-dialog sm:max-w-3xl"
           onClose={() => setOpen(false)}
         >
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索规则集..."
-              className="pl-8"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[10rem_10rem_minmax(0,1fr)]">
             <Select value={source} onValueChange={(value: RuleSetPresetSource | 'all') => setSource(value)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -194,6 +185,15 @@ export function RuleSetPresetDialog({
                   ))}
               </SelectContent>
             </Select>
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索规则集..."
+                className="pl-8"
+              />
+            </div>
           </div>
 
           {(catalog.loading || catalog.error || catalog.data?.stale || catalog.data?.updatedAt) && (
