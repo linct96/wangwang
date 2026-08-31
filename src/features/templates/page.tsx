@@ -34,7 +34,7 @@ const builtinFallback: TemplateSummary[] = [
   {
     id: 'builtin:standard',
     name: '标准规则模板',
-    description: 'MRS 常用分流 / 国内直连 / AI 与流媒体独立选择',
+    description: '常用分流 / 国内直连 / AI 与流媒体',
     kind: 'builtin',
     readOnly: true,
     profileCount: 0,
@@ -44,7 +44,7 @@ const builtinFallback: TemplateSummary[] = [
   {
     id: 'builtin:full',
     name: '完全规则模板',
-    description: '标准规则超集 / Google、Telegram、Microsoft、Apple 独立分流 / IP 规则与负载均衡',
+    description: '标准超集 / 多服务分流 / IP 规则 / 负载均衡',
     kind: 'builtin',
     readOnly: true,
     profileCount: 0,
