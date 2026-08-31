@@ -5,6 +5,8 @@ export type VisualTemplateDraft = {
   rules: RuleDraft[]
 }
 
+export type VisualChangeMeta = { type: 'normal' } | { type: 'reorder'; scope: 'groups' | 'rules' }
+
 export type GeoSettingsDraft = {
   geodataMode?: boolean | null
   geoAutoUpdate?: boolean | null
