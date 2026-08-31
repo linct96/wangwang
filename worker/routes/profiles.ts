@@ -10,7 +10,7 @@ import { resolveTemplate } from '../templates/resolver'
 
 const templateIdSchema = z
   .string()
-  .refine((value) => /^(builtin:(minimal|standard|full)|custom:[0-9a-f-]{36}|[A-Za-z0-9_-]{12})$/.test(value), {
+  .refine((value) => /^(builtin:(minimal|standard|full)|[A-Za-z0-9_-]{12})$/.test(value), {
     message: '订阅模板 ID 无效',
   })
 
