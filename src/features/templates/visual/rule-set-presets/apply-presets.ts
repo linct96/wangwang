@@ -1,16 +1,11 @@
 import type { RuleDraft, RuleSetRuleDraft, VisualTemplateDraft } from '../model'
 import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
+import { ruleProviderPresetKey } from './catalog'
 import { createProviderFromPreset, insertRulesBeforeMatch } from './helpers'
 import type { ApplyRuleSetPresetOptions, RuleSetPreset, RuleSetPresetMode } from './types'
 
 export function providerMatchesPreset(provider: VisualTemplateDraft['ruleProviders'][number], preset: RuleSetPreset) {
-  return (
-    provider.kind === 'structured' &&
-    provider.name === preset.provider.name &&
-    provider.type === preset.provider.type &&
-    provider.behavior === preset.provider.behavior &&
-    provider.url?.replace('https://gh-proxy.com/', '') === preset.provider.url.replace('https://gh-proxy.com/', '')
-  )
+  return provider.kind === 'structured' && ruleProviderPresetKey(provider) === preset.id
 }
 
 function sameRule(left: RuleDraft, right: RuleDraft) {
@@ -40,7 +35,7 @@ export function applyRuleSetPresets(
     const preset = presets.find((item) => item.id === selection.presetId)
     if (!preset) continue
     const provider =
-      ruleProviders.find((item) => providerMatchesPreset(item, preset)) ||
+      (!selection.forceCreateProvider && ruleProviders.find((item) => providerMatchesPreset(item, preset))) ||
       createProviderFromPreset(preset, selection.providerId)
     if (!ruleProviders.includes(provider)) ruleProviders.push(provider)
     resolvedProviders.set(selection.presetId, provider)

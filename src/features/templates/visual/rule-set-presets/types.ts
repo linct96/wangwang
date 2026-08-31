@@ -41,6 +41,7 @@ export interface ApplyRuleSetPresetOptions {
   presetId: string
   providerId: string
   ruleId: string
+  forceCreateProvider?: boolean
   target?: RuleTargetDraft
   noResolve?: boolean
 }
