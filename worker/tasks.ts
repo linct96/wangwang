@@ -267,22 +267,20 @@ export async function refreshSource(env: Env, sourceId: string) {
   const database = db(env)
   const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
+  if (source.kind !== 'url') throw new Error('系统节点源不能刷新')
   await database
     .update(sources)
     .set({ status: 'refreshing', error: null, updatedAt: new Date() })
     .where(eq(sources.id, sourceId))
 
   const candidateUrl = source.pendingUrl || source.url
-  const response =
-    source.kind === 'url'
-      ? await fetchSource(
-          candidateUrl!,
-          source.userAgent,
-          source.pendingUrl ? null : source.etag,
-          source.pendingUrl ? null : source.lastModified,
-        )
-      : null
-  if (response?.notModified) {
+  const response = await fetchSource(
+    candidateUrl!,
+    source.userAgent,
+    source.pendingUrl ? null : source.etag,
+    source.pendingUrl ? null : source.lastModified,
+  )
+  if (response.notModified) {
     if (source.pendingUrl) throw new Error('新订阅地址无法验证')
     const now = new Date()
     await database
@@ -309,8 +307,8 @@ export async function refreshSource(env: Env, sourceId: string) {
     return
   }
 
-  const parsed = await parseProxyText(response?.text ?? source.content ?? '', source.nodeNameFilter)
-  await replaceSourceNodes(env, sourceId, parsed, response && !response.notModified ? response : undefined)
+  const parsed = await parseProxyText(response.text, source.nodeNameFilter)
+  await replaceSourceNodes(env, sourceId, parsed, response)
   await enqueueAffectedProfiles(env, sourceId)
 }
 

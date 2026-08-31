@@ -30,7 +30,6 @@ export const sources = sqliteTable(
     kind: text('kind', { enum: ['url', 'manual'] }).notNull(),
     url: text('url'),
     pendingUrl: text('pending_url'),
-    content: text('content'),
     nodeNameFilter: text('node_name_filter'),
     nodeTag: text('node_tag'),
     userAgent: text('user_agent').notNull().default('mihomo'),
