@@ -1,6 +1,6 @@
-import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { jobs, nodes, profileNodeExclusions, profiles, profileSources, sourceNodes, sources } from './db'
+import { jobs, nodes, profiles, profileSources, sourceNodes, sources } from './db'
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
@@ -331,11 +331,7 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
       and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profile.id)),
     )
     .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
-    .leftJoin(
-      profileNodeExclusions,
-      and(eq(profileNodeExclusions.nodeId, nodes.id), eq(profileNodeExclusions.profileId, profile.id)),
-    )
-    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true), isNull(profileNodeExclusions.nodeId)))
+    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
     .orderBy(asc(sourceNodes.position), asc(nodes.createdAt))
 
   const unique = new Map<string, (typeof selected)[number]>()

@@ -140,19 +140,6 @@ export const profileSources = sqliteTable(
   (table) => [primaryKey({ columns: [table.profileId, table.sourceId] })],
 )
 
-export const profileNodeExclusions = sqliteTable(
-  'profile_node_exclusions',
-  {
-    profileId: text('profile_id')
-      .notNull()
-      .references(() => profiles.id, { onDelete: 'cascade' }),
-    nodeId: text('node_id')
-      .notNull()
-      .references(() => nodes.id, { onDelete: 'cascade' }),
-  },
-  (table) => [primaryKey({ columns: [table.profileId, table.nodeId] })],
-)
-
 export type JobType = 'refresh_source' | 'compile_profile'
 export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { count, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
-import { profileNodeExclusions, profiles, profileSources, sources } from '../db'
+import { profiles, profileSources, sources } from '../db'
 import type { TemplateId } from '../db'
 import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
@@ -20,7 +20,6 @@ export const profileSchema = z
     enabled: z.boolean().default(true),
     sourceIds: z.array(z.string()).min(1).max(20),
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
-    excludedNodeIds: z.array(z.string()).max(1000).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
   })
   .strict()
@@ -36,27 +35,13 @@ export async function assertSourceIds(env: Env, ids: string[]) {
   return unique
 }
 
-export async function saveProfileRelations(
-  env: Env,
-  profileId: string,
-  sourceIds: string[],
-  excludedNodeIds: string[],
-) {
+export async function saveProfileSources(env: Env, profileId: string, sourceIds: string[]) {
   const statements: D1PreparedStatement[] = [
     env.DB.prepare('DELETE FROM profile_sources WHERE profile_id = ?').bind(profileId),
-    env.DB.prepare('DELETE FROM profile_node_exclusions WHERE profile_id = ?').bind(profileId),
   ]
   sourceIds.forEach((sourceId) =>
     statements.push(
       env.DB.prepare('INSERT INTO profile_sources (profile_id, source_id) VALUES (?, ?)').bind(profileId, sourceId),
-    ),
-  )
-  ;[...new Set(excludedNodeIds)].forEach((nodeId) =>
-    statements.push(
-      env.DB.prepare('INSERT OR IGNORE INTO profile_node_exclusions (profile_id, node_id) VALUES (?, ?)').bind(
-        profileId,
-        nodeId,
-      ),
     ),
   )
   await env.DB.batch(statements)
@@ -72,16 +57,11 @@ export async function profileView(
     .select({ id: profileSources.sourceId })
     .from(profileSources)
     .where(eq(profileSources.profileId, profile.id))
-  const exclusionRows = await db(env)
-    .select({ id: profileNodeExclusions.nodeId })
-    .from(profileNodeExclusions)
-    .where(eq(profileNodeExclusions.profileId, profile.id))
   const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     sourceIds: sourceRows.map((item) => item.id),
-    excludedNodeIds: exclusionRows.map((item) => item.id),
     subscriptionUrl: `${origin}/s/${token}/config.yaml`,
   }
 }
@@ -112,7 +92,7 @@ profilesRouter.post('/', async (c) => {
     updatedAt: now,
   }
   await database.insert(profiles).values(profile)
-  await saveProfileRelations(c.env, profile.id, sourceIds, input.excludedNodeIds)
+  await saveProfileSources(c.env, profile.id, sourceIds)
   const job = await createJob(c.env, 'compile_profile', profile.id)
   const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
   return c.json(
@@ -140,7 +120,7 @@ profilesRouter.patch('/:id', async (c) => {
   if (input.templateId && !(await resolveTemplate(c.env, input.templateId)))
     return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const sourceIds = input.sourceIds ? await assertSourceIds(c.env, input.sourceIds) : null
-  const { sourceIds: _sourceIds, excludedNodeIds: _excluded, ...values } = input
+  const { sourceIds: _sourceIds, ...values } = input
   await database
     .update(profiles)
     .set({
@@ -150,22 +130,7 @@ profilesRouter.patch('/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(profiles.id, id))
-  if (sourceIds || input.excludedNodeIds) {
-    const oldSources = await database
-      .select({ id: profileSources.sourceId })
-      .from(profileSources)
-      .where(eq(profileSources.profileId, id))
-    const oldExclusions = await database
-      .select({ id: profileNodeExclusions.nodeId })
-      .from(profileNodeExclusions)
-      .where(eq(profileNodeExclusions.profileId, id))
-    await saveProfileRelations(
-      c.env,
-      id,
-      sourceIds || oldSources.map((item) => item.id),
-      input.excludedNodeIds || oldExclusions.map((item) => item.id),
-    )
-  }
+  if (sourceIds) await saveProfileSources(c.env, id, sourceIds)
   const job = await createJob(c.env, 'compile_profile', id)
   const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   return c.json(

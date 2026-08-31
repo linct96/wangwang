@@ -44,7 +44,7 @@ const importProtocols = new Set<ManualNodeConnection['protocol']>([
   'tuic',
 ])
 
-const profileInputFields = new Set(['name', 'enabled', 'sourceIds', 'tags', 'excludedNodeIds', 'templateId'])
+const profileInputFields = new Set(['name', 'enabled', 'sourceIds', 'tags', 'templateId'])
 
 function importedConnection(config: Record<string, unknown>): ManualNodeConnection {
   const ws = (config['ws-opts'] || {}) as { path?: string; headers?: { Host?: string } }
@@ -762,7 +762,6 @@ export function buildProfile(
     compiledAt: now(),
     error: null,
     sourceIds,
-    excludedNodeIds: current?.excludedNodeIds || [],
     subscriptionUrl: current?.subscriptionUrl || `/s/local-token/config.yaml`,
   }
   profile.compiledYaml = compileYaml(profile.templateId, localProfileNodes(state, profile), state.templates)
