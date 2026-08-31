@@ -44,6 +44,8 @@ const ruleTypeLabels = {
 } as const
 
 function withRuleTypeSuffix(preset: RuleSetPreset, enabled: boolean): RuleSetPreset {
+  if (!enabled) return preset
+
   const suffix = preset.provider.behavior === 'ipcidr' ? 'ip' : preset.provider.behavior
 
   const currentSuffix = `-${suffix}`
@@ -53,10 +55,10 @@ function withRuleTypeSuffix(preset: RuleSetPreset, enabled: boolean): RuleSetPre
 
   return {
     ...preset,
-    name: enabled ? `${displayName} ${ruleTypeLabels[preset.provider.behavior]}` : displayName,
+    name: `${displayName} ${ruleTypeLabels[preset.provider.behavior]}`,
     provider: {
       ...preset.provider,
-      name: enabled ? `${providerName}${currentSuffix}` : providerName,
+      name: `${providerName}${currentSuffix}`,
     },
   }
 }
