@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, asc, count, eq, like, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { body, fail, ok } from '../http'
 import { nodes, profileSources, sourceNodes, sources } from '../db'
 import {
@@ -189,39 +189,16 @@ nodesRouter.post('/import', async (c) => {
 nodesRouter.get('/', async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 50))
-  const query = c.req.query('q')?.trim()
   const protocol = c.req.query('protocol')?.trim()
-  const tag = c.req.query('tag')?.trim()
-  const sourceId = c.req.query('sourceId')?.trim()
   const enabled = c.req.query('enabled')
   const filters = and(
-    query
-      ? or(like(nodes.alias, `%${query}%`), like(nodes.server, `%${query}%`), sql`${nodes.config} LIKE ${`%${query}%`}`)
-      : undefined,
     protocol ? eq(nodes.protocol, protocol) : undefined,
-    tag
-      ? or(
-          sql`${nodes.tags} LIKE ${`%"${tag.replaceAll('"', '')}"%`}`,
-          sql`EXISTS (
-            SELECT 1 FROM source_nodes sn
-            JOIN sources s ON s.id = sn.source_id
-            WHERE sn.node_id = ${nodes.id} AND s.node_tag = ${tag}
-          )`,
-        )
-      : undefined,
     enabled === 'true' ? eq(nodes.enabled, true) : enabled === 'false' ? eq(nodes.enabled, false) : undefined,
     sql`EXISTS (
       SELECT 1 FROM source_nodes sn
       JOIN sources s ON s.id = sn.source_id
       WHERE sn.node_id = ${nodes.id} AND s.enabled = 1
     )`,
-    sourceId
-      ? sql`EXISTS (
-          SELECT 1 FROM source_nodes sn
-          JOIN sources s ON s.id = sn.source_id
-          WHERE sn.node_id = ${nodes.id} AND sn.source_id = ${sourceId} AND s.enabled = 1
-        )`
-      : undefined,
   )
   const database = db(c.env)
   const [rows, [{ total }]] = await Promise.all([

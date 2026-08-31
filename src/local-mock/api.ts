@@ -396,19 +396,11 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
   if (pathname === '/nodes' && method === 'GET') {
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get('pageSize')) || 50))
-    const query = (url.searchParams.get('q') || '').toLowerCase()
     const protocol = url.searchParams.get('protocol') || ''
-    const tag = url.searchParams.get('tag') || ''
-    const sourceId = url.searchParams.get('sourceId') || ''
     const enabled = url.searchParams.get('enabled') || ''
     const rows = state.nodes.filter((node) => {
-      const tags = localNodeTags(state, node)
       return (
-        (!query || node.name.toLowerCase().includes(query) || node.server.toLowerCase().includes(query)) &&
         (!protocol || node.protocol === protocol) &&
-        (!tag || tags.includes(tag)) &&
-        (!sourceId ||
-          (node.sourceIds.includes(sourceId) && state.sources.find((source) => source.id === sourceId)?.enabled)) &&
         node.sourceIds.some((id) => state.sources.find((source) => source.id === id)?.enabled) &&
         (!enabled || String(node.enabled) === enabled)
       )
