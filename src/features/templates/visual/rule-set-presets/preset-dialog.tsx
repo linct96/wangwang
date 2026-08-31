@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { newRule, newRuleProvider } from '../yaml-adapter'
 import { targetLabel, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
+import { applyGhProxyToGithubUrl } from '../geo/presets'
 import { RULE_SET_PRESETS } from './catalog'
 import type {
   ApplyRuleSetPresetOptions,
@@ -62,6 +63,7 @@ export function RuleSetPresetDialog({
   const [source, setSource] = useState<RuleSetPresetSource | 'all'>('all')
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
+  const [preferGhProxy, setPreferGhProxy] = useState(true)
   const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>({ kind: 'builtin', value: 'DIRECT' })
   const catalog = useRuleSetPresetCatalog(open)
   const presets = catalog.data?.items.length ? catalog.data.items : RULE_SET_PRESETS
@@ -105,6 +107,7 @@ export function RuleSetPresetDialog({
     setSource('all')
     setCategory('all')
     setSelections({})
+    setPreferGhProxy(true)
     setBulkTarget({ kind: 'builtin', value: 'DIRECT' })
     setOpen(true)
   }
@@ -181,6 +184,13 @@ export function RuleSetPresetDialog({
                   }
                 />
                 全选
+              </label>
+              <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
+                <Checkbox
+                  checked={preferGhProxy}
+                  onCheckedChange={(checked) => setPreferGhProxy(checked === true)}
+                />
+                优先使用 gh-proxy 地址
               </label>
               {(catalog.loading || catalog.error || catalog.data?.stale) &&
                 (catalog.loading ? (
@@ -280,59 +290,71 @@ export function RuleSetPresetDialog({
             {!filtered.length && <p className="py-10 text-center text-sm text-muted-foreground">没有匹配的规则集</p>}
           </div>
 
-          <div className="dialog-actions flex-wrap items-center gap-2">
-            <span className="mr-auto flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Database className="size-4" />
-              已选择 {selectedCount} 项
-              {mode === 'provider-and-rule' && selectedCount > 0 && (
-                <>
-                  <span>，应用于</span>
-                  <Select
-                    value={bulkTargetValue}
-                    onValueChange={(value) =>
-                      setBulkTarget(
-                        value.startsWith('group:')
-                          ? { kind: 'group', groupId: value.slice(6) }
-                          : { kind: 'builtin', value: value as 'DIRECT' | 'REJECT' },
-                      )
-                    }
-                  >
-                    <SelectTrigger className="w-32 shrink-0">
-                      <SelectValue placeholder="请选择目标策略" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {draft.groups
-                        .filter((group) => group.name)
-                        .map((group) => (
-                          <SelectItem key={group.id} value={`group:${group.id}`}>
-                            {group.name}
-                          </SelectItem>
-                        ))}
-                      <SelectItem value="DIRECT">DIRECT</SelectItem>
-                      <SelectItem value="REJECT">REJECT</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span>规则</span>
-                </>
-              )}
-            </span>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={!selectedCount}
-              onClick={() => {
-                onApply(
-                  Object.values(selections).map((selection) => ({ ...selection, target: bulkTarget })),
-                  presets,
-                )
-                setOpen(false)
-              }}
-            >
-              <Plus data-icon="inline-start" />
-              添加
-            </Button>
+          <div className="dialog-actions flex-wrap items-center !justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Database className="size-4" />
+                已选择 {selectedCount} 项
+                {mode === 'provider-and-rule' && selectedCount > 0 && (
+                  <>
+                    <span>，应用于</span>
+                    <Select
+                      value={bulkTargetValue}
+                      onValueChange={(value) =>
+                        setBulkTarget(
+                          value.startsWith('group:')
+                            ? { kind: 'group', groupId: value.slice(6) }
+                            : { kind: 'builtin', value: value as 'DIRECT' | 'REJECT' },
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-32 shrink-0">
+                        <SelectValue placeholder="请选择目标策略" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {draft.groups
+                          .filter((group) => group.name)
+                          .map((group) => (
+                            <SelectItem key={group.id} value={`group:${group.id}`}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
+                        <SelectItem value="DIRECT">DIRECT</SelectItem>
+                        <SelectItem value="REJECT">REJECT</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span>规则</span>
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                disabled={!selectedCount}
+                onClick={() => {
+                  const selectedPresets = presets.map((preset) =>
+                    preferGhProxy && selections[preset.id]
+                      ? {
+                          ...preset,
+                          provider: { ...preset.provider, url: applyGhProxyToGithubUrl(preset.provider.url) },
+                        }
+                      : preset,
+                  )
+                  onApply(
+                    Object.values(selections).map((selection) => ({ ...selection, target: bulkTarget })),
+                    selectedPresets,
+                  )
+                  setOpen(false)
+                }}
+              >
+                <Plus data-icon="inline-start" />
+                添加
+              </Button>
+            </div>
           </div>
         </AppDialog>
       )}
