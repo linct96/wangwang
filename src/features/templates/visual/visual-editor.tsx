@@ -167,16 +167,6 @@ export function VisualTemplateEditor({
           <div className="rounded-md border border-dashed px-4 py-8 text-center">
             <p className="text-sm font-medium">暂无规则集数据源</p>
             <p className="mt-1 text-sm text-muted-foreground">创建后即可通过 RULE-SET 在分流规则中引用。</p>
-            <ProviderDialog
-              providers={draft.ruleProviders}
-              groups={draft.groups}
-              onSave={(provider) => update({ ...draft, ruleProviders: [provider] })}
-            >
-              <Button type="button" variant="outline" size="sm" className="mt-4">
-                <Plus data-icon="inline-start" />
-                添加规则集数据源
-              </Button>
-            </ProviderDialog>
           </div>
         )}
       </section>
