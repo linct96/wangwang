@@ -13,8 +13,13 @@ function providerSourceLabel(provider: RuleProviderDraft) {
   if (provider.type === 'inline') return '内联'
 
   try {
-    const url = new URL(provider.url || '')
-    if (url.hostname !== 'raw.githubusercontent.com') return '自定义'
+    let url = new URL(provider.url || '')
+    if (url.hostname === 'gh-proxy.com') {
+      const innerUrl = decodeURIComponent(url.pathname.slice(1))
+      if (!innerUrl) return '自定义'
+      url = new URL(innerUrl)
+    }
+    if (!['github.com', 'raw.githubusercontent.com'].includes(url.hostname)) return '自定义'
     const path = url.pathname.toLowerCase()
     if (path.startsWith('/metacubex/meta-rules-dat/')) return 'MetaCubeX'
     if (path.startsWith('/loyalsoldier/clash-rules/')) return 'Loyalsoldier'
