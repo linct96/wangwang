@@ -25,6 +25,9 @@ dns:
     - "*.local"
     - "*.localdomain"
     - localhost
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
@@ -124,6 +127,9 @@ dns:
     - "*.local"
     - "*.localdomain"
     - localhost
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
@@ -293,17 +299,6 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-geodata-mode: true
-
-geo-auto-update: true
-
-geo-update-interval: 24
-
-geox-url:
-  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
-  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
-  asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
   listen: 0.0.0.0:1053
@@ -316,6 +311,9 @@ dns:
     - "*.local"
     - "*.localdomain"
     - localhost
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
@@ -352,8 +350,9 @@ proxy-groups:
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
+      - ⚖️ 负载均衡
       - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ⚡ 自动选择
     type: url-test
     url: https://www.gstatic.com/generate_204
@@ -367,31 +366,76 @@ proxy-groups:
     interval: 300
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: ⚖️ 负载均衡
+    type: load-balance
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    strategy: consistent-hashing
+    proxies:
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🤖 AI 服务
     type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🔍 Google
     type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ✈️ Telegram
     type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
-  - name: 🎬 流媒体
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🟦 Microsoft
     type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
-  - name: Ⓜ️ Microsoft
-    type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🍎 Apple
     type: select
-    proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🎬 流媒体
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - ⚖️ 负载均衡
+      - DIRECT
+  - name: 🛑 广告拦截
+    type: select
+    default-selected: REJECT
+    proxies:
+      - REJECT
+      - DIRECT
 rule-providers:
   category-ads-all-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/category-ads-all.mrs
+    path: ./ruleset/category-ads-all-domain.mrs
     interval: 86400
   private-domain:
     type: http
@@ -407,12 +451,12 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
     interval: 86400
-  ai-not-cn-domain:
+  category-ai-!cn:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
-    path: ./ruleset/ai-not-cn.mrs
+    path: ./ruleset/category-ai-!cn.mrs
     interval: 86400
   google-domain:
     type: http
@@ -420,6 +464,13 @@ rule-providers:
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
     path: ./ruleset/google.mrs
+    interval: 86400
+  google-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"
+    path: ./ruleset/google-ip.mrs
     interval: 86400
   telegram-domain:
     type: http
@@ -440,28 +491,35 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
-    path: ./ruleset/youtube.mrs
+    path: ./ruleset/youtube-domain.mrs
     interval: 86400
   netflix-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
-    path: ./ruleset/netflix.mrs
+    path: ./ruleset/netflix-domain.mrs
+    interval: 86400
+  netflix-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"
+    path: ./ruleset/netflix-ip.mrs
     interval: 86400
   spotify-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
-    path: ./ruleset/spotify.mrs
+    path: ./ruleset/spotify-domain.mrs
     interval: 86400
   tiktok-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
-    path: ./ruleset/tiktok.mrs
+    path: ./ruleset/tiktok-domain.mrs
     interval: 86400
   microsoft-domain:
     type: http
@@ -470,24 +528,54 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
     path: ./ruleset/microsoft.mrs
     interval: 86400
+  apple-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs"
+    path: ./ruleset/apple-cn-domain.mrs
+    interval: 86400
+  apple-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
+    path: ./ruleset/apple-domain.mrs
+    interval: 86400
+  cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
 rules:
-  - RULE-SET,category-ads-all-domain,REJECT
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
-  - RULE-SET,ai-not-cn-domain,🤖 AI 服务
+  - RULE-SET,category-ads-all-domain,🛑 广告拦截
+  - RULE-SET,category-ai-!cn,🤖 AI 服务
   - RULE-SET,google-domain,🔍 Google
+  - RULE-SET,google-ip,🔍 Google,no-resolve
   - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
+  - RULE-SET,microsoft-domain,🟦 Microsoft
+  - RULE-SET,apple-cn-domain,DIRECT
+  - RULE-SET,apple-domain,🍎 Apple
   - RULE-SET,youtube-domain,🎬 流媒体
   - RULE-SET,netflix-domain,🎬 流媒体
+  - RULE-SET,netflix-ip,🎬 流媒体,no-resolve
   - RULE-SET,spotify-domain,🎬 流媒体
   - RULE-SET,tiktok-domain,🎬 流媒体
-  - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
-  - GEOSITE,apple,🍎 Apple
-  - GEOSITE,cn,DIRECT
-  - GEOIP,CN,DIRECT,no-resolve
-  - GEOSITE,geolocation-!cn,🚀 节点选择
-  - MATCH,🚀 节点选择
+  - RULE-SET,cn-domain,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - MATCH,🐟 漏网之鱼
 `
 
 export const builtinTemplates: BuiltinTemplate[] = [
@@ -506,7 +594,7 @@ export const builtinTemplates: BuiltinTemplate[] = [
   {
     id: 'builtin:full',
     name: '完全规则模板',
-    description: '完整规则 / AI / Google / Telegram 等',
+    description: '标准规则超集 / Google、Telegram、Microsoft、Apple 独立分流 / IP 规则与负载均衡',
     yaml: fullYaml,
   },
 ]
