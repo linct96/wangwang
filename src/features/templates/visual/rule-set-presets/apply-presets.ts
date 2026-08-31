@@ -3,7 +3,7 @@ import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
 import { createProviderFromPreset, insertRulesBeforeMatch } from './helpers'
 import type { ApplyRuleSetPresetOptions, RuleSetPreset, RuleSetPresetMode } from './types'
 
-function providerMatchesPreset(provider: VisualTemplateDraft['ruleProviders'][number], preset: RuleSetPreset) {
+export function providerMatchesPreset(provider: VisualTemplateDraft['ruleProviders'][number], preset: RuleSetPreset) {
   return (
     provider.kind === 'structured' &&
     provider.name === preset.provider.name &&
