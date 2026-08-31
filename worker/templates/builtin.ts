@@ -90,12 +90,12 @@ proxy-groups:
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
 rule-providers:
-  ads:
+  category-ads-all:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/ads.mrs
+    path: ./ruleset/category-ads-all.mrs
     interval: 86400
   private:
     type: http
@@ -126,7 +126,7 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
-  - RULE-SET,ads,REJECT
+  - RULE-SET,category-ads-all,REJECT
   - RULE-SET,private,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn,DIRECT
@@ -217,12 +217,12 @@ proxy-groups:
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
 rule-providers:
-  ads:
+  category-ads-all:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/ads.mrs
+    path: ./ruleset/category-ads-all.mrs
     interval: 86400
   private:
     type: http
@@ -260,7 +260,7 @@ rule-providers:
     path: ./ruleset/geolocation-not-cn.mrs
     interval: 86400
 rules:
-  - RULE-SET,ads,REJECT
+  - RULE-SET,category-ads-all,REJECT
   - RULE-SET,private,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn,DIRECT
@@ -370,12 +370,12 @@ proxy-groups:
     type: select
     proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
 rule-providers:
-  ads:
+  category-ads-all:
     type: http
     behavior: domain
     format: mrs
     url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/ads.mrs
+    path: ./ruleset/category-ads-all.mrs
     interval: 86400
   private:
     type: http
@@ -455,7 +455,7 @@ rule-providers:
     path: ./ruleset/microsoft.mrs
     interval: 86400
 rules:
-  - RULE-SET,ads,REJECT
+  - RULE-SET,category-ads-all,REJECT
   - RULE-SET,private,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,ai-not-cn,🤖 AI 服务
