@@ -7,12 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { RuleTargetSelect } from '../rules'
-import { canUseNoResolve } from '../validation'
 import { newRule, newRuleProvider } from '../yaml-adapter'
-import { targetLabel, type RuleSetRuleDraft, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
+import { targetLabel, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { RULE_SET_PRESETS } from './catalog'
-import { createProviderFromPreset } from './helpers'
 import type {
   ApplyRuleSetPresetOptions,
   RuleSetPreset,
@@ -38,16 +35,8 @@ const sourceLabels: Record<RuleSetPresetSource, string> = {
   loyalsoldier: 'Loyalsoldier',
 }
 
-function initialTarget(preset: RuleSetPreset, draft: VisualTemplateDraft): RuleTargetDraft | undefined {
-  if (preset.defaultTarget === 'DIRECT' || preset.defaultTarget === 'REJECT') {
-    return { kind: 'builtin', value: preset.defaultTarget }
-  }
-  const group = preset.defaultTarget && draft.groups.find((item) => item.name === preset.defaultTarget)
-  return group ? { kind: 'group', groupId: group.id } : undefined
-}
-
 function initialSelection(preset: RuleSetPreset, draft: VisualTemplateDraft): ApplyRuleSetPresetOptions {
-  const target = initialTarget(preset, draft)
+  const target: RuleTargetDraft = { kind: 'builtin', value: 'DIRECT' }
   return {
     presetId: preset.id,
     providerId: newRuleProvider(draft.ruleProviders).id,
@@ -73,7 +62,7 @@ export function RuleSetPresetDialog({
   const [source, setSource] = useState<RuleSetPresetSource | 'all'>('all')
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
-  const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>()
+  const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>({ kind: 'builtin', value: 'DIRECT' })
   const catalog = useRuleSetPresetCatalog(open)
   const presets = catalog.data?.items.length ? catalog.data.items : RULE_SET_PRESETS
 
@@ -116,37 +105,15 @@ export function RuleSetPresetDialog({
     setSource('all')
     setCategory('all')
     setSelections({})
-    setBulkTarget(undefined)
+    setBulkTarget({ kind: 'builtin', value: 'DIRECT' })
     setOpen(true)
   }
 
-  function updateSelection(preset: RuleSetPreset, patch: Partial<ApplyRuleSetPresetOptions>) {
-    setSelections((current) => ({
-      ...current,
-      [preset.id]: { ...(current[preset.id] || initialSelection(preset, draft)), ...patch },
-    }))
-  }
-
-  function supportsNoResolve(preset: RuleSetPreset, selection: ApplyRuleSetPresetOptions) {
-    const provider = createProviderFromPreset(preset, selection.providerId)
-    const rule: RuleSetRuleDraft = {
-      kind: 'structured',
-      id: 'preset-preview',
-      type: 'RULE-SET',
-      provider: { kind: 'provider', providerId: provider.id },
-      target: selection.target || { kind: 'builtin', value: 'DIRECT' },
-      noResolve: false,
-    }
-    return canUseNoResolve(rule, { ruleProviders: [provider] })
-  }
-
   const selectedCount = Object.keys(selections).length
-  const missingTargetCount = Object.values(selections).filter((selection) => !selection.target).length
-  const bulkTargetValue = bulkTarget
-    ? bulkTarget.kind === 'group'
-      ? `group:${bulkTarget.groupId}`
-      : bulkTarget.value
-    : ''
+  const bulkTargetValue = bulkTarget.kind === 'group' ? `group:${bulkTarget.groupId}` : bulkTarget.value
+  const selectedFilteredCount = filtered.reduce((count, preset) => count + (selections[preset.id] ? 1 : 0), 0)
+  const allFilteredSelected = filtered.length > 0 && selectedFilteredCount === filtered.length
+  const someFilteredSelected = selectedFilteredCount > 0 && !allFilteredSelected
   const staleSources = catalog.data?.sources
     ? (['metacubex', 'loyalsoldier'] as const).filter((source) => catalog.data?.sources?.[source].stale)
     : []
@@ -197,7 +164,24 @@ export function RuleSetPresetDialog({
           </div>
 
           {(catalog.loading || catalog.error || catalog.data?.stale || catalog.data?.updatedAt) && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
+                <Checkbox
+                  aria-label="全选"
+                  checked={someFilteredSelected ? 'indeterminate' : allFilteredSelected}
+                  onCheckedChange={(checked) =>
+                    setSelections((current) => {
+                      const next = { ...current }
+                      filtered.forEach((preset) => {
+                        if (checked === true) next[preset.id] = initialSelection(preset, draft)
+                        else delete next[preset.id]
+                      })
+                      return next
+                    })
+                  }
+                />
+                全选
+              </label>
               {(catalog.loading || catalog.error || catalog.data?.stale) &&
                 (catalog.loading ? (
                   <LoaderCircle className="size-3.5 animate-spin" />
@@ -219,7 +203,7 @@ export function RuleSetPresetDialog({
                 </span>
               ))}
               {catalog.data?.updatedAt && !catalog.loading && (
-                <>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
                   <span>
                     更新于{' '}
                     {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
@@ -231,54 +215,8 @@ export function RuleSetPresetDialog({
                     <RefreshCw className="size-3.5" />
                     刷新
                   </Button>
-                </>
+                </div>
               )}
-            </div>
-          )}
-
-          {mode === 'provider-and-rule' && selectedCount > 0 && (
-            <div className="flex items-center gap-2 border-y py-3">
-              <span className="shrink-0 text-sm font-medium">统一目标策略</span>
-              <Select
-                value={bulkTargetValue}
-                onValueChange={(value) =>
-                  setBulkTarget(
-                    value.startsWith('group:')
-                      ? { kind: 'group', groupId: value.slice(6) }
-                      : { kind: 'builtin', value: value as 'DIRECT' | 'REJECT' },
-                  )
-                }
-              >
-                <SelectTrigger className="min-w-0 flex-1">
-                  <SelectValue placeholder="请选择目标策略" />
-                </SelectTrigger>
-                <SelectContent>
-                  {draft.groups
-                    .filter((group) => group.name)
-                    .map((group) => (
-                      <SelectItem key={group.id} value={`group:${group.id}`}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  <SelectItem value="DIRECT">DIRECT</SelectItem>
-                  <SelectItem value="REJECT">REJECT</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!bulkTarget}
-                onClick={() =>
-                  bulkTarget &&
-                  setSelections((current) =>
-                    Object.fromEntries(
-                      Object.entries(current).map(([id, selection]) => [id, { ...selection, target: bulkTarget }]),
-                    ),
-                  )
-                }
-              >
-                应用到全部
-              </Button>
             </div>
           )}
 
@@ -334,31 +272,6 @@ export function RuleSetPresetDialog({
                           )}
                         </label>
                       </div>
-
-                      {selection && mode === 'provider-and-rule' && (
-                        <div className="mt-3 space-y-3 border-t pt-3 pl-7">
-                          <div className="space-y-2">
-                            <span className="text-xs font-medium">目标策略</span>
-                            <RuleTargetSelect
-                              groups={draft.groups}
-                              value={selection.target}
-                              onChange={(target) => updateSelection(preset, { target })}
-                              className="w-full"
-                            />
-                            {supportsNoResolve(preset, selection) && (
-                              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                                <Checkbox
-                                  checked={selection.noResolve}
-                                  onCheckedChange={(checked) =>
-                                    updateSelection(preset, { noResolve: checked === true })
-                                  }
-                                />
-                                no-resolve
-                              </label>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )
@@ -367,12 +280,40 @@ export function RuleSetPresetDialog({
             {!filtered.length && <p className="py-10 text-center text-sm text-muted-foreground">没有匹配的规则集</p>}
           </div>
 
-          <div className="dialog-actions">
+          <div className="dialog-actions flex-wrap items-center gap-2">
             <span className="mr-auto flex items-center gap-1.5 text-sm text-muted-foreground">
               <Database className="size-4" />
               已选择 {selectedCount} 项
-              {mode === 'provider-and-rule' && missingTargetCount > 0 && (
-                <span className="text-destructive">（还有 {missingTargetCount} 项未设置目标）</span>
+              {mode === 'provider-and-rule' && selectedCount > 0 && (
+                <>
+                  <span>，应用于</span>
+                  <Select
+                    value={bulkTargetValue}
+                    onValueChange={(value) =>
+                      setBulkTarget(
+                        value.startsWith('group:')
+                          ? { kind: 'group', groupId: value.slice(6) }
+                          : { kind: 'builtin', value: value as 'DIRECT' | 'REJECT' },
+                      )
+                    }
+                  >
+                    <SelectTrigger className="w-32 shrink-0">
+                      <SelectValue placeholder="请选择目标策略" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {draft.groups
+                        .filter((group) => group.name)
+                        .map((group) => (
+                          <SelectItem key={group.id} value={`group:${group.id}`}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      <SelectItem value="DIRECT">DIRECT</SelectItem>
+                      <SelectItem value="REJECT">REJECT</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span>规则</span>
+                </>
               )}
             </span>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -380,9 +321,12 @@ export function RuleSetPresetDialog({
             </Button>
             <Button
               type="button"
-              disabled={!selectedCount || (mode === 'provider-and-rule' && missingTargetCount > 0)}
+              disabled={!selectedCount}
               onClick={() => {
-                onApply(Object.values(selections), presets)
+                onApply(
+                  Object.values(selections).map((selection) => ({ ...selection, target: bulkTarget })),
+                  presets,
+                )
                 setOpen(false)
               }}
             >
