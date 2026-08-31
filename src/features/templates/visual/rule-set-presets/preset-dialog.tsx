@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { newRule, newRuleProvider } from '../yaml-adapter'
 import { targetLabel, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { applyGhProxyToGithubUrl } from '../geo/presets'
-import { RULE_SET_PRESETS } from './catalog'
+import { RULE_SET_PRESETS, ruleProviderPresetKey } from './catalog'
 import { providerMatchesPreset } from './apply-presets'
 import type {
   ApplyRuleSetPresetOptions,
@@ -35,6 +35,30 @@ const categoryLabels: Record<RuleSetPresetCategory, string> = {
 const sourceLabels: Record<RuleSetPresetSource, string> = {
   metacubex: 'MetaCubeX',
   loyalsoldier: 'Loyalsoldier',
+}
+
+const ruleTypeLabels = {
+  domain: 'Domain',
+  ipcidr: 'IP',
+  classical: 'Classical',
+} as const
+
+function withRuleTypeSuffix(preset: RuleSetPreset, enabled: boolean): RuleSetPreset {
+  const suffix = preset.provider.behavior === 'ipcidr' ? 'ip' : preset.provider.behavior
+
+  const currentSuffix = `-${suffix}`
+  const generatedIpSuffix = preset.source === 'metacubex' && preset.provider.behavior === 'ipcidr'
+  const providerName = generatedIpSuffix ? preset.provider.name.replace(/-ip$/, '') : preset.provider.name
+  const displayName = generatedIpSuffix ? preset.name.replace(/ IP$/i, '') : preset.name
+
+  return {
+    ...preset,
+    name: enabled ? `${displayName} ${ruleTypeLabels[preset.provider.behavior]}` : displayName,
+    provider: {
+      ...preset.provider,
+      name: enabled ? `${providerName}${currentSuffix}` : providerName,
+    },
+  }
 }
 
 function initialSelection(preset: RuleSetPreset, draft: VisualTemplateDraft): ApplyRuleSetPresetOptions {
@@ -64,6 +88,7 @@ export function RuleSetPresetDialog({
   const [source, setSource] = useState<RuleSetPresetSource | 'all'>('all')
   const [category, setCategory] = useState<RuleSetPresetCategory | 'all'>('all')
   const [selections, setSelections] = useState<Record<string, ApplyRuleSetPresetOptions>>({})
+  const [appendTypeSuffix, setAppendTypeSuffix] = useState(true)
   const [preferGhProxy, setPreferGhProxy] = useState(true)
   const [bulkTarget, setBulkTarget] = useState<RuleTargetDraft>({ kind: 'builtin', value: 'DIRECT' })
   const catalog = useRuleSetPresetCatalog(open)
@@ -82,15 +107,16 @@ export function RuleSetPresetDialog({
     )
   }, [category, presets, query, source])
   const configuredTargets = useMemo(() => {
-    const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
+    const providers = new Map(draft.ruleProviders.map((provider) => [provider.id, provider]))
     const targets = new Map<string, Set<string>>()
     draft.rules.forEach((rule) => {
       if (rule.kind !== 'structured' || rule.type !== 'RULE-SET' || rule.provider.kind !== 'provider') return
-      const providerName = providerNames.get(rule.provider.providerId)
-      if (!providerName) return
-      const values = targets.get(providerName) || new Set<string>()
+      const provider = providers.get(rule.provider.providerId)
+      const providerKey = provider?.kind === 'structured' ? ruleProviderPresetKey(provider) : undefined
+      if (!providerKey) return
+      const values = targets.get(providerKey) || new Set<string>()
       values.add(targetLabel(rule.target, draft.groups))
-      targets.set(providerName, values)
+      targets.set(providerKey, values)
     })
     return new Map([...targets].map(([name, values]) => [name, [...values].join('、')]))
   }, [draft.groups, draft.ruleProviders, draft.rules])
@@ -108,6 +134,7 @@ export function RuleSetPresetDialog({
     setSource('all')
     setCategory('all')
     setSelections({})
+    setAppendTypeSuffix(true)
     setPreferGhProxy(true)
     setBulkTarget({ kind: 'builtin', value: 'DIRECT' })
     setOpen(true)
@@ -167,7 +194,7 @@ export function RuleSetPresetDialog({
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
               <Checkbox
                 aria-label="全选"
@@ -177,9 +204,12 @@ export function RuleSetPresetDialog({
                     const next = { ...current }
                     filtered.forEach((preset) => {
                       if (checked === true) {
+                        const effectivePreset =
+                          mode === 'provider-only' ? withRuleTypeSuffix(preset, appendTypeSuffix) : preset
                         if (
                           mode === 'provider-only' &&
-                          draft.ruleProviders.some((provider) => providerMatchesPreset(provider, preset))
+                          appendTypeSuffix &&
+                          draft.ruleProviders.some((provider) => providerMatchesPreset(provider, effectivePreset))
                         )
                           return
                         next[preset.id] = initialSelection(preset, draft)
@@ -191,6 +221,15 @@ export function RuleSetPresetDialog({
               />
               全选
             </label>
+            {mode === 'provider-only' && (
+              <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
+                <Checkbox
+                  checked={appendTypeSuffix}
+                  onCheckedChange={(checked) => setAppendTypeSuffix(checked === true)}
+                />
+                添加规则类型后缀
+              </label>
+            )}
             <label className="ml-2 flex shrink-0 cursor-pointer items-center gap-1.5">
               <Checkbox checked={preferGhProxy} onCheckedChange={(checked) => setPreferGhProxy(checked === true)} />
               使用 gh-proxy 加速
@@ -244,10 +283,12 @@ export function RuleSetPresetDialog({
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const preset = filtered[virtualItem.index]
+                const displayPreset = mode === 'provider-only' ? withRuleTypeSuffix(preset, false) : preset
+                const effectivePreset = mode === 'provider-only' ? withRuleTypeSuffix(preset, appendTypeSuffix) : preset
                 const selection = selections[preset.id]
-                const configuredTarget = configuredTargets.get(preset.provider.name)
+                const configuredTarget = configuredTargets.get(preset.id)
                 const configuredProvider = draft.ruleProviders.some((provider) =>
-                  providerMatchesPreset(provider, preset),
+                  providerMatchesPreset(provider, effectivePreset),
                 )
                 return (
                   <div
@@ -262,7 +303,7 @@ export function RuleSetPresetDialog({
                         <Checkbox
                           id={`preset-${mode}-${preset.id}`}
                           checked={Boolean(selection)}
-                          disabled={mode === 'provider-only' && configuredProvider}
+                          disabled={mode === 'provider-only' && appendTypeSuffix && configuredProvider}
                           onCheckedChange={(checked) =>
                             setSelections((current) => {
                               if (checked === true) return { ...current, [preset.id]: initialSelection(preset, draft) }
@@ -277,7 +318,15 @@ export function RuleSetPresetDialog({
                         >
                           <span className="min-w-0 flex-1">
                             <span className="flex min-w-0 items-center gap-2">
-                              <strong className="min-w-0 truncate text-sm">{preset.name}</strong>
+                              <strong className="min-w-0 truncate text-sm">
+                                {displayPreset.name}
+                                {mode === 'provider-only' && appendTypeSuffix && (
+                                  <span className="font-normal text-muted-foreground">
+                                    {' '}
+                                    {ruleTypeLabels[preset.provider.behavior]}
+                                  </span>
+                                )}
+                              </strong>
                               <Badge variant="outline" className="shrink-0">
                                 {categoryLabels[preset.category]}
                               </Badge>
@@ -350,16 +399,25 @@ export function RuleSetPresetDialog({
                 type="button"
                 disabled={!selectedCount}
                 onClick={() => {
-                  const selectedPresets = presets.map((preset) =>
-                    preferGhProxy && selections[preset.id]
+                  const selectedPresets = presets.map((preset) => {
+                    const effectivePreset =
+                      mode === 'provider-only' ? withRuleTypeSuffix(preset, appendTypeSuffix) : preset
+                    return preferGhProxy && selections[preset.id]
                       ? {
-                          ...preset,
-                          provider: { ...preset.provider, url: applyGhProxyToGithubUrl(preset.provider.url) },
+                          ...effectivePreset,
+                          provider: {
+                            ...effectivePreset.provider,
+                            url: applyGhProxyToGithubUrl(effectivePreset.provider.url),
+                          },
                         }
-                      : preset,
-                  )
+                      : effectivePreset
+                  })
                   onApply(
-                    Object.values(selections).map((selection) => ({ ...selection, target: bulkTarget })),
+                    Object.values(selections).map((selection) => ({
+                      ...selection,
+                      forceCreateProvider: mode === 'provider-only' && !appendTypeSuffix,
+                      target: bulkTarget,
+                    })),
                     selectedPresets,
                   )
                   setOpen(false)
