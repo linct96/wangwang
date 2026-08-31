@@ -98,9 +98,7 @@ export function GeoSettingsPanel({
 
   const applyGhProxy = () => {
     const geoxUrl = applyGhProxyToGeoUrls(value.geoxUrl)
-    const changed = Object.keys(geoxUrl).some(
-      (key) => geoxUrl[key as GeoUrlKey] !== value.geoxUrl[key as GeoUrlKey],
-    )
+    const changed = Object.keys(geoxUrl).some((key) => geoxUrl[key as GeoUrlKey] !== value.geoxUrl[key as GeoUrlKey])
 
     if (!changed) {
       toast.info('没有可替换的 GitHub 地址')
