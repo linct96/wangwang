@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Copy, Eye, FileCode2, FilePlus2, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
+import { Copy, Eye, FileCode2, FilePlus2, Globe, Layers, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
@@ -13,6 +13,12 @@ import { ProfileDialog } from '@/features/profiles/profile-dialog'
 import { formatDate } from '@/lib/format'
 import { TemplatePreview } from './template-preview'
 import '@/styles/templates.css'
+
+const builtinTemplateIcons = {
+  'builtin:minimal': { icon: Zap, color: 'text-amber-500 bg-amber-500/10' },
+  'builtin:standard': { icon: Layers, color: 'text-blue-500 bg-blue-500/10' },
+  'builtin:full': { icon: Globe, color: 'text-indigo-500 bg-indigo-500/10' },
+} as const
 
 const builtinFallback: TemplateSummary[] = [
   {
@@ -108,6 +114,7 @@ export function TemplatesPage() {
         </Button>
       </div>
       {error && <PageState loading={false} error={error} />}
+
       <>
         <section className="template-section">
           <div className="template-section-header">
@@ -115,44 +122,53 @@ export function TemplatesPage() {
             <span className="template-section-count">{builtin.length}</span>
           </div>
           <div className="template-grid">
-            {builtin.map((template) => (
-              <article className="template-card" key={template.id}>
-                <div className="template-card-body">
-                  <header className="template-card-header">
-                    <div className="template-card-icon template-icon-builtin">
-                      <Zap className="size-4" />
-                    </div>
-                    <div className="template-card-info">
-                      <div className="template-card-title-row">
-                        <h3 title={template.name}>{template.name}</h3>
-                        <Badge variant="secondary">内置</Badge>
+            {builtin.map((template) => {
+              const iconConfig = builtinTemplateIcons[template.id as keyof typeof builtinTemplateIcons] || {
+                icon: Zap,
+                color: 'text-amber-500 bg-amber-500/10',
+              }
+              const TemplateIcon = iconConfig.icon
+              return (
+                <article className="template-card" key={template.id}>
+                  <div className="template-card-body">
+                    <header className="template-card-header">
+                      <div
+                        className={`template-card-icon flex size-8 items-center justify-center rounded ${iconConfig.color}`}
+                      >
+                        <TemplateIcon className="size-4" />
                       </div>
-                      <p>{template.description || '开箱即用的预设规则模板'}</p>
-                    </div>
-                  </header>
-                </div>
-                <footer className="template-card-footer">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
-                    <Zap className="size-3.5" />
-                    使用
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
-                    <Eye className="size-3.5" />
-                    预览
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === template.id}
-                    onClick={() => void duplicate(template)}
-                  >
-                    <Copy className="size-3.5" />
-                    复制
-                  </Button>
-                </footer>
-              </article>
-            ))}
+                      <div className="template-card-info">
+                        <div className="template-card-title-row">
+                          <h3 title={template.name}>{template.name}</h3>
+                          <Badge variant="secondary">内置</Badge>
+                        </div>
+                        <p>{template.description || '开箱即用的预设规则模板'}</p>
+                      </div>
+                    </header>
+                  </div>
+                  <footer className="template-card-footer">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                      <Zap className="size-3.5" />
+                      使用
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
+                      <Eye className="size-3.5" />
+                      预览
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy === template.id}
+                      onClick={() => void duplicate(template)}
+                    >
+                      <Copy className="size-3.5" />
+                      复制
+                    </Button>
+                  </footer>
+                </article>
+              )
+            })}
           </div>
         </section>
 
@@ -274,7 +290,7 @@ export function TemplatesPage() {
 
             <button type="button" className="template-source-card" onClick={() => create('builtin:standard')}>
               <div className="template-source-icon text-blue-500 bg-blue-500/10">
-                <FileCode2 className="size-4.5" />
+                <Layers className="size-4.5" />
               </div>
               <div className="template-source-text">
                 <strong>从标准规则模板创建</strong>
@@ -283,8 +299,8 @@ export function TemplatesPage() {
             </button>
 
             <button type="button" className="template-source-card" onClick={() => create('builtin:full')}>
-              <div className="template-source-icon text-sky-500 bg-sky-500/10">
-                <FileCode2 className="size-4.5" />
+              <div className="template-source-icon text-indigo-500 bg-indigo-500/10">
+                <Globe className="size-4.5" />
               </div>
               <div className="template-source-text">
                 <strong>从完全规则模板创建</strong>
