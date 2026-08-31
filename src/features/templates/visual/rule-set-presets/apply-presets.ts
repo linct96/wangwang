@@ -3,6 +3,30 @@ import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
 import { createProviderFromPreset, insertRulesBeforeMatch } from './helpers'
 import type { ApplyRuleSetPresetOptions, RuleSetPreset, RuleSetPresetMode } from './types'
 
+function providerMatchesPreset(provider: VisualTemplateDraft['ruleProviders'][number], preset: RuleSetPreset) {
+  return (
+    provider.kind === 'structured' &&
+    provider.name === preset.provider.name &&
+    provider.type === preset.provider.type &&
+    provider.behavior === preset.provider.behavior &&
+    provider.url?.replace('https://gh-proxy.com/', '') === preset.provider.url.replace('https://gh-proxy.com/', '')
+  )
+}
+
+function sameRule(left: RuleDraft, right: RuleDraft) {
+  return (
+    left.kind === 'structured' &&
+    right.kind === 'structured' &&
+    left.type === 'RULE-SET' &&
+    right.type === 'RULE-SET' &&
+    left.provider.kind === 'provider' &&
+    right.provider.kind === 'provider' &&
+    left.provider.providerId === right.provider.providerId &&
+    left.noResolve === right.noResolve &&
+    JSON.stringify(left.target) === JSON.stringify(right.target)
+  )
+}
+
 export function applyRuleSetPresets(
   draft: VisualTemplateDraft,
   presets: RuleSetPreset[],
@@ -15,8 +39,10 @@ export function applyRuleSetPresets(
   for (const selection of selections) {
     const preset = presets.find((item) => item.id === selection.presetId)
     if (!preset) continue
-    const provider = createProviderFromPreset(preset, selection.providerId)
-    ruleProviders.push(provider)
+    const provider =
+      ruleProviders.find((item) => providerMatchesPreset(item, preset)) ||
+      createProviderFromPreset(preset, selection.providerId)
+    if (!ruleProviders.includes(provider)) ruleProviders.push(provider)
     resolvedProviders.set(selection.presetId, provider)
   }
 
@@ -37,7 +63,11 @@ export function applyRuleSetPresets(
       noResolve: resolvePresetNoResolve(provider, selection.noResolve ?? preset.noResolve ?? false),
     }
     const planned = canUseNoResolve(rule, { ruleProviders }) ? rule : { ...rule, noResolve: false }
-    additions.push(planned)
+    if (
+      !draft.rules.some((existing) => sameRule(existing, planned)) &&
+      !additions.some((existing) => sameRule(existing, planned))
+    )
+      additions.push(planned)
   }
 
   return { ...draft, ruleProviders, rules: insertRulesBeforeMatch(draft.rules, additions) }
