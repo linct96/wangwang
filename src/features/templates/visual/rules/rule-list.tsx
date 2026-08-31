@@ -1,4 +1,5 @@
 import { DragDropProvider } from '@dnd-kit/react'
+import { isSortableOperation } from '@dnd-kit/react/sortable'
 import { type ProxyGroupDraft, type RuleDraft, type RuleProviderDraft, type VisualIssue } from '../model'
 import { RuleCard } from './rule-card'
 import type { GeoProvider } from './geo-catalog'
@@ -18,15 +19,17 @@ export function RuleList({
   onChange: (rules: RuleDraft[]) => void
   geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
 }) {
-  const firstMatch = rules.findIndex((rule) => rule.kind === 'structured' && rule.type === 'MATCH')
+  const firstMatch = rules.findIndex((rule) =>
+    rule.kind === 'structured' ? rule.type === 'MATCH' : rule.raw.split(',', 1)[0].trim() === 'MATCH',
+  )
   return (
     <DragDropProvider
       onDragEnd={(event) => {
-        const { source, target } = event.operation
-        if (!source || !target || source.id === target.id) return
-        const from = rules.findIndex((rule) => rule.id === source.id)
-        const to = rules.findIndex((rule) => rule.id === target.id)
-        if (from < 0 || to < 0) return
+        if (event.canceled || !isSortableOperation(event.operation) || !event.operation.source) return
+        const { source } = event.operation
+        const from = source.initialIndex
+        const to = source.index
+        if (from === to || from < 0 || from >= rules.length || to < 0 || to >= rules.length) return
         const next = [...rules]
         const [moved] = next.splice(from, 1)
         next.splice(to, 0, moved)

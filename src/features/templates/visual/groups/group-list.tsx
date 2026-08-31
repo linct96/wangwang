@@ -1,4 +1,5 @@
 import { DragDropProvider } from '@dnd-kit/react'
+import { isSortableOperation } from '@dnd-kit/react/sortable'
 import type { ProxyGroupDraft } from '../model'
 import { GroupCard } from './group-card'
 
@@ -14,11 +15,11 @@ export function GroupList({
   return (
     <DragDropProvider
       onDragEnd={(event) => {
-        const { source, target } = event.operation
-        if (!source || !target || source.id === target.id) return
-        const from = groups.findIndex((group) => group.id === source.id)
-        const to = groups.findIndex((group) => group.id === target.id)
-        if (from < 0 || to < 0) return
+        if (event.canceled || !isSortableOperation(event.operation) || !event.operation.source) return
+        const { source } = event.operation
+        const from = source.initialIndex
+        const to = source.index
+        if (from === to || from < 0 || from >= groups.length || to < 0 || to >= groups.length) return
         const next = [...groups]
         const [moved] = next.splice(from, 1)
         next.splice(to, 0, moved)

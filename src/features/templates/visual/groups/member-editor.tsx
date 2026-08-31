@@ -1,5 +1,5 @@
 import { DragDropProvider } from '@dnd-kit/react'
-import { useSortable } from '@dnd-kit/react/sortable'
+import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
@@ -91,27 +91,15 @@ export function MemberEditor({
       <FieldLabel>包含节点与子组 (proxies)</FieldLabel>
       <DragDropProvider
         onDragEnd={(event) => {
-          const { source, target } = event.operation
-          if (!source || !target || source.id === target.id) return
-          const sourceStr = String(source.id)
-          const targetStr = String(target.id)
-          if (sourceStr.startsWith('member-') && targetStr.startsWith('member-')) {
-            const fromIndex = Number(sourceStr.slice(7))
-            const toIndex = Number(targetStr.slice(7))
-            if (
-              !Number.isNaN(fromIndex) &&
-              !Number.isNaN(toIndex) &&
-              fromIndex >= 0 &&
-              fromIndex < form.members.length &&
-              toIndex >= 0 &&
-              toIndex < form.members.length
-            ) {
-              const nextMembers = [...form.members]
-              const [moved] = nextMembers.splice(fromIndex, 1)
-              nextMembers.splice(toIndex, 0, moved)
-              onChange({ ...form, members: nextMembers })
-            }
-          }
+          if (event.canceled || !isSortableOperation(event.operation) || !event.operation.source) return
+          const { source } = event.operation
+          const from = source.initialIndex
+          const to = source.index
+          if (from === to || from < 0 || from >= form.members.length || to < 0 || to >= form.members.length) return
+          const nextMembers = [...form.members]
+          const [moved] = nextMembers.splice(from, 1)
+          nextMembers.splice(to, 0, moved)
+          onChange({ ...form, members: nextMembers })
         }}
       >
         <div className="template-member-tags-container">
