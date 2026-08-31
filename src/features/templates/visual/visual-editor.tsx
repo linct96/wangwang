@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { groupReferences, ruleProviderReferences } from './validation'
-import { findPotentialRawProviderReferences, findPotentialRawReferences, renameRawReferences } from './yaml-adapter'
+import { findPotentialRawProviderReferences, findPotentialRawReferences } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
@@ -96,11 +96,14 @@ export function VisualTemplateEditor({
       return
     }
     const previous = draft.groups.find((item) => item.id === changed.id)!
-    const renamed = renameRawReferences({ ...draft, groups }, previous.name, changed.name)
+    if (findPotentialRawReferences(draft, previous.name).count) {
+      toast.error('该代理组可能被高级配置引用，请先在 YAML 模式确认后再重命名')
+      return
+    }
     // default-selected 保存的是名称，不是运行时 groupId；组重命名时必须同步它。
     update({
-      ...renamed,
-      groups: renamed.groups.map((group) =>
+      ...draft,
+      groups: groups.map((group) =>
         group.kind === 'structured' && group.defaultSelected === previous.name
           ? { ...group, defaultSelected: changed.name }
           : group,
