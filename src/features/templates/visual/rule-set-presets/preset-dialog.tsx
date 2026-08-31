@@ -236,7 +236,7 @@ export function RuleSetPresetDialog({
             </label>
             {(catalog.error || catalog.data?.stale) && <AlertTriangle className="size-3.5 text-amber-500" />}
             {catalog.loading
-              ? '正在同步社区目录，内置预设可正常使用'
+              ? null
               : catalog.error
                 ? catalog.data
                   ? '社区目录刷新失败，当前使用上次加载的数据'
@@ -290,6 +290,7 @@ export function RuleSetPresetDialog({
                 const configuredProvider = draft.ruleProviders.some((provider) =>
                   providerMatchesPreset(provider, effectivePreset),
                 )
+                const disabled = mode === 'provider-only' && appendTypeSuffix && configuredProvider
                 return (
                   <div
                     key={virtualItem.key}
@@ -298,12 +299,18 @@ export function RuleSetPresetDialog({
                     className="absolute top-0 left-0 w-full pb-2"
                     style={{ transform: `translateY(${virtualItem.start}px)` }}
                   >
-                    <div className="rounded-md border bg-card p-3">
+                    <div
+                      className={
+                        disabled
+                          ? 'rounded-md border bg-muted/50 p-3 text-muted-foreground'
+                          : 'rounded-md border bg-card p-3'
+                      }
+                    >
                       <div className="flex min-h-10 items-center gap-3">
                         <Checkbox
                           id={`preset-${mode}-${preset.id}`}
-                          checked={Boolean(selection)}
-                          disabled={mode === 'provider-only' && appendTypeSuffix && configuredProvider}
+                          checked={disabled || Boolean(selection)}
+                          disabled={disabled}
                           onCheckedChange={(checked) =>
                             setSelections((current) => {
                               if (checked === true) return { ...current, [preset.id]: initialSelection(preset, draft) }
@@ -314,7 +321,7 @@ export function RuleSetPresetDialog({
                         />
                         <label
                           htmlFor={`preset-${mode}-${preset.id}`}
-                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-4"
+                          className={`flex min-w-0 flex-1 items-center gap-4 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
                           <span className="min-w-0 flex-1">
                             <span className="flex min-w-0 items-center gap-2">
