@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import CodeMirror from '@uiw/react-codemirror'
 import { ArrowLeft, Check, Save, Upload, WandSparkles } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
@@ -13,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { formatYaml, yamlEditorExtensions } from '@/lib/yaml-editor'
+import { formatYaml } from '@/lib/yaml-editor'
 import { TemplatePreview } from './template-preview'
 import { Segmented } from '@/components/ui/segmented'
 import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
@@ -22,6 +21,8 @@ import { VisualTemplateEditor } from './visual/visual-editor'
 import type { VisualTemplateDraft } from './visual/model'
 import { inferGeoSource } from './visual/rules/geo-catalog'
 import '@/styles/templates.css'
+
+const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
 const blankTemplate = `proxy-groups:
@@ -277,18 +278,19 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
             </div>
 
             {mode === 'yaml' ? (
-              <CodeMirror
-                className="template-code-editor"
-                value={yaml}
-                height="100%"
-                theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-                extensions={yamlEditorExtensions}
-                onChange={(next) => {
-                  setYaml(next)
-                  setVisualDraft(null)
-                }}
-                aria-labelledby="template-yaml-label"
-              />
+              <Suspense fallback={<div className="template-code-editor" />}>
+                <YamlCodeEditor
+                  className="template-code-editor"
+                  value={yaml}
+                  height="100%"
+                  theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+                  onChange={(next) => {
+                    setYaml(next)
+                    setVisualDraft(null)
+                  }}
+                  aria-labelledby="template-yaml-label"
+                />
+              </Suspense>
             ) : (
               visualDraft && (
                 <VisualTemplateEditor

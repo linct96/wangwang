@@ -2,13 +2,13 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
-import CodeMirror from '@uiw/react-codemirror'
 import { useTheme } from 'next-themes'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { ManualNodeConnection, NodeDetail, NodeImportResult, NodeItem } from '@/api/types'
 import { AppDialog, PageState } from '@/components/app-primitives'
+import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -16,7 +16,7 @@ import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Textarea } from '@/components/ui/textarea'
-import { formatYaml, yamlEditorExtensions } from '@/lib/yaml-editor'
+import { formatYaml } from '@/lib/yaml-editor'
 import { defaultConnection, ManualConnectionFields } from './node-form'
 
 const tagsSchema = z.string().superRefine((value, context) => {
@@ -350,13 +350,12 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
                       <WandSparkles />
                     </Button>
                   </div>
-                  <CodeMirror
+                  <YamlCodeEditor
                     id="node-yaml"
                     className="min-h-0 flex-1 overflow-hidden rounded-md border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
                     value={field.state.value}
                     height="100%"
                     theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-                    extensions={yamlEditorExtensions}
                     onBlur={field.handleBlur}
                     onChange={field.handleChange}
                     aria-labelledby="node-yaml-label"
