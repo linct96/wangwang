@@ -28,7 +28,7 @@ const builtinFallback: TemplateSummary[] = [
   {
     id: 'builtin:standard',
     name: '标准规则模板',
-    description: '常用分流规则 / 国内直连 / 国外代理',
+    description: 'MRS 常用分流 / 国内直连 / AI 与流媒体独立选择',
     kind: 'builtin',
     readOnly: true,
     profileCount: 0,
@@ -278,7 +278,7 @@ export function TemplatesPage() {
               </div>
               <div className="template-source-text">
                 <strong>从标准规则模板创建</strong>
-                <p>常用分流规则，国内直连、国外代理</p>
+                <p>MRS 常用分流，国内直连、AI 与流媒体独立选择</p>
               </div>
             </button>
 
