@@ -177,7 +177,9 @@ export function SourcesPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {source.expireAt && source.expireAt <= 8_640_000_000 ? formatDate(source.expireAt * 1000) : '-'}
+                        {source.expireAt && source.expireAt <= 8_640_000_000
+                          ? formatDate(source.expireAt * 1000)
+                          : '长期有效'}
                       </TableCell>
                       <TableCell>{formatRelativeTime(source.lastRefreshedAt)}</TableCell>
                       <TableCell className="actions">
