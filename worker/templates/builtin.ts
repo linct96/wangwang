@@ -37,8 +37,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://1.1.1.1/dns-query#🚀 节点选择"
     - "https://8.8.8.8/dns-query#🚀 节点选择"
+    - "https://1.1.1.1/dns-query#🚀 节点选择"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
