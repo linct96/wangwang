@@ -333,10 +333,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
         connection,
       })
     }
-    const manualSource = requireItem(
-      state.sources.find((source) => source.id === 'system-manual'),
-      '本地数据迁移未完成',
-    )
+    const manualSource = state.sources.find((source) => source.id === 'system-manual')!
     manualSource.nodeCount = state.nodes.filter((node) => node.sourceIds.includes('system-manual')).length
     if (imported.length) recompileProfiles(state, ['system-manual'])
     writeState(state)
@@ -382,10 +379,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       connection,
     }
     state.nodes.unshift(node)
-    const manualSource = requireItem(
-      state.sources.find((source) => source.id === 'system-manual'),
-      '本地数据迁移未完成',
-    )
+    const manualSource = state.sources.find((source) => source.id === 'system-manual')!
     manualSource.nodeCount += 1
     recompileProfiles(state, ['system-manual'])
     writeState(state)
@@ -511,10 +505,7 @@ export async function localApi<T>(path: string, init?: RequestInit): Promise<T> 
       node.canDelete = false
       node.connection = undefined
     }
-    const manualSource = requireItem(
-      state.sources.find((source) => source.id === 'system-manual'),
-      '本地数据迁移未完成',
-    )
+    const manualSource = state.sources.find((source) => source.id === 'system-manual')!
     manualSource.nodeCount = state.nodes.filter((item) => item.sourceIds.includes('system-manual')).length
     recompileProfiles(state, ['system-manual'])
     writeState(state)

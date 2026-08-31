@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { body, fail, ok } from '../http'
-import { nodes, profileSources, sourceNodes, sources } from '../db'
+import { nodes, profileSources, sourceNodes } from '../db'
 import {
   editableProxyYaml,
   fingerprint,
@@ -30,12 +30,6 @@ const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 
 nodesRouter.post('/', async (c) => {
   const input = await body(c, nodeCreateSchema)
   const database = db(c.env)
-  const manualSource = await database
-    .select({ id: sources.id })
-    .from(sources)
-    .where(eq(sources.id, MANUAL_SOURCE_ID))
-    .get()
-  if (!manualSource) return fail(c, 500, 'MIGRATION_REQUIRED', '数据库迁移未完成')
   const [{ value }] = await database.select({ value: count() }).from(nodes)
   if (Number(value) >= 2000) return fail(c, 409, 'NODE_LIMIT', '全局节点数量已达到 2000 个')
 
@@ -108,12 +102,6 @@ nodesRouter.post('/', async (c) => {
 nodesRouter.post('/import', async (c) => {
   const input = await body(c, nodeImportSchema)
   const database = db(c.env)
-  const manualSource = await database
-    .select({ id: sources.id })
-    .from(sources)
-    .where(eq(sources.id, MANUAL_SOURCE_ID))
-    .get()
-  if (!manualSource) return fail(c, 500, 'MIGRATION_REQUIRED', '数据库迁移未完成')
 
   let parsed: Awaited<ReturnType<typeof parseProxyText>>
   try {
