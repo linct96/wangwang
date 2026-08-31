@@ -51,7 +51,10 @@ export function RuleProviderCombobox({
           placeholder="搜索名称、行为或格式"
           onChange={(event) => setQuery(event.target.value)}
         />
-        <div className="max-h-56 min-h-0 overflow-y-auto overscroll-contain" onWheel={(event) => event.stopPropagation()}>
+        <div
+          className="max-h-56 min-h-0 overflow-y-auto overscroll-contain"
+          onWheel={(event) => event.stopPropagation()}
+        >
           {filtered.length === 0 && <p className="px-2 py-3 text-sm text-muted-foreground">没有匹配的数据源</p>}
           {filtered.map((provider) => (
             <button
