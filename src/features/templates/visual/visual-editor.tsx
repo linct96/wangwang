@@ -12,6 +12,7 @@ import {
   type ProxyGroupDraft,
   type RuleProviderDraft,
   type StructuredRuleDraft,
+  type VisualChangeMeta,
   type VisualIssue,
   type VisualTemplateDraft,
 } from './model'
@@ -29,12 +30,12 @@ export function VisualTemplateEditor({
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
-  onChange: (draft: VisualTemplateDraft) => void
+  onChange: (draft: VisualTemplateDraft, meta?: VisualChangeMeta) => void
   geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
   customGeo?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
-  const update = (next: VisualTemplateDraft) => onChange(next)
+  const update = (next: VisualTemplateDraft, meta?: VisualChangeMeta) => onChange(next, meta)
 
   function addRule(rule: StructuredRuleDraft) {
     update({
@@ -81,7 +82,11 @@ export function VisualTemplateEditor({
     update({ ...draft, ruleProviders })
   }
 
-  function updateGroups(groups: ProxyGroupDraft[]) {
+  function updateGroups(groups: ProxyGroupDraft[], meta?: VisualChangeMeta) {
+    if (meta?.type === 'reorder') {
+      update({ ...draft, groups }, meta)
+      return
+    }
     const changed = groups.find((next) => {
       const previous = draft.groups.find((item) => item.id === next.id)
       return previous && previous.name !== next.name
@@ -218,7 +223,7 @@ export function VisualTemplateEditor({
           groups={draft.groups}
           ruleProviders={draft.ruleProviders}
           issues={issues}
-          onChange={(rules) => update({ ...draft, rules })}
+          onChange={(rules, meta) => update({ ...draft, rules }, meta)}
           geoProvider={geoProvider}
         />
       </section>

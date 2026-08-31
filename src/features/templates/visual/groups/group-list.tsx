@@ -1,6 +1,6 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation } from '@dnd-kit/react/sortable'
-import type { ProxyGroupDraft } from '../model'
+import type { ProxyGroupDraft, VisualChangeMeta } from '../model'
 import { GroupCard } from './group-card'
 
 export function GroupList({
@@ -9,7 +9,7 @@ export function GroupList({
   onDelete,
 }: {
   groups: ProxyGroupDraft[]
-  onChange: (groups: ProxyGroupDraft[]) => void
+  onChange: (groups: ProxyGroupDraft[], meta?: VisualChangeMeta) => void
   onDelete: (group: ProxyGroupDraft) => void
 }) {
   return (
@@ -23,7 +23,7 @@ export function GroupList({
         const next = [...groups]
         const [moved] = next.splice(from, 1)
         next.splice(to, 0, moved)
-        onChange(next)
+        onChange(next, { type: 'reorder', scope: 'groups' })
       }}
     >
       <div className="template-visual-list">

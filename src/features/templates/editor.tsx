@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { ArrowLeft, Check, Save, Upload, WandSparkles } from 'lucide-react'
@@ -18,7 +18,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
 import { validateVisualDraft } from './visual/validation'
 import { VisualTemplateEditor } from './visual/visual-editor'
-import type { VisualTemplateDraft } from './visual/model'
+import type { VisualChangeMeta, VisualTemplateDraft } from './visual/model'
 import { inferGeoSource } from './visual/rules/geo-catalog'
 import '@/styles/templates.css'
 
@@ -78,6 +78,55 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     }
     return []
   })
+  const yamlRef = useRef(yaml)
+  const visualDraftRef = useRef(visualDraft)
+  const materializedDraftRef = useRef(visualDraft)
+  const pendingValidationRef = useRef<{ type: 'idle' | 'timeout'; id: number } | null>(null)
+  const validationVersionRef = useRef(0)
+
+  function cancelScheduledValidation() {
+    validationVersionRef.current += 1
+    const pending = pendingValidationRef.current
+    if (!pending) return
+    if (pending.type === 'idle') window.cancelIdleCallback(pending.id)
+    else window.clearTimeout(pending.id)
+    pendingValidationRef.current = null
+  }
+
+  function scheduleVisualValidation(nextDraft: VisualTemplateDraft) {
+    cancelScheduledValidation()
+    const version = validationVersionRef.current
+    const run = () => {
+      if (version !== validationVersionRef.current) return
+      pendingValidationRef.current = null
+      if (visualDraftRef.current !== nextDraft) return
+      setVisualIssues(validateVisualDraft(nextDraft))
+    }
+    pendingValidationRef.current =
+      typeof window.requestIdleCallback === 'function'
+        ? { type: 'idle', id: window.requestIdleCallback(run, { timeout: 500 }) }
+        : { type: 'timeout', id: window.setTimeout(run, 50) }
+  }
+
+  function materializeVisualYaml() {
+    const draft = visualDraftRef.current
+    if (!draft || draft === materializedDraftRef.current) return yamlRef.current
+    const nextYaml = applyVisualTemplate(yamlRef.current, draft, materializedDraftRef.current || undefined)
+    yamlRef.current = nextYaml
+    materializedDraftRef.current = draft
+    setYaml(nextYaml)
+    return nextYaml
+  }
+
+  useEffect(
+    () => () => {
+      const pending = pendingValidationRef.current
+      if (!pending) return
+      if (pending.type === 'idle') window.cancelIdleCallback(pending.id)
+      else window.clearTimeout(pending.id)
+    },
+    [],
+  )
 
   useEffect(() => {
     const templateId = id || (source?.startsWith('builtin:') ? source : '')
@@ -92,13 +141,19 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         if (controller.signal.aborted) return
         setName(id ? template.name : `${template.name} 副本`)
         setDescription(template.description || '')
+        yamlRef.current = template.yaml
         setYaml(template.yaml)
         try {
           const result = parseVisualTemplate(template.yaml)
+          visualDraftRef.current = result.draft
+          materializedDraftRef.current = result.draft
           setVisualDraft(result.draft)
           setVisualIssues(validateVisualDraft(result.draft, result.warnings))
           setMode('visual')
         } catch {
+          visualDraftRef.current = null
+          materializedDraftRef.current = null
+          setVisualDraft(null)
           setMode('yaml')
         }
         setError('')
@@ -116,6 +171,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     if (source === 'blank' && yaml && !visualDraft) {
       try {
         const result = parseVisualTemplate(yaml)
+        visualDraftRef.current = result.draft
+        materializedDraftRef.current = result.draft
         setVisualDraft(result.draft)
         setVisualIssues(validateVisualDraft(result.draft, result.warnings))
         setMode('visual')
@@ -127,7 +184,9 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   function enterVisualMode() {
     try {
-      const result = parseVisualTemplate(yaml)
+      const result = parseVisualTemplate(yamlRef.current)
+      visualDraftRef.current = result.draft
+      materializedDraftRef.current = result.draft
       setVisualDraft(result.draft)
       setVisualIssues(validateVisualDraft(result.draft, result.warnings))
       setMode('visual')
@@ -137,9 +196,31 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     }
   }
 
-  function updateVisualDraft(nextDraft: VisualTemplateDraft) {
+  function enterYamlMode() {
     try {
-      const nextYaml = applyVisualTemplate(yaml, nextDraft, visualDraft || undefined)
+      materializeVisualYaml()
+      setMode('yaml')
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '可视化更新失败')
+    }
+  }
+
+  function updateVisualDraft(nextDraft: VisualTemplateDraft, meta?: VisualChangeMeta) {
+    if (meta?.type === 'reorder') {
+      visualDraftRef.current = nextDraft
+      setVisualDraft(nextDraft)
+      scheduleVisualValidation(nextDraft)
+      setError('')
+      return
+    }
+
+    cancelScheduledValidation()
+    try {
+      const nextYaml = applyVisualTemplate(yamlRef.current, nextDraft, materializedDraftRef.current || undefined)
+      yamlRef.current = nextYaml
+      visualDraftRef.current = nextDraft
+      materializedDraftRef.current = nextDraft
       setVisualDraft(nextDraft)
       setVisualIssues(validateVisualDraft(nextDraft))
       setYaml(nextYaml)
@@ -156,7 +237,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
       setError('模板 YAML 超过 1 MiB')
       return
     }
-    setYaml(await file.text())
+    const nextYaml = await file.text()
+    yamlRef.current = nextYaml
+    visualDraftRef.current = null
+    materializedDraftRef.current = null
+    setYaml(nextYaml)
     setVisualDraft(null)
     setMode('yaml')
     if (!name) setName(file.name.replace(/\.ya?ml$/i, ''))
@@ -167,7 +252,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     setBusy('validate')
     setError('')
     try {
-      await api('/templates/validate', { method: 'POST', body: JSON.stringify({ yaml }) })
+      const yamlToValidate = mode === 'visual' ? materializeVisualYaml() : yamlRef.current
+      await api('/templates/validate', { method: 'POST', body: JSON.stringify({ yaml: yamlToValidate }) })
       toast.success('模板校验通过')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '模板校验失败')
@@ -181,11 +267,12 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     setBusy('save')
     setError('')
     try {
+      const yamlToSave = mode === 'visual' ? materializeVisualYaml() : yamlRef.current
       const result = await api<TemplateDetail | { template: TemplateDetail; jobIds: string[] }>(
         id ? `/templates/${id}` : '/templates',
         {
           method: id ? 'PATCH' : 'POST',
-          body: JSON.stringify({ name, description: description.trim() || null, yaml }),
+          body: JSON.stringify({ name, description: description.trim() || null, yaml: yamlToSave }),
         },
       )
       const jobs = 'jobIds' in result ? result.jobIds.length : 0
@@ -250,7 +337,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                     { value: 'visual', label: '可视化编辑' },
                     { value: 'yaml', label: 'YAML 编辑' },
                   ]}
-                  onChange={(next) => (next === 'visual' ? enterVisualMode() : setMode('yaml'))}
+                  onChange={(next) => (next === 'visual' ? enterVisualMode() : enterYamlMode())}
                 />
               </div>
               <div className="flex items-center gap-1.5">
@@ -268,7 +355,10 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                     label="格式化 YAML"
                     onClick={() => {
                       const formatted = formatYaml(yaml)
-                      if (formatted) setYaml(formatted)
+                      if (formatted) {
+                        yamlRef.current = formatted
+                        setYaml(formatted)
+                      }
                     }}
                   >
                     <WandSparkles />
@@ -285,6 +375,9 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   height="100%"
                   theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
                   onChange={(next) => {
+                    yamlRef.current = next
+                    visualDraftRef.current = null
+                    materializedDraftRef.current = null
                     setYaml(next)
                     setVisualDraft(null)
                   }}
@@ -332,7 +425,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
           </section>
           <aside className="template-editor-preview">
             <h2>配置预览</h2>
-            <TemplatePreview yaml={yaml} profiles={profiles} />
+            <TemplatePreview
+              yaml={yaml}
+              getYaml={mode === 'visual' ? materializeVisualYaml : undefined}
+              profiles={profiles}
+            />
           </aside>
         </form>
       )}

@@ -9,11 +9,13 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 export function TemplatePreview({
   templateId,
   yaml,
+  getYaml,
   profiles,
   auto = false,
 }: {
   templateId?: TemplateId
   yaml?: string
+  getYaml?: () => string
   profiles: Profile[]
   auto?: boolean
 }) {
@@ -26,9 +28,14 @@ export function TemplatePreview({
     setLoading(true)
     setError('')
     try {
+      const currentYaml = getYaml?.() ?? yaml
       const result = await api<PreviewResult>('/templates/preview', {
         method: 'POST',
-        body: JSON.stringify({ templateId, yaml, profileId: profileId === 'sample' ? undefined : profileId }),
+        body: JSON.stringify({
+          templateId,
+          yaml: currentYaml,
+          profileId: profileId === 'sample' ? undefined : profileId,
+        }),
         signal,
       })
       if (!signal?.aborted) setPreview(result)
