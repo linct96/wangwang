@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Database, Globe, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, Database, Globe, Replace, Sparkles, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -18,10 +18,8 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { GeoSettingsDraft, VisualIssue } from '../model'
 import {
+  applyGhProxyToGeoUrls,
   createEmptyGeoSettings,
-  createDomesticLiteGeoSettings,
-  createDomesticLoyalsoldierGeoSettings,
-  createDomesticRecommendedGeoSettings,
   createLiteGeoSettings,
   createLoyalsoldierGeoSettings,
   createRecommendedGeoSettings,
@@ -96,6 +94,21 @@ export function GeoSettingsPanel({
   const applyUrlPreset = (presetFn: () => GeoSettingsDraft, label: string) => {
     onChange({ ...value, geoxUrl: { ...presetFn().geoxUrl } })
     toast.success(`已应用 ${label}`)
+  }
+
+  const applyGhProxy = () => {
+    const geoxUrl = applyGhProxyToGeoUrls(value.geoxUrl)
+    const changed = Object.keys(geoxUrl).some(
+      (key) => geoxUrl[key as GeoUrlKey] !== value.geoxUrl[key as GeoUrlKey],
+    )
+
+    if (!changed) {
+      toast.info('没有可替换的 GitHub 地址')
+      return
+    }
+
+    onChange({ ...value, geoxUrl })
+    toast.success('已使用 gh-proxy 替换 GitHub 地址')
   }
 
   const activePreset = detectActivePreset(value)
@@ -244,6 +257,16 @@ export function GeoSettingsPanel({
                   <span className="text-sm font-semibold text-foreground">数据文件下载地址 (geox-url)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 gap-1.5 text-xs font-medium border-border/80 hover:bg-accent/60"
+                    onClick={applyGhProxy}
+                  >
+                    <Replace className="size-3.5 shrink-0" />
+                    <span>使用 gh-proxy</span>
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -268,16 +291,6 @@ export function GeoSettingsPanel({
                         </div>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() =>
-                          applyUrlPreset(createDomesticRecommendedGeoSettings, 'MetaCubeX 全量推荐（国内直连）')
-                        }
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">MetaCubeX 全量（国内直连）</span>
-                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
                         onClick={() => applyUrlPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}
                       >
                         <div className="flex flex-col gap-0.5">
@@ -286,29 +299,11 @@ export function GeoSettingsPanel({
                         </div>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => applyUrlPreset(createDomesticLiteGeoSettings, 'MetaCubeX 精简版（国内直连）')}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">MetaCubeX 精简（国内直连）</span>
-                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
                         onClick={() => applyUrlPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}
                       >
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-sm">Loyalsoldier 规则集</span>
                           <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          applyUrlPreset(createDomesticLoyalsoldierGeoSettings, 'Loyalsoldier 规则集（国内直连）')
-                        }
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">Loyalsoldier（国内直连）</span>
-                          <span className="text-xs text-muted-foreground">通过 gh-proxy 访问 GitHub</span>
                         </div>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
