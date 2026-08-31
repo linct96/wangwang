@@ -13,67 +13,54 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-geodata-mode: true
-
-geo-auto-update: true
-
-geo-update-interval: 24
-
-geox-url:
-  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
-  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite-lite.dat"
-  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
-  asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
-  respect-rules: true
-  enhanced-mode: fake-ip
   listen: 0.0.0.0:1053
-  prefer-h3: false
   ipv6: false
+  enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+
   fake-ip-filter:
-    - '*.lan'
-    - '*.local'
-    - '*.localdomain'
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
     - localhost
-    - '*.ntp.org'
+    - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - '*.n.n.srv.nintendo.net'
+    - "*.n.n.srv.nintendo.net"
     - +.stun.playstation.net
-    - '*.xboxlive.com'
+    - "*.xboxlive.com"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
-    - 114.114.114.114
   nameserver:
-    - https://doh.pub/dns-query
-    - tls://dot.pub
-    - https://dns.alidns.com/dns-query
-    - tls://dns.alidns.com
-    - https://nas.ip33.com/dns-query
+    - "https://1.1.1.1/dns-query#🚀 节点选择"
+    - "https://8.8.8.8/dns-query#🚀 节点选择"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
   nameserver-policy:
-    'geosite:cn,private':
-      - https://223.5.5.5/dns-query
+    "rule-set:private-domain":
+      - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
-    'geosite:geolocation-!cn':
-      - 'tcp://1.1.1.1'
-      - 'tcp://8.8.8.8'
-      - 'https://dns.google/dns-query'
+
+    "rule-set:cn-domain":
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
 proxy-groups:
   - name: 🚀 节点选择
     type: select
     proxies:
       - ⚡ 自动选择
-      - ♻️ 故障转移
       - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
   - name: ⚡ 自动选择
@@ -83,20 +70,7 @@ proxy-groups:
     tolerance: 50
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
-  - name: ♻️ 故障转移
-    type: fallback
-    url: https://www.gstatic.com/generate_204
-    interval: 300
-    proxies:
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
 rule-providers:
-  category-ads-all-domain:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/category-ads-all.mrs
-    interval: 86400
   private-domain:
     type: http
     behavior: domain
@@ -126,7 +100,6 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
-  - RULE-SET,category-ads-all-domain,REJECT
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn-domain,DIRECT
