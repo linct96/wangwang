@@ -27,6 +27,8 @@ dns:
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
+    - localhost.weixin.qq.com
+    - localhost.work.weixin.qq.com
     - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
@@ -129,6 +131,8 @@ dns:
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
+    - localhost.weixin.qq.com
+    - localhost.work.weixin.qq.com
     - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
@@ -313,6 +317,8 @@ dns:
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
+    - localhost.weixin.qq.com
+    - localhost.work.weixin.qq.com
     - "localhost.*.weixin.qq.com"
     - "*.ntp.org"
     - +.stun.*.*
@@ -559,22 +565,33 @@ rule-providers:
 rules:
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
+
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
+
   - RULE-SET,category-ai-!cn,🤖 AI 服务
+
+  # YouTube 必须优先于 Google
+  - RULE-SET,youtube-domain,🎬 流媒体
+
   - RULE-SET,google-domain,🔍 Google
   - RULE-SET,google-ip,🔍 Google,no-resolve
+
   - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
+
   - RULE-SET,microsoft-domain,🟦 Microsoft
+
   - RULE-SET,apple-cn-domain,DIRECT
   - RULE-SET,apple-domain,🍎 Apple
-  - RULE-SET,youtube-domain,🎬 流媒体
+
   - RULE-SET,netflix-domain,🎬 流媒体
   - RULE-SET,netflix-ip,🎬 流媒体,no-resolve
   - RULE-SET,spotify-domain,🎬 流媒体
   - RULE-SET,tiktok-domain,🎬 流媒体
+
   - RULE-SET,cn-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT,no-resolve
+
   - MATCH,🐟 漏网之鱼
 `
 
