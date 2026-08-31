@@ -18,6 +18,7 @@ dns:
   listen: 0.0.0.0:1053
   ipv6: false
   enhanced-mode: fake-ip
+  respect-rules: true
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
     - "*.lan"
@@ -36,8 +37,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://8.8.8.8/dns-query#RULES"
-    - "https://1.1.1.1/dns-query#RULES"
+    - "https://dns.google/dns-query"
+    - "https://cloudflare-dns.com/dns-query"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -59,8 +60,8 @@ proxy-groups:
     type: select
     proxies:
       - ⚡ 自动选择
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ⚡ 自动选择
     type: url-test
     url: https://www.gstatic.com/generate_204
@@ -111,22 +112,12 @@ mode: rule
 log-level: info
 ipv6: false
 unified-delay: true
-geodata-mode: true
-
-geo-auto-update: true
-
-geo-update-interval: 24
-
-geox-url:
-  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
-  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
-  asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
   enhanced-mode: fake-ip
+  respect-rules: true
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
     - "*.lan"
@@ -145,8 +136,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://8.8.8.8/dns-query#RULES"
-    - "https://1.1.1.1/dns-query#RULES"
+    - "https://dns.google/dns-query"
+    - "https://cloudflare-dns.com/dns-query"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -169,8 +160,8 @@ proxy-groups:
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
       - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ⚡ 自动选择
     type: url-test
     url: https://www.gstatic.com/generate_204
@@ -184,14 +175,34 @@ proxy-groups:
     interval: 300
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🤖 AI 服务
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🎬 流媒体
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🛑 广告拦截
+    type: select
+    default-selected: REJECT
+    proxies:
+      - REJECT
+      - DIRECT
 rule-providers:
-  category-ads-all-domain:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
-    path: ./ruleset/category-ads-all.mrs
-    interval: 86400
   private-domain:
     type: http
     behavior: domain
@@ -205,6 +216,48 @@ rule-providers:
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
+    interval: 86400
+  category-ads-all-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/category-ads-all-domain.mrs
+    interval: 86400
+  category-ai-!cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
+    path: ./ruleset/category-ai-!cn.mrs
+    interval: 86400
+  youtube-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
+    path: ./ruleset/youtube-domain.mrs
+    interval: 86400
+  netflix-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
+    path: ./ruleset/netflix-domain.mrs
+    interval: 86400
+  spotify-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
+    path: ./ruleset/spotify-domain.mrs
+    interval: 86400
+  tiktok-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
+    path: ./ruleset/tiktok-domain.mrs
     interval: 86400
   cn-domain:
     type: http
@@ -220,21 +273,18 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
     path: ./ruleset/cn-ip.mrs
     interval: 86400
-  geolocation-not-cn-domain:
-    type: http
-    behavior: domain
-    format: mrs
-    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
-    path: ./ruleset/geolocation-not-cn.mrs
-    interval: 86400
 rules:
-  - RULE-SET,category-ads-all-domain,REJECT
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,category-ads-all-domain,🛑 广告拦截
+  - RULE-SET,category-ai-!cn,🤖 AI 服务
+  - RULE-SET,youtube-domain,🎬 流媒体
+  - RULE-SET,netflix-domain,🎬 流媒体
+  - RULE-SET,spotify-domain,🎬 流媒体
+  - RULE-SET,tiktok-domain,🎬 流媒体
   - RULE-SET,cn-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT,no-resolve
-  - RULE-SET,geolocation-not-cn-domain,🚀 节点选择
-  - MATCH,🚀 节点选择
+  - MATCH,🐟 漏网之鱼
 `
 
 const fullYaml = `mixed-port: 7890
@@ -259,6 +309,7 @@ dns:
   listen: 0.0.0.0:1053
   ipv6: false
   enhanced-mode: fake-ip
+  respect-rules: true
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
     - "*.lan"
@@ -277,8 +328,8 @@ dns:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://8.8.8.8/dns-query#RULES"
-    - "https://1.1.1.1/dns-query#RULES"
+    - "https://dns.google/dns-query"
+    - "https://cloudflare-dns.com/dns-query"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -449,7 +500,7 @@ export const builtinTemplates: BuiltinTemplate[] = [
   {
     id: 'builtin:standard',
     name: '标准规则模板',
-    description: '常用分流规则 / 国内直连 / 国外代理',
+    description: 'MRS 常用分流 / 国内直连 / AI 与流媒体独立选择',
     yaml: standardYaml,
   },
   {
