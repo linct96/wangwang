@@ -44,7 +44,7 @@ const builtinFallback: TemplateSummary[] = [
   {
     id: 'builtin:full',
     name: '完全规则模板',
-    description: '完整规则 / AI / Google / Telegram 等',
+    description: '标准规则超集 / Google、Telegram、Microsoft、Apple 独立分流 / IP 规则与负载均衡',
     kind: 'builtin',
     readOnly: true,
     profileCount: 0,
@@ -304,7 +304,7 @@ export function TemplatesPage() {
               </div>
               <div className="template-source-text">
                 <strong>从完全规则模板创建</strong>
-                <p>包含广告拦截、流媒体、AI服务等全量分流</p>
+                <p>标准规则超集，增加 Google、Telegram、Microsoft、Apple 分流与负载均衡</p>
               </div>
             </button>
 
