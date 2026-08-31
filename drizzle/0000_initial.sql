@@ -40,14 +40,6 @@ CREATE TABLE `nodes` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `nodes_fingerprint_idx` ON `nodes` (`fingerprint`);--> statement-breakpoint
-CREATE TABLE `profile_node_exclusions` (
-	`profile_id` text NOT NULL,
-	`node_id` text NOT NULL,
-	PRIMARY KEY(`profile_id`, `node_id`),
-	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `profile_sources` (
 	`profile_id` text NOT NULL,
 	`source_id` text NOT NULL,

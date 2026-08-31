@@ -150,7 +150,6 @@ function seedState(): LocalState {
       compiledAt: updatedAt,
       error: null,
       sourceIds: ['source-main'],
-      excludedNodeIds: [],
       subscriptionUrl: '/s/local-token/config.yaml',
     },
   ]
@@ -199,14 +198,13 @@ export function localNodeTags(state: LocalState, node: LocalNode) {
   ]
 }
 
-export function localProfileNodes(state: LocalState, profile: Pick<Profile, 'sourceIds' | 'tags' | 'excludedNodeIds'>) {
+export function localProfileNodes(state: LocalState, profile: Pick<Profile, 'sourceIds' | 'tags'>) {
   const enabledSources = new Set(state.sources.filter((source) => source.enabled).map((source) => source.id))
   return state.nodes
     .filter((node) => node.enabled)
     .filter((node) => node.sourceIds.some((id) => profile.sourceIds.includes(id) && enabledSources.has(id)))
     .map((node) => ({ ...node, tags: localNodeTags(state, node) }))
     .filter((node) => !profile.tags.length || profile.tags.some((tag) => node.tags.includes(tag)))
-    .filter((node) => !profile.excludedNodeIds.includes(node.id))
 }
 
 export function recompileProfiles(state: LocalState, sourceIds: string[], profileIds?: string[]) {

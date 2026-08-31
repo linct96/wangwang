@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cbb77bb2-bf07-421a-bad4-f29161e13474",
+  "id": "ba9b7a54-1293-40f1-b39b-a43e5cdce037",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "admin_account": {
@@ -249,54 +249,6 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "profile_node_exclusions": {
-      "name": "profile_node_exclusions",
-      "columns": {
-        "profile_id": {
-          "name": "profile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "profile_node_exclusions_profile_id_profiles_id_fk": {
-          "name": "profile_node_exclusions_profile_id_profiles_id_fk",
-          "tableFrom": "profile_node_exclusions",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "profile_node_exclusions_node_id_nodes_id_fk": {
-          "name": "profile_node_exclusions_node_id_nodes_id_fk",
-          "tableFrom": "profile_node_exclusions",
-          "tableTo": "nodes",
-          "columnsFrom": ["node_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "profile_node_exclusions_profile_id_node_id_pk": {
-          "columns": ["profile_id", "node_id"],
-          "name": "profile_node_exclusions_profile_id_node_id_pk"
-        }
-      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

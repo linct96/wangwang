@@ -117,6 +117,5 @@ export type Profile = {
   compiledAt: string | null
   error: string | null
   sourceIds: string[]
-  excludedNodeIds: string[]
   subscriptionUrl: string
 }
