@@ -124,48 +124,45 @@ geox-url:
   asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
-  respect-rules: true
-  enhanced-mode: fake-ip
   listen: 0.0.0.0:1053
-  prefer-h3: false
   ipv6: false
+  enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - '*.lan'
-    - '*.local'
-    - '*.localdomain'
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
     - localhost
-    - '*.ntp.org'
+    - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - '*.n.n.srv.nintendo.net'
+    - "*.n.n.srv.nintendo.net"
     - +.stun.playstation.net
-    - '*.xboxlive.com'
+    - "*.xboxlive.com"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
-    - 114.114.114.114
   nameserver:
-    - https://doh.pub/dns-query
-    - tls://dot.pub
-    - https://dns.alidns.com/dns-query
-    - tls://dns.alidns.com
-    - https://nas.ip33.com/dns-query
+    - "https://8.8.8.8/dns-query#RULES"
+    - "https://1.1.1.1/dns-query#RULES"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
   nameserver-policy:
-    'geosite:cn,private':
-      - https://223.5.5.5/dns-query
+    "rule-set:private-domain":
+      - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
-    'geosite:geolocation-!cn':
-      - 'tcp://1.1.1.1'
-      - 'tcp://8.8.8.8'
-      - 'https://dns.google/dns-query'
+    "rule-set:cn-domain":
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
 proxy-groups:
   - name: 🚀 节点选择
     type: select
@@ -259,48 +256,45 @@ geox-url:
   asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
-  respect-rules: true
-  enhanced-mode: fake-ip
   listen: 0.0.0.0:1053
-  prefer-h3: false
   ipv6: false
+  enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - '*.lan'
-    - '*.local'
-    - '*.localdomain'
+    - "*.lan"
+    - "*.local"
+    - "*.localdomain"
     - localhost
-    - '*.ntp.org'
+    - "*.ntp.org"
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - '*.n.n.srv.nintendo.net'
+    - "*.n.n.srv.nintendo.net"
     - +.stun.playstation.net
-    - '*.xboxlive.com'
+    - "*.xboxlive.com"
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
-    - 114.114.114.114
   nameserver:
-    - https://doh.pub/dns-query
-    - tls://dot.pub
-    - https://dns.alidns.com/dns-query
-    - tls://dns.alidns.com
-    - https://nas.ip33.com/dns-query
+    - "https://8.8.8.8/dns-query#RULES"
+    - "https://1.1.1.1/dns-query#RULES"
   proxy-server-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-    - 180.184.101.101
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
   nameserver-policy:
-    'geosite:cn,private':
-      - https://223.5.5.5/dns-query
+    "rule-set:private-domain":
+      - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
-    'geosite:geolocation-!cn':
-      - 'tcp://1.1.1.1'
-      - 'tcp://8.8.8.8'
-      - 'https://dns.google/dns-query'
+    "rule-set:cn-domain":
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
 proxy-groups:
   - name: 🚀 节点选择
     type: select
