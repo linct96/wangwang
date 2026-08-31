@@ -21,7 +21,7 @@ geo-update-interval: 24
 
 geox-url:
   geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
-  geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite-lite.dat"
   mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
   asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
@@ -89,12 +89,48 @@ proxy-groups:
     interval: 300
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/ads.mrs
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+  cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
 rules:
-  - GEOSITE,category-ads-all,REJECT
-  - GEOSITE,private,DIRECT
-  - GEOIP,private,DIRECT,no-resolve
-  - GEOSITE,cn,DIRECT
-  - GEOIP,CN,DIRECT,no-resolve
+  - RULE-SET,ads,REJECT
+  - RULE-SET,private,DIRECT
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,cn,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
   - MATCH,🚀 节点选择
 `
 
@@ -111,9 +147,9 @@ geo-auto-update: true
 geo-update-interval: 24
 
 geox-url:
-  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
   geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
   asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
@@ -180,13 +216,56 @@ proxy-groups:
     interval: 300
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/ads.mrs
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+  cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
+    path: ./ruleset/cn.mrs
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+  geolocation-not-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"
+    path: ./ruleset/geolocation-not-cn.mrs
+    interval: 86400
 rules:
-  - GEOSITE,category-ads-all,REJECT
-  - GEOSITE,private,DIRECT
-  - GEOIP,private,DIRECT,no-resolve
-  - GEOSITE,cn,DIRECT
-  - GEOIP,CN,DIRECT,no-resolve
-  - GEOSITE,geolocation-!cn,🚀 节点选择
+  - RULE-SET,ads,REJECT
+  - RULE-SET,private,DIRECT
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,cn,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - RULE-SET,geolocation-not-cn,🚀 节点选择
   - MATCH,🚀 节点选择
 `
 
@@ -203,9 +282,9 @@ geo-auto-update: true
 geo-update-interval: 24
 
 geox-url:
-  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geoip: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
   geosite: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
+  mmdb: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
   asn: "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
 dns:
   enable: true
@@ -290,19 +369,104 @@ proxy-groups:
   - name: 🍎 Apple
     type: select
     proxies: [🚀 节点选择, ⚡ 自动选择, DIRECT]
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
+    path: ./ruleset/ads.mrs
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
+    path: ./ruleset/private.mrs
+    interval: 86400
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+  ai-not-cn:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
+    path: ./ruleset/ai-not-cn.mrs
+    interval: 86400
+  google:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
+    path: ./ruleset/google.mrs
+    interval: 86400
+  telegram:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
+    path: ./ruleset/telegram.mrs
+    interval: 86400
+  telegram-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"
+    path: ./ruleset/telegram-ip.mrs
+    interval: 86400
+  youtube:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"
+    path: ./ruleset/youtube.mrs
+    interval: 86400
+  netflix:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"
+    path: ./ruleset/netflix.mrs
+    interval: 86400
+  spotify:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"
+    path: ./ruleset/spotify.mrs
+    interval: 86400
+  tiktok:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
+    path: ./ruleset/tiktok.mrs
+    interval: 86400
+  microsoft:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://gh-proxy.com/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
 rules:
-  - GEOSITE,category-ads-all,REJECT
-  - GEOSITE,private,DIRECT
-  - GEOIP,private,DIRECT,no-resolve
-  - GEOSITE,category-ai-!cn,🤖 AI 服务
-  - GEOSITE,google,🔍 Google
-  - GEOSITE,telegram,✈️ Telegram
-  - GEOIP,telegram,✈️ Telegram,no-resolve
-  - GEOSITE,youtube,🎬 流媒体
-  - GEOSITE,netflix,🎬 流媒体
-  - GEOSITE,spotify,🎬 流媒体
-  - GEOSITE,tiktok,🎬 流媒体
-  - GEOSITE,microsoft,Ⓜ️ Microsoft
+  - RULE-SET,ads,REJECT
+  - RULE-SET,private,DIRECT
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,ai-not-cn,🤖 AI 服务
+  - RULE-SET,google,🔍 Google
+  - RULE-SET,telegram,✈️ Telegram
+  - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
+  - RULE-SET,youtube,🎬 流媒体
+  - RULE-SET,netflix,🎬 流媒体
+  - RULE-SET,spotify,🎬 流媒体
+  - RULE-SET,tiktok,🎬 流媒体
+  - RULE-SET,microsoft,Ⓜ️ Microsoft
   - GEOSITE,apple,🍎 Apple
   - GEOSITE,cn,DIRECT
   - GEOIP,CN,DIRECT,no-resolve
