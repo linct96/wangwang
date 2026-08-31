@@ -6,16 +6,13 @@ React SPA + TanStack Router + Tailwind CSS + shadcn/ui + Sonner + Hono + Drizzle
 
 ```bash
 pnpm install
+pnpm db:migrate:local
 pnpm dev
 ```
 
-开发模式默认使用 `localStorage` 模拟 API，存储键为 `wangwang:dev:v1`。需要连接本地 Worker 时使用：
+开发模式由 Cloudflare Vite Plugin 启动本地 Worker，前端 API 统一请求本地 Worker。首次开发或重建本地数据库时执行 `pnpm db:migrate:local`，数据结构和初始化的 `system-manual` 节点源均来自正式 D1 baseline。
 
-```bash
-VITE_DATA_SOURCE=api pnpm dev
-```
-
-生产构建默认使用 Worker API。
+本地绑定来自 `wrangler.jsonc`：D1 `DB`、KV `KV`、Queue `JOBS`、静态资源 `ASSETS`。本地 Worker 密钥放在 `.dev.vars`（可复制 `.dev.vars.example`）。
 
 - 前端：`src/`
 - Worker API：`worker/`
@@ -34,7 +31,9 @@ pnpm cf-typegen
 ## 验证与部署
 
 ```bash
+pnpm format:check
 pnpm lint
+pnpm test
 pnpm build
 pnpm deploy
 ```

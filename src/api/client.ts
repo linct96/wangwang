@@ -1,6 +1,4 @@
-import { localApi } from '@/local-mock/api'
-
-async function httpApi<T>(path: string, init?: RequestInit): Promise<T> {
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers,
@@ -13,9 +11,3 @@ async function httpApi<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok || payload.data === undefined) throw new Error(payload.error?.message || '请求失败')
   return payload.data
 }
-
-const useLocalData = import.meta.env.VITE_DATA_SOURCE
-  ? import.meta.env.VITE_DATA_SOURCE === 'local'
-  : import.meta.env.DEV
-
-export const api = useLocalData ? localApi : httpApi
