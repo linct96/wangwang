@@ -59,14 +59,22 @@ export const EMPTY_GEO_PRESET: GeoSettingsDraft = {
 }
 
 const GH_PROXY_PREFIX = 'https://gh-proxy.com/'
+const GITHUB_PREFIX = 'https://github.com/'
+
+export function applyGhProxyToGeoUrls(geoxUrl: GeoSettingsDraft['geoxUrl']): GeoSettingsDraft['geoxUrl'] {
+  return Object.fromEntries(
+    Object.entries(geoxUrl).map(([key, url]) => [
+      key,
+      url?.startsWith(GITHUB_PREFIX) ? `${GH_PROXY_PREFIX}${url}` : url,
+    ]),
+  ) as GeoSettingsDraft['geoxUrl']
+}
 
 function createGhProxyGeoSettings(factory: () => GeoSettingsDraft): GeoSettingsDraft {
   const settings = factory()
   return {
     ...settings,
-    geoxUrl: Object.fromEntries(
-      Object.entries(settings.geoxUrl).map(([key, url]) => [key, url ? `${GH_PROXY_PREFIX}${url}` : url]),
-    ) as GeoSettingsDraft['geoxUrl'],
+    geoxUrl: applyGhProxyToGeoUrls(settings.geoxUrl),
   }
 }
 
