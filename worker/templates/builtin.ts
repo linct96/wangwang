@@ -526,6 +526,13 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"
     path: ./ruleset/tiktok-domain.mrs
     interval: 86400
+  microsoft@cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs"
+    path: ./ruleset/microsoft.mrs
+    interval: 86400
   microsoft-domain:
     type: http
     behavior: domain
@@ -578,6 +585,7 @@ rules:
   - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
 
+  - RULE-SET,microsoft@cn-domain,DIRECT
   - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
 
   - RULE-SET,apple-cn-domain,DIRECT
