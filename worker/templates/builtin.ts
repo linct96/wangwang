@@ -236,12 +236,12 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"
     path: ./ruleset/category-ads-all-domain.mrs
     interval: 86400
-  category-ai-!cn:
+  category-ai-!cn-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
-    path: ./ruleset/category-ai-!cn.mrs
+    path: ./ruleset/category-ai-!cn-domain.mrs
     interval: 86400
   youtube-domain:
     type: http
@@ -289,7 +289,7 @@ rules:
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
-  - RULE-SET,category-ai-!cn,🤖 AI 服务
+  - RULE-SET,category-ai-!cn-domain,🤖 AI 服务
   - RULE-SET,youtube-domain,🎬 流媒体
   - RULE-SET,netflix-domain,🎬 流媒体
   - RULE-SET,spotify-domain,🎬 流媒体
@@ -472,12 +472,12 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"
     path: ./ruleset/private-ip.mrs
     interval: 86400
-  category-ai-!cn:
+  category-ai-!cn-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
-    path: ./ruleset/category-ai-!cn.mrs
+    path: ./ruleset/category-ai-!cn-domain.mrs
     interval: 86400
   github-domain:
     type: http
@@ -625,7 +625,7 @@ rules:
 
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
 
-  - RULE-SET,category-ai-!cn,🤖 AI 服务
+  - RULE-SET,category-ai-!cn-domain,🤖 AI 服务
 
   - RULE-SET,github-domain,🐱 GitHub
 
