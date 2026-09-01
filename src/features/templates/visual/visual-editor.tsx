@@ -123,7 +123,10 @@ export function VisualTemplateEditor({
       <GeoSettingsPanel value={draft.geo} issues={issues} onChange={(geo) => update({ ...draft, geo })} />
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
-          <h2>代理组</h2>
+          <div className="template-rule-header-left">
+            <h2>代理组</h2>
+            <span className="template-section-count">{draft.groups.length}</span>
+          </div>
           <GroupDialog groups={draft.groups} onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}>
             <Button type="button" size="default">
               <Plus data-icon="inline-start" />
