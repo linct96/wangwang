@@ -5,7 +5,7 @@ export type VisualTemplateDraft = {
   rules: RuleDraft[]
 }
 
-export type VisualChangeMeta = { type: 'normal' } | { type: 'reorder'; scope: 'groups' | 'rules' }
+export type VisualChangeMeta = { type: 'normal' } | { type: 'reorder'; scope: 'groups' | 'rules' | 'ruleProviders' }
 
 export type GeoSettingsDraft = {
   geodataMode?: boolean | null

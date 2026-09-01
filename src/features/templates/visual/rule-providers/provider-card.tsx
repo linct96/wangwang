@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ChevronDown, CircleAlert, Edit2, Eye, Trash2 } from 'lucide-react'
+import { useSortable } from '@dnd-kit/react/sortable'
+import { ChevronDown, CircleAlert, Edit2, Eye, GripVertical, Trash2 } from 'lucide-react'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -35,6 +36,7 @@ export function ProviderCard({
   groups,
   references,
   issues,
+  index,
   onSave,
   onDelete,
 }: {
@@ -43,11 +45,16 @@ export function ProviderCard({
   groups: ProxyGroupDraft[]
   references: number
   issues: VisualIssue[]
+  index: number
   onSave: (provider: RuleProviderDraft) => void
   onDelete: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [view, setView] = useState(false)
+  const { ref, handleRef, isDragging } = useSortable({
+    id: provider.id,
+    index,
+  })
   const duplicateNameIssue = issues.find((issue) => issue.code === 'PROVIDER_NAME_DUPLICATE')
   const expandedIssues = issues.filter((issue) => issue !== duplicateNameIssue)
   const providerProxy = provider.kind === 'structured' ? provider.proxy : undefined
@@ -58,13 +65,34 @@ export function ProviderCard({
     : '未指定'
   return (
     <article
-      className={cn('template-visual-card', issues.some((issue) => issue.level === 'error') && 'template-rule-issue')}
+      ref={ref}
+      className={cn(
+        'template-visual-card',
+        isDragging && 'template-card-dragging',
+        issues.some((issue) => issue.level === 'error') && 'template-rule-issue',
+      )}
     >
       <header className="template-visual-card-header">
-        <button
-          type="button"
+        <div
+          ref={handleRef}
+          className="template-drag-handle"
+          title="拖拽排序"
+          aria-label="拖拽排序"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="template-drag-icon" />
+        </div>
+        <div
           className="template-group-header-info text-left"
+          role="button"
+          tabIndex={0}
           onClick={() => setExpanded((current) => !current)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setExpanded((current) => !current)
+            }
+          }}
         >
           <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
           <strong>{provider.name || '未命名数据源'}</strong>
@@ -72,8 +100,8 @@ export function ProviderCard({
           <span className="template-group-summary">
             {ruleProviderLabel(provider)} · {references} 条规则引用
           </span>
-        </button>
-        <div className="template-visual-card-actions">
+        </div>
+        <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
           {provider.kind === 'structured' ? (
             <ProviderDialog providers={providers} groups={groups} value={provider} onSave={onSave}>
               <IconButton label="编辑规则集数据源">
