@@ -2,14 +2,15 @@ import { LibraryBig, ListPlus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { groupReferences, ruleProviderReferences } from './validation'
-import { findPotentialRawProviderReferences, findPotentialRawReferences } from './yaml-adapter'
+import { groupReferences, resolvePresetNoResolve, ruleProviderReferences } from './validation'
+import { findPotentialRawProviderReferences, findPotentialRawReferences, newRule } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
 import { RuleDialog } from './rules/rule-dialog'
 import {
   type ProxyGroupDraft,
+  type RuleSetRuleDraft,
   type RuleProviderDraft,
   type StructuredRuleDraft,
   type VisualChangeMeta,
@@ -42,6 +43,20 @@ export function VisualTemplateEditor({
       ...draft,
       rules: rule.type === 'MATCH' ? [...draft.rules, rule] : insertRulesBeforeMatch(draft.rules, [rule]),
     })
+  }
+
+  function addRuleForProvider(provider: RuleProviderDraft) {
+    const target = { kind: 'builtin' as const, value: 'DIRECT' as const }
+    const rule: RuleSetRuleDraft = {
+      kind: 'structured',
+      id: newRule(target).id,
+      type: 'RULE-SET',
+      provider: { kind: 'provider', providerId: provider.id },
+      target,
+      noResolve: resolvePresetNoResolve(provider, true),
+    }
+    addRule(rule)
+    toast.success(`已将“${provider.name}”添加到分流规则`)
   }
 
   function removeGroup(group: ProxyGroupDraft) {
@@ -172,7 +187,13 @@ export function VisualTemplateEditor({
           </div>
         </header>
         {draft.ruleProviders.length ? (
-          <ProviderList draft={draft} issues={issues} onChange={updateProviders} onDelete={removeProvider} />
+          <ProviderList
+            draft={draft}
+            issues={issues}
+            onChange={updateProviders}
+            onDelete={removeProvider}
+            onUse={addRuleForProvider}
+          />
         ) : (
           <div className="rounded-md border border-dashed px-4 py-8 text-center">
             <p className="text-sm font-medium">暂无规则集数据源</p>
