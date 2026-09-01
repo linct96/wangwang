@@ -9,11 +9,13 @@ export function ProviderList({
   issues,
   onChange,
   onDelete,
+  onUse,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
   onChange: (providers: RuleProviderDraft[], meta?: VisualChangeMeta) => void
   onDelete: (provider: RuleProviderDraft) => void
+  onUse: (provider: RuleProviderDraft) => void
 }) {
   return (
     <DragDropProvider
@@ -42,6 +44,7 @@ export function ProviderList({
             issues={issues.filter((issue) => issue.providerId === provider.id)}
             onSave={(next) => onChange(draft.ruleProviders.map((item) => (item.id === provider.id ? next : item)))}
             onDelete={() => onDelete(provider)}
+            onUse={() => onUse(provider)}
           />
         ))}
       </div>

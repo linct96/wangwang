@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { ChevronDown, CircleAlert, Edit2, Eye, GripVertical, Trash2 } from 'lucide-react'
+import { ChevronDown, CircleAlert, Edit2, Eye, GripVertical, ListPlus, Trash2 } from 'lucide-react'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -39,6 +39,7 @@ export function ProviderCard({
   index,
   onSave,
   onDelete,
+  onUse,
 }: {
   provider: RuleProviderDraft
   providers: RuleProviderDraft[]
@@ -48,6 +49,7 @@ export function ProviderCard({
   index: number
   onSave: (provider: RuleProviderDraft) => void
   onDelete: () => void
+  onUse: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [view, setView] = useState(false)
@@ -102,6 +104,9 @@ export function ProviderCard({
           </span>
         </div>
         <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
+          <IconButton label="添加到分流规则" onClick={onUse}>
+            <ListPlus />
+          </IconButton>
           {provider.kind === 'structured' ? (
             <ProviderDialog providers={providers} groups={groups} value={provider} onSave={onSave}>
               <IconButton label="编辑规则集数据源">

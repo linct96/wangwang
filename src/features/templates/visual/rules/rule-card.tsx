@@ -30,7 +30,7 @@ import type {
   SupportedRuleType,
   VisualIssue,
 } from '../model'
-import { canUseNoResolve } from '../validation'
+import { canUseNoResolve, resolvePresetNoResolve } from '../validation'
 import { RuleProviderCombobox } from '../rule-providers'
 import { GeoMatchValueCombobox } from './geo-match-value-combobox'
 import type { GeoProvider } from './geo-catalog'
@@ -120,7 +120,10 @@ export function changeStructuredRule(
       type,
       provider,
       target: rule.target,
-      noResolve: rule.noResolve,
+      noResolve: resolvePresetNoResolve(
+        provider.kind === 'provider' ? ruleProviders.find((item) => item.id === provider.providerId) : undefined,
+        true,
+      ),
     }
     return canUseNoResolve(next, { ruleProviders }) ? next : { ...next, noResolve: false }
   }
