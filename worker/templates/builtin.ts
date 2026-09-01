@@ -190,6 +190,7 @@ proxy-groups:
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🎬 流媒体
@@ -197,6 +198,7 @@ proxy-groups:
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🐟 漏网之鱼
@@ -356,7 +358,6 @@ proxy-groups:
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - ⚖️ 负载均衡
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ⚡ 自动选择
@@ -372,18 +373,12 @@ proxy-groups:
     interval: 300
     proxies:
       - __WANGWANG_CUSTOM_SOURCE_NODES__
-  - name: ⚖️ 负载均衡
-    type: load-balance
-    url: https://www.gstatic.com/generate_204
-    interval: 300
-    strategy: consistent-hashing
-    proxies:
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🤖 AI 服务
     type: select
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🔍 Google
@@ -391,6 +386,7 @@ proxy-groups:
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: ✈️ Telegram
@@ -398,27 +394,31 @@ proxy-groups:
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
-  - name: 🟦 Microsoft
+  - name: Ⓜ️ Microsoft
     type: select
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🍎 Apple
     type: select
     proxies:
-      - DIRECT
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🎬 流媒体
     type: select
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
+      - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🐟 漏网之鱼
@@ -427,7 +427,6 @@ proxy-groups:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
-      - ⚖️ 负载均衡
       - DIRECT
   - name: 🛑 广告拦截
     type: select
@@ -579,7 +578,7 @@ rules:
   - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
 
-  - RULE-SET,microsoft-domain,🟦 Microsoft
+  - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
 
   - RULE-SET,apple-cn-domain,DIRECT
   - RULE-SET,apple-domain,🍎 Apple
@@ -611,7 +610,7 @@ export const builtinTemplates: BuiltinTemplate[] = [
   {
     id: 'builtin:full',
     name: '完全规则模板',
-    description: '标准超集 / 多服务分流 / IP 规则 / 负载均衡',
+    description: '标准超集 / 多服务分流 / IP 规则',
     yaml: fullYaml,
   },
 ]
