@@ -80,7 +80,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
+    path: ./ruleset/private-domain.mrs
     interval: 86400
   private-ip:
     type: http
@@ -94,7 +94,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
+    path: ./ruleset/cn-domain.mrs
     interval: 86400
   cn-ip:
     type: http
@@ -220,7 +220,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
+    path: ./ruleset/private-domain.mrs
     interval: 86400
   private-ip:
     type: http
@@ -276,7 +276,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
+    path: ./ruleset/cn-domain.mrs
     interval: 86400
   cn-ip:
     type: http
@@ -447,7 +447,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"
-    path: ./ruleset/private.mrs
+    path: ./ruleset/private-domain.mrs
     interval: 86400
   private-ip:
     type: http
@@ -468,7 +468,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"
-    path: ./ruleset/google.mrs
+    path: ./ruleset/google-domain.mrs
     interval: 86400
   google-ip:
     type: http
@@ -482,7 +482,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"
-    path: ./ruleset/telegram.mrs
+    path: ./ruleset/telegram-domain.mrs
     interval: 86400
   telegram-ip:
     type: http
@@ -531,14 +531,14 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs"
-    path: ./ruleset/microsoft.mrs
+    path: ./ruleset/microsoft@cn-domain.mrs
     interval: 86400
   microsoft-domain:
     type: http
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"
-    path: ./ruleset/microsoft.mrs
+    path: ./ruleset/microsoft-domain.mrs
     interval: 86400
   apple-cn-domain:
     type: http
@@ -559,7 +559,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"
-    path: ./ruleset/cn.mrs
+    path: ./ruleset/cn-domain.mrs
     interval: 86400
   cn-ip:
     type: http
