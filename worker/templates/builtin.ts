@@ -381,6 +381,14 @@ proxy-groups:
       - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🐱 GitHub
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🔍 Google
     type: select
     proxies:
@@ -462,6 +470,13 @@ rule-providers:
     format: mrs
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"
     path: ./ruleset/category-ai-!cn.mrs
+    interval: 86400
+  github-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"
+    path: ./ruleset/github-domain.mrs
     interval: 86400
   google-domain:
     type: http
@@ -575,6 +590,8 @@ rules:
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
 
   - RULE-SET,category-ai-!cn,🤖 AI 服务
+
+  - RULE-SET,github-domain,🐱 GitHub
 
   # YouTube 必须优先于 Google
   - RULE-SET,youtube-domain,🎬 流媒体
