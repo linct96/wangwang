@@ -304,7 +304,7 @@ export function TemplatesPage() {
               </div>
               <div className="template-source-text">
                 <strong>从完全规则模板创建</strong>
-                <p>标准规则超集，增加 GitHub、Google、Telegram、Microsoft、Apple 分流</p>
+                <p>标准规则超集，增加 GitHub、Google、Telegram、Microsoft、Apple、游戏分流</p>
               </div>
             </button>
 

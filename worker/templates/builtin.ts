@@ -421,6 +421,14 @@ proxy-groups:
       - ♻️ 故障转移
       - DIRECT
       - __WANGWANG_CUSTOM_SOURCE_NODES__
+  - name: 🎮 游戏平台
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
   - name: 🎬 流媒体
     type: select
     proxies:
@@ -569,6 +577,34 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
     path: ./ruleset/apple-domain.mrs
     interval: 86400
+  games-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games@cn.mrs"
+    path: ./ruleset/games-cn-domain.mrs
+    interval: 86400
+  games-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games.mrs"
+    path: ./ruleset/games-domain.mrs
+    interval: 86400
+  steam-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.mrs"
+    path: ./ruleset/steam-cn-domain.mrs
+    interval: 86400
+  steam-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"
+    path: ./ruleset/steam-domain.mrs
+    interval: 86400
   cn-domain:
     type: http
     behavior: domain
@@ -607,6 +643,13 @@ rules:
 
   - RULE-SET,apple-cn-domain,DIRECT
   - RULE-SET,apple-domain,🍎 Apple
+
+  # 中国大陆游戏 CDN / 服务优先直连
+  - RULE-SET,steam-cn-domain,DIRECT
+  - RULE-SET,games-cn-domain,DIRECT
+  # 其余游戏服务进入游戏平台策略组
+  - RULE-SET,steam-domain,🎮 游戏平台
+  - RULE-SET,games-domain,🎮 游戏平台
 
   - RULE-SET,netflix-domain,🎬 流媒体
   - RULE-SET,netflix-ip,🎬 流媒体,no-resolve
