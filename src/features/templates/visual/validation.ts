@@ -1,4 +1,11 @@
-import type { RuleDraft, RuleProviderDraft, VisualIssue, VisualTemplateDraft } from './model'
+import type {
+  RuleDraft,
+  RuleProviderDraft,
+  RuleSetRuleDraft,
+  RuleTargetDraft,
+  VisualIssue,
+  VisualTemplateDraft,
+} from './model'
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
@@ -20,6 +27,93 @@ export function canUseNoResolve(rule: RuleDraft, draft: Pick<VisualTemplateDraft
   const providerId = rule.provider.providerId
   const provider = draft.ruleProviders.find((item) => item.id === providerId)
   return canUseNoResolveWithProvider(rule, provider)
+}
+
+type RuleSetReference = {
+  providerId: string
+  ruleId: string
+  index: number
+  target: RuleTargetDraft
+  noResolve: boolean
+  matchSignature: string
+}
+
+type RuleSetMatchBucket = {
+  first: RuleSetReference
+  targets: Map<string, RuleSetReference>
+}
+
+function effectiveRuleSetNoResolve(rule: RuleSetRuleDraft, provider: RuleProviderDraft | undefined) {
+  return Boolean(rule.noResolve && provider?.kind === 'structured' && provider.behavior === 'ipcidr')
+}
+
+function ruleTargetSignature(target: RuleTargetDraft) {
+  return target.kind === 'group'
+    ? JSON.stringify([target.kind, target.groupId])
+    : JSON.stringify([target.kind, target.value])
+}
+
+function ruleSetMatchSignature(providerId: string, noResolve: boolean) {
+  return JSON.stringify([providerId, noResolve])
+}
+
+function analyzeRuleSetReferences(
+  referencesByProvider: Map<string, RuleSetReference[]>,
+  providers: Map<string, RuleProviderDraft>,
+  addIssue: (issue: VisualIssue) => void,
+) {
+  for (const [providerId, references] of referencesByProvider) {
+    const provider = providers.get(providerId)
+    if (!provider) continue
+    const isIpProvider = provider.kind === 'structured' && provider.behavior === 'ipcidr'
+    const seenNoResolve = new Set<boolean>()
+    const firstNoResolve = new Map<boolean, RuleSetReference>()
+    const matches = new Map<string, RuleSetMatchBucket>()
+
+    for (const current of references) {
+      const oppositeNoResolve = isIpProvider && seenNoResolve.has(!current.noResolve)
+      if (oppositeNoResolve) {
+        const overlap = firstNoResolve.get(!current.noResolve)
+        addIssue({
+          level: 'warning',
+          code: 'RULE_SET_NO_RESOLVE_OVERLAP',
+          message: `第 ${current.index + 1} 条规则与第 ${(overlap?.index ?? current.index) + 1} 条规则引用同一 IP 规则集，但 no-resolve 设置不同，请确认这是有意利用 DNS 解析行为`,
+          ruleId: current.ruleId,
+        })
+      } else {
+        const bucket = matches.get(current.matchSignature)
+        if (bucket) {
+          const target = ruleTargetSignature(current.target)
+          const duplicate = bucket.targets.get(target)
+          if (duplicate) {
+            addIssue({
+              level: 'error',
+              code: 'RULE_SET_RULE_DUPLICATE',
+              message: `第 ${current.index + 1} 条 RULE-SET 与第 ${duplicate.index + 1} 条规则完全重复，后续规则不会产生额外效果`,
+              ruleId: current.ruleId,
+            })
+          } else {
+            addIssue({
+              level: 'error',
+              code: 'RULE_SET_RULE_SHADOWED',
+              message: `第 ${current.index + 1} 条规则已被第 ${bucket.first.index + 1} 条同规则集规则覆盖，目标策略不会生效`,
+              ruleId: current.ruleId,
+            })
+          }
+        }
+      }
+
+      seenNoResolve.add(current.noResolve)
+      if (!firstNoResolve.has(current.noResolve)) firstNoResolve.set(current.noResolve, current)
+      const bucket = matches.get(current.matchSignature)
+      const target = ruleTargetSignature(current.target)
+      if (bucket) {
+        if (!bucket.targets.has(target)) bucket.targets.set(target, current)
+      } else {
+        matches.set(current.matchSignature, { first: current, targets: new Map([[target, current]]) })
+      }
+    }
+  }
 }
 
 export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualIssue[] = []) {
@@ -259,7 +353,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         providerId: provider.id,
       })
   })
-  const providerReferenceCounts = new Map<string, number>()
+  const ruleSetReferencesByProvider = new Map<string, RuleSetReference[]>()
   let matchCount = 0
   draft.rules.forEach((rule, index) => {
     if (rule.kind === 'raw') {
@@ -285,7 +379,16 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       else {
         const providerId = rule.provider.providerId
         const provider = providerById.get(providerId)
-        providerReferenceCounts.set(providerId, (providerReferenceCounts.get(providerId) || 0) + 1)
+        const references = ruleSetReferencesByProvider.get(providerId) || []
+        references.push({
+          providerId,
+          ruleId: rule.id,
+          index,
+          target: rule.target,
+          noResolve: rule.noResolve,
+          matchSignature: ruleSetMatchSignature(providerId, effectiveRuleSetNoResolve(rule, provider)),
+        })
+        ruleSetReferencesByProvider.set(providerId, references)
         if (!provider)
           add({
             level: 'error',
@@ -331,6 +434,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         ruleId: rule.id,
       })
   })
+  analyzeRuleSetReferences(ruleSetReferencesByProvider, providerById, add)
   if (matchCount > 1) add({ level: 'error', code: 'MULTIPLE_MATCH', message: '存在多个 MATCH 兜底规则' })
   const graph = new Map<string, string[]>()
   draft.groups.forEach((group) =>
@@ -360,19 +464,12 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   if (draft.groups.some((group) => group.kind === 'raw'))
     add({ level: 'warning', code: 'RAW_GROUP_CYCLE', message: 'RAW 代理组未参与完整循环引用分析' })
   draft.ruleProviders.forEach((provider) => {
-    const referenceCount = providerReferenceCounts.get(provider.id) || 0
+    const referenceCount = ruleSetReferencesByProvider.get(provider.id)?.length || 0
     if (!referenceCount)
       add({
         level: 'warning',
         code: 'RULE_PROVIDER_UNUSED',
         message: `规则集数据源“${provider.name}”尚未被分流规则引用`,
-        providerId: provider.id,
-      })
-    else if (referenceCount > 1)
-      add({
-        level: 'error',
-        code: 'RULE_SET_PROVIDER_DUPLICATE',
-        message: `规则集数据源“${provider.name}”存在 ${referenceCount} 条 RULE-SET 规则，后续规则可能无法产生预期效果`,
         providerId: provider.id,
       })
   })
