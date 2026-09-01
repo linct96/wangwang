@@ -73,7 +73,11 @@ export function VisualTemplateEditor({
     update({ ...draft, ruleProviders: draft.ruleProviders.filter((item) => item.id !== provider.id) })
   }
 
-  function updateProviders(ruleProviders: RuleProviderDraft[]) {
+  function updateProviders(ruleProviders: RuleProviderDraft[], meta?: VisualChangeMeta) {
+    if (meta?.type === 'reorder') {
+      update({ ...draft, ruleProviders }, meta)
+      return
+    }
     const renamed = ruleProviders.find((next) => {
       const previous = draft.ruleProviders.find((item) => item.id === next.id)
       return previous && previous.name !== next.name && findPotentialRawProviderReferences(draft, previous.name).count
