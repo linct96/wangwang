@@ -56,7 +56,7 @@ const builtinFallback: TemplateSummary[] = [
 export function TemplatesPage() {
   const navigate = useNavigate()
   const { data: templates, error, loading, reload } = useApi<TemplateSummary[]>('/templates')
-  const { data: profiles = [] } = useApi<Profile[]>('/profiles')
+  const { data: profiles = [], reload: reloadProfiles } = useApi<Profile[]>('/profiles')
   const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const [previewing, setPreviewing] = useState<TemplateSummary>()
   const [using, setUsing] = useState<TemplateId>()
@@ -344,12 +344,12 @@ export function TemplatesPage() {
           sources={sources}
           initialTemplateId={using}
           onClose={() => setUsing(undefined)}
-          onSaved={async (jobId, profileId) => {
+          onSaved={async (jobId) => {
             setUsing(undefined)
             try {
               await waitForJob(jobId)
               toast.success('配置生成成功')
-              await navigate({ to: '/profiles/$id', params: { id: profileId } })
+              await Promise.all([reload(), reloadProfiles()])
             } catch (reason) {
               toast.error(reason instanceof Error ? reason.message : '生成失败')
             }
