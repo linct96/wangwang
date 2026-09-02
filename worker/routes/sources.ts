@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { count, desc, eq } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileSources, sources } from '../db'
@@ -65,7 +65,7 @@ sourcesRouter.get('/', async (c) => {
     .select()
     .from(sources)
     .where(includeSystem ? undefined : eq(sources.kind, 'url'))
-    .orderBy(desc(sources.createdAt))
+    .orderBy(asc(sources.createdAt))
   const views = await Promise.all(
     result.map(async (source) => {
       const [{ value }] = await database
