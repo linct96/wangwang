@@ -31,6 +31,7 @@ jobs:
             git commit -m "chore: generate tag migration metadata"
             git push
           fi
+      - run: pnpm db:migrate:local
       - run: pnpm format
       - run: pnpm test
       - run: pnpm lint
