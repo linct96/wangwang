@@ -1,34 +1,42 @@
 import { mkdir, cp, rm, writeFile, readdir, readFile, stat } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 
 const exec = promisify(execFile)
 const version = (process.env.WANGWANG_VERSION || process.env.npm_package_version || '0.1.0').replace(/^v/, '')
 const tag = `v${version}`
-const root = new URL('..', import.meta.url).pathname
-const stage = `${root}/.deploy/wangwang-${tag}`
-const output = `${root}/.deploy/wangwang-deploy-v${version}.tar.gz`
+const root = fileURLToPath(new URL('..', import.meta.url))
+const deployDir = path.join(root, '.deploy')
+const stage = path.join(deployDir, `wangwang-${tag}`)
+const output = path.join(deployDir, `wangwang-deploy-v${version}.tar.gz`)
 
-await rm(`${root}/.deploy`, { recursive: true, force: true })
-await mkdir(`${stage}/assets`, { recursive: true })
-await mkdir(`${stage}/migrations`, { recursive: true })
-await cp(`${root}/dist/admin/wangwang/index.js`, `${stage}/worker.js`)
-await cp(`${root}/dist/admin/client`, `${stage}/assets`, { recursive: true })
-await cp(`${root}/drizzle`, `${stage}/migrations`, { recursive: true })
-await cp(`${root}/drizzle/0000_initial.sql`, `${stage}/migration.sql`)
+await rm(deployDir, { recursive: true, force: true })
+await mkdir(path.join(stage, 'assets'), { recursive: true })
+await mkdir(path.join(stage, 'migrations'), { recursive: true })
+await cp(path.join(root, 'dist/admin/wangwang/index.js'), path.join(stage, 'worker.js'))
+await cp(path.join(root, 'dist/admin/client'), path.join(stage, 'assets'), { recursive: true })
+await cp(path.join(root, 'drizzle'), path.join(stage, 'migrations'), { recursive: true })
+
+const drizzleEntries = await readdir(path.join(root, 'drizzle'))
+const initialMigration =
+  drizzleEntries.find((file) => file.startsWith('0000_') && file.endsWith('.sql')) || '0000_initial.sql'
+await cp(path.join(root, 'drizzle', initialMigration), path.join(stage, 'migration.sql'))
+
 const assets = {}
 async function collect(dir, prefix = '') {
   for (const entry of await readdir(dir)) {
-    const file = `${dir}/${entry}`
+    const file = path.join(dir, entry)
     const relative = `${prefix}/${entry}`
     if ((await stat(file)).isDirectory()) await collect(file, relative)
     else assets[relative] = (await readFile(file)).toString('base64')
   }
 }
-await collect(`${stage}/assets`)
-await writeFile(`${stage}/assets.json`, `${JSON.stringify(assets)}\n`)
+await collect(path.join(stage, 'assets'))
+await writeFile(path.join(stage, 'assets.json'), `${JSON.stringify(assets)}\n`)
 await writeFile(
-  `${stage}/manifest.json`,
+  path.join(stage, 'manifest.json'),
   `${JSON.stringify(
     {
       product: 'wangwang',
@@ -49,5 +57,5 @@ await writeFile(
     2,
   )}\n`,
 )
-await exec('tar', ['-czf', output, '-C', `${root}/.deploy`, `wangwang-${tag}`])
+await exec('tar', ['-czf', output, '-C', deployDir, `wangwang-${tag}`])
 console.log(output)
