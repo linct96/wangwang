@@ -19,7 +19,7 @@ export function NodesPage() {
   const [enabled, setEnabled] = useState('')
   const [tagId, setTagId] = useState('')
   const [page, setPage] = useState(1)
-  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
+  const { data: tagOptions = [], reload: reloadTags } = useApi<TagOption[]>('/tags')
   const { data, error, loading, reload } = useApi<{ items: NodeItem[]; total: number; page: number; pageSize: number }>(
     `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}`,
   )
@@ -45,7 +45,7 @@ export function NodesPage() {
     try {
       await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
       setDeleting(undefined)
-      await reload()
+      await Promise.all([reload(), reloadTags()])
       toast.success('手动节点已删除')
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '删除失败')
@@ -259,7 +259,7 @@ export function NodesPage() {
           onClose={() => setEditing(undefined)}
           onSaved={async () => {
             setEditing(undefined)
-            await reload()
+            await Promise.all([reload(), reloadTags()])
             toast.success('节点保存成功')
           }}
         />
@@ -269,7 +269,7 @@ export function NodesPage() {
           onClose={() => setAdding(false)}
           onSaved={async (result) => {
             setAdding(false)
-            await reload()
+            await Promise.all([reload(), reloadTags()])
             if (!result) {
               toast.success('节点添加成功，相关配置正在更新')
               return
