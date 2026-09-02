@@ -205,8 +205,8 @@ export function AddNodeDialog({
               ? z.string().superRefine((value, context) => {
                   const addresses = preferredAddresses(value)
                   if (!addresses.length) context.addIssue({ code: 'custom', message: '请至少填写一个优选地址' })
-                  else if (addresses.length > 20)
-                    context.addIssue({ code: 'custom', message: '最多填写 20 个优选地址' })
+                  else if (addresses.length > 100)
+                    context.addIssue({ code: 'custom', message: '最多填写 100 个优选地址' })
                   else {
                     const error = addresses.map(preferredAddressError).find(Boolean)
                     if (error) context.addIssue({ code: 'custom', message: error })
