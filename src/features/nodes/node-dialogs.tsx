@@ -6,8 +6,9 @@ import { useTheme } from 'next-themes'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { ManualNodeConnection, NodeDetail, NodeImportResult, NodeItem } from '@/api/types'
+import type { ManualNodeConnection, NodeDetail, NodeImportResult, NodeItem, TagOption } from '@/api/types'
 import { AppDialog, PageState } from '@/components/app-primitives'
+import { TagMultiSelect } from '@/components/tag-multi-select'
 import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -19,14 +20,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatYaml } from '@/lib/yaml-editor'
 import { defaultConnection, ManualConnectionFields } from './node-form'
 
-const tagsSchema = z.string().superRefine((value, context) => {
-  const tags = value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-  if (tags.length > 10) context.addIssue({ code: 'custom', message: '标签不能超过 10 个' })
-  if (tags.some((tag) => tag.length > 24)) context.addIssue({ code: 'custom', message: '单个标签不能超过 24 个字符' })
-})
+const tagsSchema = z
+  .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
+  .max(10, '标签不能超过 10 个')
 
 const connectionSchema = z
   .custom<ManualNodeConnection>((value) => Boolean(value && typeof value === 'object'), '连接参数无效')
@@ -56,8 +52,9 @@ export function AddNodeDialog({
 }) {
   const [mode, setMode] = useState<'import' | 'form'>('import')
   const [error, setError] = useState('')
+  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const form = useForm({
-    defaultValues: { content: '', connection: defaultConnection(), tags: '', enabled: true },
+    defaultValues: { content: '', connection: defaultConnection(), tags: [] as string[], enabled: true },
     validators: {
       onSubmit: z.object({
         content:
@@ -76,13 +73,7 @@ export function AddNodeDialog({
     onSubmit: async ({ value }) => {
       setError('')
       try {
-        const options = {
-          tags: value.tags
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-          enabled: value.enabled,
-        }
+        const options = { tags: value.tags, enabled: value.enabled }
         if (mode === 'import') {
           const result = await api<NodeImportResult>('/nodes/import', {
             method: 'POST',
@@ -140,18 +131,7 @@ export function AddNodeDialog({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder={`每行一个节点链接：
-vless://uuid@example.com:443#香港节点
-trojan://password@example.net:443#日本节点
-
-或粘贴 YAML 节点列表：
-proxies:
-  - name: 新加坡节点
-    type: ss
-    server: sg.example.com
-    port: 8388
-    cipher: aes-128-gcm
-    password: your-password`}
+                      placeholder={`每行一个节点链接：\nvless://uuid@example.com:443#香港节点\ntrojan://password@example.net:443#日本节点\n\n或粘贴 YAML 节点列表：\nproxies:\n  - name: 新加坡节点\n    type: ss\n    server: sg.example.com\n    port: 8388\n    cipher: aes-128-gcm\n    password: your-password`}
                       aria-invalid={invalid}
                     />
                     {invalid && <FieldError errors={field.state.meta.errors} />}
@@ -178,13 +158,14 @@ proxies:
               return (
                 <Field data-invalid={invalid}>
                   <FieldLabel htmlFor="manual-tags">标签</FieldLabel>
-                  <Input
+                  <TagMultiSelect
                     id="manual-tags"
                     value={field.state.value}
+                    options={tagOptions}
+                    max={10}
+                    placeholder="选择或创建标签"
                     onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="香港, 高速"
-                    aria-invalid={invalid}
+                    onChange={field.handleChange}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
@@ -241,10 +222,11 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
   const [error, setError] = useState('')
   const [mode, setMode] = useState<'form' | 'yaml'>('yaml')
   const { resolvedTheme } = useTheme()
+  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const form = useForm({
     defaultValues: {
       alias: node.alias || '',
-      tags: node.tags.join(', '),
+      tags: node.directTags.map((tag) => tag.name),
       enabled: node.enabled,
       connection: node.connection,
       yaml: node.yaml || '',
@@ -272,10 +254,7 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
           method: 'PATCH',
           body: JSON.stringify({
             alias: value.alias || null,
-            tags: value.tags
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
+            tags: value.tags,
             enabled: value.enabled,
             connection: node.canEditConnection && mode === 'form' ? value.connection : undefined,
             yaml: node.canEditConnection && mode === 'yaml' ? value.yaml : undefined,
@@ -398,13 +377,15 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
             return (
               <Field data-invalid={invalid}>
                 <FieldLabel htmlFor="node-tags">标签</FieldLabel>
-                <Input
+                <TagMultiSelect
                   id="node-tags"
                   value={field.state.value}
+                  options={tagOptions}
+                  inherited={node.inheritedTags}
+                  max={10}
+                  placeholder="选择或创建标签"
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="香港, 高速"
-                  aria-invalid={invalid}
+                  onChange={field.handleChange}
                 />
                 {invalid && <FieldError errors={field.state.meta.errors} />}
               </Field>
