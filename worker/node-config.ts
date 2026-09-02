@@ -182,6 +182,12 @@ export function buildManualConfig(input: ManualConnection, current?: ProxyConfig
 }
 
 export function connectionView(config: ProxyConfig) {
+  if (
+    Object.hasOwn(config, 'ech-opts') ||
+    (Object.hasOwn(config, 'client-fingerprint') && !['vmess', 'vless', 'trojan'].includes(config.type))
+  )
+    return null
+
   const common = { name: config.name, protocol: config.type, server: config.server, port: config.port }
   const network = String(config.network || 'tcp') as 'tcp' | 'ws' | 'grpc'
   const ws = (config['ws-opts'] || {}) as { path?: string; headers?: { Host?: string } }
