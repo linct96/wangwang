@@ -20,6 +20,7 @@ import {
   MANUAL_SOURCE_ID,
   nodeBatchSchema,
   nodeCreateSchema,
+  nodeDeleteBatchSchema,
   nodeImportSchema,
   nodeKinds,
   nodeUpdateSchema,
@@ -381,6 +382,37 @@ nodesRouter.patch('/batch', async (c) => {
     .run()
   await enqueueProfilesForNodes(c.env, input.ids)
   return ok(c, { updated: input.ids.length })
+})
+
+nodesRouter.delete('/batch', async (c) => {
+  const input = await body(c, nodeDeleteBatchSchema)
+  const kinds = await nodeKinds(c.env, input.ids)
+  const manualIds = input.ids.filter((id) => kinds.get(id)?.includes('manual'))
+  if (!manualIds.length) return ok(c, { deleted: 0, detached: 0, skipped: input.ids.length })
+
+  const placeholders = manualIds.map(() => '?').join(',')
+  const now = Date.now()
+  await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM source_nodes WHERE source_id = ? AND node_id IN (${placeholders})`).bind(
+      MANUAL_SOURCE_ID,
+      ...manualIds,
+    ),
+    c.env.DB.prepare(
+      `DELETE FROM nodes WHERE id IN (${placeholders}) AND NOT EXISTS (SELECT 1 FROM source_nodes WHERE node_id = nodes.id)`,
+    ).bind(...manualIds),
+    c.env.DB.prepare(
+      'UPDATE sources SET node_count = (SELECT count(*) FROM source_nodes WHERE source_id = ?), updated_at = ? WHERE id = ?',
+    ).bind(MANUAL_SOURCE_ID, now, MANUAL_SOURCE_ID),
+  ])
+  const remaining = await c.env.DB.prepare(`SELECT id FROM nodes WHERE id IN (${placeholders})`)
+    .bind(...manualIds)
+    .all<{ id: string }>()
+  await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
+  return ok(c, {
+    deleted: manualIds.length - remaining.results.length,
+    detached: remaining.results.length,
+    skipped: input.ids.length - manualIds.length,
+  })
 })
 
 nodesRouter.get('/:id', async (c) => {

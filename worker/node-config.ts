@@ -129,6 +129,7 @@ export const nodeUpdateSchema = z.object({
     .optional(),
 })
 export const nodeBatchSchema = z.object({ ids: z.array(z.string()).min(1).max(100), enabled: z.boolean() })
+export const nodeDeleteBatchSchema = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(100) })
 
 export type ManualConnection = z.infer<typeof manualConnectionSchema>
 
