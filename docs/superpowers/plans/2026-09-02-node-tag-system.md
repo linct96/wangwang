@@ -206,10 +206,12 @@ Profile: profile_tag_filters <-> profiles.tags
 ### Task 1: 建立可测试的标签领域模型
 
 **Files:**
+
 - Create: `worker/tag-model.ts`
 - Create: `tests/tag-model.test.ts`
 
 **Interfaces:**
+
 - Produces: `TagRecord`, `TagView`, `normalizeTagName`, `normalizeTagInputs`, `mergeTagViews`, `matchesAnyTag`。
 - Consumes: 无数据库依赖。
 
@@ -234,9 +236,12 @@ describe('tag model', () => {
   it('rejects empty, too long, and over-limit tags', () => {
     expect(() => normalizeTagInputs([''], 10)).toThrow('标签不能为空')
     expect(() => normalizeTagInputs(['a'.repeat(25)], 10)).toThrow('单个标签不能超过 24 个字符')
-    expect(() => normalizeTagInputs(Array.from({ length: 11 }, (_, i) => `tag-${i}`), 10)).toThrow(
-      '标签不能超过 10 个',
-    )
+    expect(() =>
+      normalizeTagInputs(
+        Array.from({ length: 11 }, (_, i) => `tag-${i}`),
+        10,
+      ),
+    ).toThrow('标签不能超过 10 个')
   })
 
   it('merges direct and inherited tags by id', () => {
@@ -335,12 +340,14 @@ git commit -m "feat: add tag domain model"
 ### Task 2: 新增标签表结构与安全 backfill migration
 
 **Files:**
+
 - Modify: `worker/db.ts`
 - Create/generated: `drizzle/0001_normalize_tags.sql`
 - Create/generated: `drizzle/meta/0001_snapshot.json`
 - Modify/generated: `drizzle/meta/_journal.json`
 
 **Interfaces:**
+
 - Produces: Drizzle tables `tags`, `nodeTags`, `sourceTags`, `profileTagFilters`。
 - Consumes: Task 1 的规范化约定；SQL backfill 使用 `lower(trim(...))`，与 ASCII lower 规则一致。
 
@@ -500,11 +507,13 @@ git commit -m "feat: normalize tag persistence"
 ### Task 3: 实现 Tag Store 与标签目录接口
 
 **Files:**
+
 - Create: `worker/tag-store.ts`
 - Create: `worker/routes/tags.ts`
 - Modify: `worker/app.ts`
 
 **Interfaces:**
+
 - Consumes: `tags`, `nodeTags`, `sourceTags`, `profileTagFilters`；Task 1 `normalizeTagInputs/normalizeTagName`。
 - Produces:
 
@@ -547,10 +556,7 @@ import { db } from '../tasks'
 export const tagsRouter = new Hono<{ Bindings: Env }>()
 
 tagsRouter.get('/', async (c) => {
-  const rows = await db(c.env)
-    .select({ id: tags.id, name: tags.name })
-    .from(tags)
-    .orderBy(asc(tags.normalizedName))
+  const rows = await db(c.env).select({ id: tags.id, name: tags.name }).from(tags).orderBy(asc(tags.normalizedName))
   return ok(c, rows)
 })
 ```
@@ -591,11 +597,13 @@ git commit -m "feat: add tag catalog service"
 ### Task 4: 将 Node 写入、读取和筛选切换到关系表
 
 **Files:**
+
 - Modify: `worker/routes/nodes.ts`
 - Modify: `worker/node-config.ts`
 - Modify: `worker/tasks.ts`（仅移除/替换旧 tag helper 时）
 
 **Interfaces:**
+
 - Consumes: `ensureTags`, `replaceNodeDirectTags`, `nodeTagViews`, `mergeTagViews`。
 - Produces: `GET /nodes` 支持 `tagId`；Node 响应新增 `directTags/inheritedTags`。
 
@@ -705,9 +713,11 @@ git commit -m "feat: use normalized tags for nodes"
 ### Task 5: Source 继承标签同步到 `source_tags`
 
 **Files:**
+
 - Modify: `worker/routes/sources.ts`
 
 **Interfaces:**
+
 - Consumes: `replaceSourceTags`。
 - Produces: Source 的现有单个 `nodeTag` 同时存在于 `source_tags`，Node inherited 查询不依赖 legacy 字段。
 
@@ -754,10 +764,12 @@ git commit -m "feat: sync source inherited tags"
 ### Task 6: Profile 标签过滤切换到关系表，保持 OR 语义
 
 **Files:**
+
 - Modify: `worker/routes/profiles.ts`
 - Modify: `worker/tasks.ts`
 
 **Interfaces:**
+
 - Consumes: `replaceProfileTagFilters`, `profileFilterTagIds`, `nodeTagViews`, `matchesAnyTag`。
 - Produces: 编译配置不再依赖 legacy JSON/source nodeTag 进行标签匹配。
 
@@ -837,10 +849,12 @@ git commit -m "feat: normalize profile tag filters"
 ### Task 7: 新增前端 Tag 类型与 Creatable MultiSelect
 
 **Files:**
+
 - Modify: `src/api/types.ts`
 - Create: `src/components/tag-multi-select.tsx`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -889,7 +903,7 @@ inheritedTags: TagOption[]
    - normalized 后不存在于 options；
    - normalized 后不存在于 value；
    - value.length < max；
-   则显示按钮 `创建「${trimmed}」`。
+     则显示按钮 `创建「${trimmed}」`。
 7. 点击创建只执行 `onChange([...value, trimmed])`；不得调用 `/tags` POST，因为系统没有标签独立创建接口。
 8. `allowCreate={false}` 时完全不显示创建入口。
 9. `value.length >= max` 时禁用未选择项和创建入口，显示 `最多选择 ${max} 个标签`。
@@ -918,9 +932,11 @@ git commit -m "feat: add creatable tag multi select"
 ### Task 8: Node 新增/编辑表单接入多标签组件
 
 **Files:**
+
 - Modify: `src/features/nodes/node-dialogs.tsx`
 
 **Interfaces:**
+
 - Consumes: `TagMultiSelect`, `TagOption`, `NodeItem.directTags/inheritedTags`。
 - Produces: Node 表单内部 `tags` 从 comma string 改为 `string[]`。
 
@@ -1020,9 +1036,11 @@ git commit -m "feat: use multi select for node tags"
 ### Task 9: Node 列表增加标签 Select 筛选
 
 **Files:**
+
 - Modify: `src/features/nodes/page.tsx`
 
 **Interfaces:**
+
 - Consumes: `GET /tags`, `GET /nodes?tagId=`。
 - Produces: 工具栏第三个过滤维度。
 
@@ -1036,7 +1054,7 @@ const { data: tags = [] } = useApi<TagOption[]>('/tags')
 Node 请求改为：
 
 ```ts
-`/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}`
+;`/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}`
 ```
 
 - [ ] **Step 2: 在 toolbar 最前或协议筛选旁增加 Select**
@@ -1101,9 +1119,11 @@ git commit -m "feat: filter nodes by tag"
 ### Task 10: Profile 标签筛选改为现有标签多选
 
 **Files:**
+
 - Modify: `src/features/profiles/profile-dialog.tsx`
 
 **Interfaces:**
+
 - Consumes: `TagMultiSelect` with `allowCreate={false}`、`GET /tags`。
 - Produces: Profile 不再依赖逗号手输标签，避免拼写出不存在的 filter。
 
@@ -1122,9 +1142,7 @@ tags: profile?.tags || []
 validator：
 
 ```ts
-tags: z
-  .array(z.string().trim().min(1).max(24))
-  .max(20, '标签不能超过 20 个')
+tags: z.array(z.string().trim().min(1).max(24)).max(20, '标签不能超过 20 个')
 ```
 
 - [ ] **Step 2: 替换标签筛选 Input**
@@ -1171,9 +1189,11 @@ git commit -m "feat: select profile tag filters"
 ### Task 11: 全量兼容性、迁移和质量验证
 
 **Files:**
+
 - Modify only if verification exposes defects; do not add unrelated refactors.
 
 **Interfaces:**
+
 - Consumes: Tasks 1-10 完整实现。
 - Produces: 可部署版本。
 

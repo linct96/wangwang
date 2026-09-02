@@ -41,7 +41,12 @@ export function TagMultiSelect({
   const normalizedQuery = normalizeTag(trimmed)
   const exists = options.some((option) => normalizeTag(option.name) === normalizedQuery)
   const canCreate =
-    allowCreate && Boolean(trimmed) && trimmed.length <= 24 && !exists && !selected.has(normalizedQuery) && value.length < max
+    allowCreate &&
+    Boolean(trimmed) &&
+    trimmed.length <= 24 &&
+    !exists &&
+    !selected.has(normalizedQuery) &&
+    value.length < max
 
   function toggle(name: string) {
     const normalized = normalizeTag(name)
@@ -73,8 +78,16 @@ export function TagMultiSelect({
       </div>
       <Popover>
         <PopoverTrigger asChild>
-          <Button id={id} type="button" variant="outline" className="w-full justify-between font-normal" onBlur={onBlur}>
-            <span className="text-muted-foreground">{value.length ? `已选择 ${value.length} 个标签` : placeholder}</span>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            className="w-full justify-between font-normal"
+            onBlur={onBlur}
+          >
+            <span className="text-muted-foreground">
+              {value.length ? `已选择 ${value.length} 个标签` : placeholder}
+            </span>
             <ChevronDown className="size-4 opacity-60" />
           </Button>
         </PopoverTrigger>
@@ -112,7 +125,8 @@ export function TagMultiSelect({
                   setQuery('')
                 }}
               >
-                <Plus className="size-4" />创建「{trimmed}」
+                <Plus className="size-4" />
+                创建「{trimmed}」
               </button>
             )}
             {!filtered.length && !canCreate && (

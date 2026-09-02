@@ -28,7 +28,10 @@ import { nodeTagViews, replaceNodeDirectTags } from '../tag-store'
 export const nodesRouter = new Hono<{ Bindings: Env }>()
 const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic', 'anytls'])
 
-function nodeTagPayload(view: { direct: Array<{ id: string; name: string }>; inherited: Array<{ id: string; name: string }> }) {
+function nodeTagPayload(view: {
+  direct: Array<{ id: string; name: string }>
+  inherited: Array<{ id: string; name: string }>
+}) {
   return {
     tags: mergeTagViews(view.direct, view.inherited).map((tag) => tag.name),
     directTags: view.direct,

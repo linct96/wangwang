@@ -33,11 +33,11 @@ async function replaceRelations(
   ownerId: string,
   tags: TagRecord[],
 ) {
-  const statements: D1PreparedStatement[] = [env.DB.prepare(`DELETE FROM ${table} WHERE ${ownerColumn} = ?`).bind(ownerId)]
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(`DELETE FROM ${table} WHERE ${ownerColumn} = ?`).bind(ownerId),
+  ]
   for (const tag of tags)
-    statements.push(
-      env.DB.prepare(`INSERT INTO ${table} (${ownerColumn}, tag_id) VALUES (?, ?)`).bind(ownerId, tag.id),
-    )
+    statements.push(env.DB.prepare(`INSERT INTO ${table} (${ownerColumn}, tag_id) VALUES (?, ?)`).bind(ownerId, tag.id))
   await env.DB.batch(statements)
 }
 

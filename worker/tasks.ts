@@ -329,10 +329,7 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
     .orderBy(asc(sourceNodes.position), asc(nodes.createdAt))
 
   const filterTagIds = await profileFilterTagIds(env, profile.id)
-  const views = await nodeTagViews(
-    env,
-    [...new Set(selected.map((node) => node.id))],
-  )
+  const views = await nodeTagViews(env, [...new Set(selected.map((node) => node.id))])
   const unique = new Map<string, (typeof selected)[number]>()
   for (const node of selected) {
     const view = views.get(node.id) || { direct: [], inherited: [] }

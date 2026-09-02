@@ -14,9 +14,12 @@ describe('tag model', () => {
   it('rejects empty, too long, and over-limit tags', () => {
     expect(() => normalizeTagInputs([''], 10)).toThrow('标签不能为空')
     expect(() => normalizeTagInputs(['a'.repeat(25)], 10)).toThrow('单个标签不能超过 24 个字符')
-    expect(() => normalizeTagInputs(Array.from({ length: 11 }, (_, index) => `tag-${index}`), 10)).toThrow(
-      '标签不能超过 10 个',
-    )
+    expect(() =>
+      normalizeTagInputs(
+        Array.from({ length: 11 }, (_, index) => `tag-${index}`),
+        10,
+      ),
+    ).toThrow('标签不能超过 10 个')
   })
 
   it('merges direct and inherited tags by id', () => {
