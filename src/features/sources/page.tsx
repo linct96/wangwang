@@ -6,8 +6,9 @@ import { useForm } from '@tanstack/react-form'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
-import type { Source } from '@/api/types'
+import type { Source, TagOption } from '@/api/types'
 import { AppConfirmDialog, AppDialog, IconButton } from '@/components/app-primitives'
+import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -293,6 +294,7 @@ function SourceDialog({
   onSaved: (jobId: string | null) => void
 }) {
   const [error, setError] = useState('')
+  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const initialUserAgent = source?.userAgent || 'mihomo'
   const [userAgentOption, setUserAgentOption] = useState(
     userAgentPresets.some(({ value }) => value === initialUserAgent) ? initialUserAgent : customUserAgent,
@@ -302,7 +304,7 @@ function SourceDialog({
       name: source?.name || '',
       url: source?.url || '',
       userAgent: source?.userAgent || 'mihomo',
-      nodeTag: source?.nodeTag || '',
+      nodeTags: source?.nodeTags || [],
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
     },
@@ -318,7 +320,9 @@ function SourceDialog({
           .min(1, '请输入 User-Agent')
           .max(200, 'User-Agent 不能超过 200 个字符')
           .regex(/^[\x20-\x7e]+$/, 'User-Agent 仅支持 ASCII 字符'),
-        nodeTag: z.string().trim().max(24, '节点标签不能超过 24 个字符'),
+        nodeTags: z
+          .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
+          .max(10, '节点标签不能超过 10 个'),
         nodeNameFilter: z
           .string()
           .trim()
@@ -347,7 +351,7 @@ function SourceDialog({
             url: source ? (urlChanged ? value.url.trim() : undefined) : value.url.trim(),
             refreshIntervalHours: value.interval,
             userAgent: value.userAgent.trim(),
-            nodeTag: value.nodeTag.trim(),
+            nodeTags: value.nodeTags,
             nodeNameFilter,
           }),
         })
@@ -385,6 +389,48 @@ function SourceDialog({
               )
             }}
           </form.Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <form.Field name="name">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                return (
+                  <Field data-invalid={invalid}>
+                    <FieldLabel htmlFor="source-name">订阅名称</FieldLabel>
+                    <Input
+                      id="source-name"
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                      placeholder={source ? '例如：机场订阅' : '默认自动获取，可留空'}
+                      aria-invalid={invalid}
+                    />
+                    {invalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                )
+              }}
+            </form.Field>
+            <form.Field name="nodeTags">
+              {(field) => {
+                const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                return (
+                  <Field data-invalid={invalid}>
+                    <FieldLabel htmlFor="source-node-tags">节点标签</FieldLabel>
+                    <TagCombobox
+                      id="source-node-tags"
+                      value={field.state.value}
+                      options={tagOptions}
+                      max={10}
+                      placeholder="选择或创建标签"
+                      invalid={invalid}
+                      onBlur={field.handleBlur}
+                      onChange={field.handleChange}
+                    />
+                    {invalid && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                )
+              }}
+            </form.Field>
+          </div>
           <form.Field name="userAgent">
             {(field) => {
               const invalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -425,44 +471,6 @@ function SourceDialog({
                       aria-invalid={invalid}
                     />
                   </div>
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
-                </Field>
-              )
-            }}
-          </form.Field>
-          <form.Field name="name">
-            {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-              return (
-                <Field data-invalid={invalid}>
-                  <FieldLabel htmlFor="source-name">订阅名称</FieldLabel>
-                  <Input
-                    id="source-name"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={source ? '例如：机场订阅' : '默认自动获取，可留空'}
-                    aria-invalid={invalid}
-                  />
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
-                </Field>
-              )
-            }}
-          </form.Field>
-          <form.Field name="nodeTag">
-            {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-              return (
-                <Field data-invalid={invalid}>
-                  <FieldLabel htmlFor="source-node-tag">节点标签</FieldLabel>
-                  <Input
-                    id="source-node-tag"
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="例如：机场 A"
-                    aria-invalid={invalid}
-                  />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               )

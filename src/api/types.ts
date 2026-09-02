@@ -18,7 +18,7 @@ export type Source = {
   kind: 'url' | 'manual'
   url: string | null
   nodeNameFilter: string | null
-  nodeTag: string | null
+  nodeTags: string[]
   userAgent: string
   pendingUrl: boolean
   profileCount: number
