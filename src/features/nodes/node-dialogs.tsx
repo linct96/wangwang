@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ChevronDown, RefreshCw, Search, WandSparkles, X } from 'lucide-react'
+import { RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
 import { useTheme } from 'next-themes'
 import { z } from 'zod'
@@ -8,17 +8,28 @@ import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { ManualNodeConnection, NodeDetail, NodeImportResult, NodeItem, TagOption } from '@/api/types'
 import { AppDialog, PageState } from '@/components/app-primitives'
-import { TagMultiSelect } from '@/components/tag-multi-select'
+import { TagCombobox } from '@/components/tag-combobox'
 import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+  useComboboxAnchor,
+} from '@/components/ui/combobox'
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatYaml } from '@/lib/yaml-editor'
 import { defaultConnection, ManualConnectionFields } from './node-form'
@@ -69,101 +80,86 @@ function PreferredNodeSelect({
   onChange,
   onBlur,
 }: {
-  value: NodeItem[]
+  value: string[]
   invalid: boolean
-  onChange: (value: NodeItem[]) => void
+  onChange: (value: string[]) => void
   onBlur: () => void
 }) {
   const [query, setQuery] = useState('')
+  const anchor = useComboboxAnchor()
   const { data, error, loading } = useApi<{ items: NodeItem[] }>(
     `/nodes?page=1&pageSize=100&q=${encodeURIComponent(query)}`,
   )
-  const selectedIds = new Set(value.map((node) => node.id))
-
-  function toggle(node: NodeItem) {
-    onChange(selectedIds.has(node.id) ? value.filter((item) => item.id !== node.id) : [...value, node])
-  }
+  const knownNodes = useRef(new Map<string, NodeItem>())
+  const items = data?.items.map((node) => node.id) || []
+  const nodesById = new Map([...knownNodes.current, ...(data?.items.map((node) => [node.id, node] as const) || [])])
 
   return (
-    <div className="flex flex-col gap-2">
-      {value.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {value.map((node) => (
-            <Badge key={node.id} variant="outline" className="max-w-full">
-              <span className="truncate">{node.name}</span>
-              <button type="button" aria-label={`移除节点 ${node.name}`} onClick={() => toggle(node)}>
-                <X className="size-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            id="preferred-source-nodes"
-            type="button"
-            variant="outline"
-            className="w-full justify-between font-normal"
-            aria-invalid={invalid}
-            onBlur={onBlur}
-          >
-            <span className="text-muted-foreground">{value.length ? `已选择 ${value.length} 个节点` : '选择节点'}</span>
-            <ChevronDown />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              autoFocus
-              className="pl-8"
-              value={query}
-              maxLength={100}
-              placeholder="搜索节点"
-              onChange={(event) => setQuery(event.target.value)}
-            />
+    <Combobox
+      items={items}
+      multiple
+      autoHighlight
+      value={value}
+      inputValue={query}
+      filter={null}
+      onInputValueChange={setQuery}
+      onValueChange={(nextValue) => {
+        data?.items.forEach((node) => knownNodes.current.set(node.id, node))
+        onChange(nextValue.slice(0, 20))
+      }}
+    >
+      <ComboboxChips ref={anchor}>
+        <ComboboxValue>
+          {(values: string[]) => (
+            <>
+              {values.map((node) => (
+                <ComboboxChip key={node} className="max-w-full">
+                  <span className="truncate">{nodesById.get(node)?.name || node}</span>
+                </ComboboxChip>
+              ))}
+              <ComboboxChipsInput
+                id="preferred-source-nodes"
+                placeholder={values.length ? '继续添加节点' : '选择节点'}
+                maxLength={100}
+                aria-invalid={invalid}
+                onBlur={onBlur}
+              />
+            </>
+          )}
+        </ComboboxValue>
+      </ComboboxChips>
+      <ComboboxContent anchor={anchor}>
+        {loading && !data ? (
+          <div className="flex flex-col gap-2 p-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
           </div>
-          <div className="max-h-64 overflow-y-auto py-1">
-            {loading && !data ? (
-              <div className="flex flex-col gap-2 p-1">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            ) : error ? (
-              <p className="px-2 py-3 text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : data?.items.length ? (
-              data.items.map((node) => {
-                const checked = selectedIds.has(node.id)
+        ) : error ? (
+          <p className="px-2 py-3 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : (
+          <>
+            <ComboboxEmpty>没有匹配节点</ComboboxEmpty>
+            <ComboboxList>
+              {(id) => {
+                const node = nodesById.get(id)!
                 return (
-                  <label
-                    key={node.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted has-disabled:cursor-not-allowed has-disabled:opacity-50"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={!checked && value.length >= 20}
-                      aria-label={`选择节点 ${node.name}`}
-                      onCheckedChange={() => toggle(node)}
-                    />
+                  <ComboboxItem key={id} value={id} disabled={!value.includes(id) && value.length >= 20}>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{node.name}</span>
+                      <span className="block truncate">{node.name}</span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {node.protocol} · {node.server}:{node.port}
                       </span>
                     </span>
-                  </label>
+                  </ComboboxItem>
                 )
-              })
-            ) : (
-              <p className="px-2 py-3 text-center text-sm text-muted-foreground">没有匹配节点</p>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+              }}
+            </ComboboxList>
+          </>
+        )}
+      </ComboboxContent>
+    </Combobox>
   )
 }
 
@@ -181,7 +177,7 @@ export function AddNodeDialog({
     defaultValues: {
       content: '',
       connection: defaultConnection(),
-      sourceNodes: [] as NodeItem[],
+      sourceNodes: [] as string[],
       addresses: '',
       tags: [] as string[],
       enabled: true,
@@ -203,10 +199,7 @@ export function AddNodeDialog({
           connection: mode === 'form' ? connectionSchema : z.any(),
           sourceNodes:
             mode === 'preferred'
-              ? z
-                  .array(z.custom<NodeItem>((value) => Boolean(value && typeof value === 'object')))
-                  .min(1, '请至少选择一个节点')
-                  .max(20, '最多选择 20 个节点')
+              ? z.array(z.string()).min(1, '请至少选择一个节点').max(20, '最多选择 20 个节点')
               : z.array(z.any()),
           addresses:
             mode === 'preferred'
@@ -249,7 +242,7 @@ export function AddNodeDialog({
           const result = await api<NodeImportResult>('/nodes/preferred', {
             method: 'POST',
             body: JSON.stringify({
-              sourceNodeIds: value.sourceNodes.map((node) => node.id),
+              sourceNodeIds: value.sourceNodes,
               addresses: preferredAddresses(value.addresses),
               ...options,
             }),
@@ -268,69 +261,40 @@ export function AddNodeDialog({
   return (
     <AppDialog title="添加节点" onClose={onClose} contentClassName="overflow-hidden">
       <form className="form" onSubmit={submit} noValidate>
-        <Segmented
-          block
+        <Tabs
           value={mode}
-          options={[
-            { label: '导入', value: 'import' },
-            { label: '表单', value: 'form' },
-            { label: '节点优选', value: 'preferred' },
-          ]}
-          onChange={(value) => {
-            setMode(value)
+          onValueChange={(value) => {
+            setMode(value as typeof mode)
             setError('')
           }}
-        />
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="import">导入</TabsTrigger>
+            <TabsTrigger value="form">表单</TabsTrigger>
+            <TabsTrigger value="preferred">节点优选</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <FieldGroup
           className={
-            mode === 'import'
-              ? 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
-              : 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
+            mode === 'form'
+              ? 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
+              : 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
           }
         >
           {mode === 'import' ? (
-            <form.Field name="content">
-              {(field) => {
-                const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-                return (
-                  <Field className="min-h-0 flex-1" data-invalid={invalid}>
-                    <FieldLabel htmlFor="node-import-content">节点内容</FieldLabel>
-                    <Textarea
-                      id="node-import-content"
-                      className="min-h-0 flex-1 resize-none overflow-y-auto field-sizing-fixed"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder={`每行一个节点链接：\nvless://uuid@example.com:443#香港节点\ntrojan://password@example.net:443#日本节点\n\n或粘贴 YAML 节点列表：\nproxies:\n  - name: 新加坡节点\n    type: ss\n    server: sg.example.com\n    port: 8388\n    cipher: aes-128-gcm\n    password: your-password`}
-                      aria-invalid={invalid}
-                    />
-                    {invalid && <FieldError errors={field.state.meta.errors} />}
-                  </Field>
-                )
-              }}
-            </form.Field>
-          ) : mode === 'form' ? (
-            <form.Field name="connection">
-              {(field) => {
-                const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-                return (
-                  <Field data-invalid={invalid}>
-                    <ManualConnectionFields value={field.state.value} onChange={field.handleChange} />
-                    {invalid && <FieldError errors={field.state.meta.errors} />}
-                  </Field>
-                )
-              }}
-            </form.Field>
-          ) : (
             <>
-              <form.Field name="sourceNodes">
+              <form.Field name="tags">
                 {(field) => {
                   const invalid = field.state.meta.isTouched && !field.state.meta.isValid
                   return (
                     <Field data-invalid={invalid}>
-                      <FieldLabel htmlFor="preferred-source-nodes">源节点</FieldLabel>
-                      <PreferredNodeSelect
+                      <FieldLabel htmlFor="import-tags">标签</FieldLabel>
+                      <TagCombobox
+                        id="import-tags"
                         value={field.state.value}
+                        options={tagOptions}
+                        max={10}
+                        placeholder="选择或创建标签"
                         invalid={invalid}
                         onBlur={field.handleBlur}
                         onChange={field.handleChange}
@@ -340,15 +304,113 @@ export function AddNodeDialog({
                   )
                 }}
               </form.Field>
-              <form.Field name="addresses">
+              <form.Field name="content">
+                {(field) => {
+                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                  return (
+                    <Field className="min-h-0 flex-1" data-invalid={invalid}>
+                      <FieldLabel htmlFor="node-import-content">节点内容</FieldLabel>
+                      <Textarea
+                        id="node-import-content"
+                        className="min-h-0 flex-1 resize-none overflow-y-auto field-sizing-fixed"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => field.handleChange(event.target.value)}
+                        placeholder={`每行一个节点链接：\nvless://uuid@example.com:443#香港节点\ntrojan://password@example.net:443#日本节点\n\n或粘贴 YAML 节点列表：\nproxies:\n  - name: 新加坡节点\n    type: ss\n    server: sg.example.com\n    port: 8388\n    cipher: aes-128-gcm\n    password: your-password`}
+                        aria-invalid={invalid}
+                      />
+                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+            </>
+          ) : mode === 'form' ? (
+            <>
+              <form.Field name="tags">
                 {(field) => {
                   const invalid = field.state.meta.isTouched && !field.state.meta.isValid
                   return (
                     <Field data-invalid={invalid}>
+                      <FieldLabel htmlFor="manual-tags">标签</FieldLabel>
+                      <TagCombobox
+                        id="manual-tags"
+                        value={field.state.value}
+                        options={tagOptions}
+                        max={10}
+                        placeholder="选择或创建标签"
+                        invalid={invalid}
+                        onBlur={field.handleBlur}
+                        onChange={field.handleChange}
+                      />
+                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+              <form.Field name="connection">
+                {(field) => {
+                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                  return (
+                    <Field data-invalid={invalid}>
+                      <ManualConnectionFields value={field.state.value} onChange={field.handleChange} />
+                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <form.Field name="sourceNodes">
+                  {(field) => {
+                    const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                    return (
+                      <Field data-invalid={invalid}>
+                        <FieldLabel htmlFor="preferred-source-nodes">源节点</FieldLabel>
+                        <PreferredNodeSelect
+                          value={field.state.value}
+                          invalid={invalid}
+                          onBlur={field.handleBlur}
+                          onChange={field.handleChange}
+                        />
+                        {invalid && <FieldError errors={field.state.meta.errors} />}
+                      </Field>
+                    )
+                  }}
+                </form.Field>
+                <form.Field name="tags">
+                  {(field) => {
+                    const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                    return (
+                      <Field data-invalid={invalid}>
+                        <FieldLabel htmlFor="preferred-tags">标签</FieldLabel>
+                        <TagCombobox
+                          id="preferred-tags"
+                          value={field.state.value}
+                          options={tagOptions}
+                          max={10}
+                          placeholder="选择或创建标签"
+                          invalid={invalid}
+                          onBlur={field.handleBlur}
+                          onChange={field.handleChange}
+                        />
+                        {invalid && <FieldError errors={field.state.meta.errors} />}
+                      </Field>
+                    )
+                  }}
+                </form.Field>
+              </div>
+              <form.Field name="addresses">
+                {(field) => {
+                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                  return (
+                    <Field className="min-h-0 flex-1" data-invalid={invalid}>
                       <FieldLabel htmlFor="preferred-addresses">优选域名或 IP</FieldLabel>
                       <Textarea
                         id="preferred-addresses"
-                        className="min-h-32 resize-y"
+                        className="min-h-0 flex-1 resize-none overflow-y-auto field-sizing-fixed"
                         value={field.state.value}
                         placeholder={
                           'nexusmods.com:443#企业域名 | NexusMods\n104.16.1.1#Cloudflare\n[2606:4700::6810:101]:443#Cloudflare IPv6'
@@ -362,50 +424,8 @@ export function AddNodeDialog({
                   )
                 }}
               </form.Field>
-              <form.Subscribe
-                selector={(state) => ({
-                  sourceCount: state.values.sourceNodes.length,
-                  addressCount: preferredAddresses(state.values.addresses).length,
-                })}
-              >
-                {({ sourceCount, addressCount }) => (
-                  <FieldDescription>将生成 {sourceCount * addressCount} 个节点</FieldDescription>
-                )}
-              </form.Subscribe>
             </>
           )}
-          <form.Field name="tags">
-            {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-              return (
-                <Field data-invalid={invalid}>
-                  <FieldLabel htmlFor="manual-tags">标签</FieldLabel>
-                  <TagMultiSelect
-                    id="manual-tags"
-                    value={field.state.value}
-                    options={tagOptions}
-                    max={10}
-                    placeholder="选择或创建标签"
-                    onBlur={field.handleBlur}
-                    onChange={field.handleChange}
-                  />
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
-                </Field>
-              )
-            }}
-          </form.Field>
-          <Field orientation="horizontal">
-            <form.Field name="enabled">
-              {(field) => (
-                <Checkbox
-                  id="manual-enabled"
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(checked === true)}
-                />
-              )}
-            </form.Field>
-            <FieldLabel htmlFor="manual-enabled">启用节点</FieldLabel>
-          </Field>
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -599,13 +619,14 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
             return (
               <Field data-invalid={invalid}>
                 <FieldLabel htmlFor="node-tags">标签</FieldLabel>
-                <TagMultiSelect
+                <TagCombobox
                   id="node-tags"
                   value={field.state.value}
                   options={tagOptions}
                   inherited={node.inheritedTags}
                   max={10}
                   placeholder="选择或创建标签"
+                  invalid={invalid}
                   onBlur={field.handleBlur}
                   onChange={field.handleChange}
                 />
