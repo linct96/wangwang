@@ -5,14 +5,15 @@ import { body, fail, ok } from '../http'
 import { profileSources, sources } from '../db'
 import { createJob, db, enqueueAffectedProfiles } from '../tasks'
 import { assertRemoteUrl } from '../security'
-import { replaceSourceTags } from '../tag-store'
+import { normalizeTagInputs, normalizeTagName } from '../tag-model'
+import { replaceSourceTags, sourceTagViews } from '../tag-store'
 
 const nodeNameFilterSchema = z
   .string()
   .trim()
   .max(200)
   .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
-const nodeTagSchema = z.string().trim().max(24)
+const nodeTagsSchema = z.array(z.string().trim().min(1).max(24)).max(10)
 const userAgentSchema = z
   .string()
   .trim()
@@ -25,7 +26,7 @@ export const sourceCreateSchema = z.object({
   url: z.string().trim().min(1).max(2048),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
-  nodeTag: nodeTagSchema.optional().default(''),
+  nodeTags: nodeTagsSchema.optional().default([]),
   userAgent: userAgentSchema.optional().default('mihomo'),
 })
 
@@ -35,7 +36,7 @@ export const sourceUpdateSchema = z.object({
   enabled: z.boolean().optional(),
   refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).optional(),
   nodeNameFilter: nodeNameFilterSchema.optional(),
-  nodeTag: nodeTagSchema.optional(),
+  nodeTags: nodeTagsSchema.optional(),
   userAgent: userAgentSchema.optional(),
 })
 
@@ -53,8 +54,9 @@ function normalizeNodeNameFilter(value: string | undefined) {
   return normalized || null
 }
 
-export function sourceView(source: typeof sources.$inferSelect, profileCount = 0) {
-  return { ...source, pendingUrl: Boolean(source.pendingUrl), profileCount }
+export function sourceView(source: typeof sources.$inferSelect, profileCount = 0, nodeTags: string[] = []) {
+  const { nodeTag: _nodeTag, ...view } = source
+  return { ...view, nodeTags, pendingUrl: Boolean(source.pendingUrl), profileCount }
 }
 
 export const sourcesRouter = new Hono<{ Bindings: Env }>()
@@ -67,13 +69,17 @@ sourcesRouter.get('/', async (c) => {
     .from(sources)
     .where(includeSystem ? undefined : eq(sources.kind, 'url'))
     .orderBy(asc(sources.createdAt))
+  const tagsBySource = await sourceTagViews(
+    c.env,
+    result.map((source) => source.id),
+  )
   const views = await Promise.all(
     result.map(async (source) => {
       const [{ value }] = await database
         .select({ value: count() })
         .from(profileSources)
         .where(eq(profileSources.sourceId, source.id))
-      return sourceView(source, Number(value))
+      return sourceView(source, Number(value), tagsBySource.get(source.id)?.map((tag) => tag.name) ?? [])
     }),
   )
   return ok(c, views)
@@ -94,7 +100,6 @@ sourcesRouter.post('/', async (c) => {
     kind: 'url' as const,
     url: input.url,
     nodeNameFilter,
-    nodeTag: input.nodeTag || null,
     userAgent: input.userAgent,
     refreshIntervalHours: input.refreshIntervalHours,
     enabled: true,
@@ -103,7 +108,7 @@ sourcesRouter.post('/', async (c) => {
     updatedAt: now,
   }
   await database.insert(sources).values(source)
-  await replaceSourceTags(c.env, source.id, source.nodeTag ? [source.nodeTag] : [])
+  await replaceSourceTags(c.env, source.id, input.nodeTags)
   const job = await createJob(c.env, 'refresh_source', source.id)
   return c.json({ data: { sourceId: source.id, jobId: job.id } }, 202)
 })
@@ -120,8 +125,12 @@ sourcesRouter.patch('/:id', async (c) => {
   if (input.url) assertRemoteUrl(input.url)
   const nodeNameFilter =
     input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
-  const nodeTag = input.nodeTag === undefined ? current.nodeTag : input.nodeTag || null
-  const nodeTagChanged = nodeTag !== current.nodeTag
+  const currentNodeTags = (await sourceTagViews(c.env, [current.id])).get(current.id)?.map((tag) => tag.name) || []
+  const nodeTags = input.nodeTags === undefined ? currentNodeTags : normalizeTagInputs(input.nodeTags, 10)
+  const currentNormalizedTags = new Set(currentNodeTags.map(normalizeTagName))
+  const nodeTagsChanged =
+    currentNormalizedTags.size !== nodeTags.length ||
+    nodeTags.some((tag) => !currentNormalizedTags.has(normalizeTagName(tag)))
   const userAgent = input.userAgent ?? current.userAgent
   const userAgentChanged = userAgent !== current.userAgent
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
@@ -136,7 +145,6 @@ sourcesRouter.patch('/:id', async (c) => {
       enabled: input.enabled,
       refreshIntervalHours: input.refreshIntervalHours,
       nodeNameFilter,
-      nodeTag,
       userAgent,
       pendingUrl: input.url,
       status: input.url ? 'idle' : undefined,
@@ -147,11 +155,11 @@ sourcesRouter.patch('/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(sources.id, current.id))
-  if (nodeTagChanged) await replaceSourceTags(c.env, current.id, nodeTag ? [nodeTag] : [])
+  if (nodeTagsChanged) await replaceSourceTags(c.env, current.id, nodeTags)
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
-  if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagChanged)
+  if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagsChanged)
     await enqueueAffectedProfiles(c.env, current.id)
-  return ok(c, { source: sourceView(updated!), jobId: null })
+  return ok(c, { source: sourceView(updated!, 0, nodeTags), jobId: null })
 })
 
 sourcesRouter.delete('/:id', async (c) => {

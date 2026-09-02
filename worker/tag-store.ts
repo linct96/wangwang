@@ -76,6 +76,22 @@ export async function replaceProfileTagFilters(env: Env, profileId: string, name
   return tags
 }
 
+export async function sourceTagViews(env: Env, sourceIds: string[]) {
+  const result = new Map<string, TagView[]>()
+  for (const sourceId of sourceIds) result.set(sourceId, [])
+  if (!sourceIds.length) return result
+  const rows = await env.DB.prepare(
+    `SELECT st.source_id AS sourceId, t.id, t.name
+     FROM source_tags st JOIN tags t ON t.id = st.tag_id
+     WHERE st.source_id IN (${placeholders(sourceIds.length)})
+     ORDER BY t.normalized_name`,
+  )
+    .bind(...sourceIds)
+    .all<{ sourceId: string; id: string; name: string }>()
+  for (const row of rows.results) result.get(row.sourceId)?.push({ id: row.id, name: row.name })
+  return result
+}
+
 export async function nodeTagViews(env: Env, nodeIds: string[]) {
   const result = new Map<string, { direct: TagView[]; inherited: TagView[] }>()
   for (const nodeId of nodeIds) result.set(nodeId, { direct: [], inherited: [] })
