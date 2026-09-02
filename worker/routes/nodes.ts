@@ -10,7 +10,7 @@ import {
   proxyConfigError,
   restoreProxySecrets,
 } from '../proxy/index'
-import { db, enqueueAffectedProfiles, enqueueProfilesForNode, enqueueProfilesForNodes, mergeNodeTags } from '../tasks'
+import { db, enqueueAffectedProfiles, enqueueProfilesForNode, enqueueProfilesForNodes } from '../tasks'
 import {
   buildManualConfig,
   connectionView,
@@ -20,12 +20,21 @@ import {
   nodeCreateSchema,
   nodeImportSchema,
   nodeKinds,
-  nodeSourceTags,
   nodeUpdateSchema,
 } from '../node-config'
+import { mergeTagViews, normalizeTagInputs, normalizeTagName } from '../tag-model'
+import { nodeTagViews, replaceNodeDirectTags } from '../tag-store'
 
 export const nodesRouter = new Hono<{ Bindings: Env }>()
 const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic', 'anytls'])
+
+function nodeTagPayload(view: { direct: Array<{ id: string; name: string }>; inherited: Array<{ id: string; name: string }> }) {
+  return {
+    tags: mergeTagViews(view.direct, view.inherited).map((tag) => tag.name),
+    directTags: view.direct,
+    inheritedTags: view.inherited,
+  }
+}
 
 nodesRouter.post('/', async (c) => {
   const input = await body(c, nodeCreateSchema)
@@ -42,6 +51,7 @@ nodesRouter.post('/', async (c) => {
     .get()
   if (duplicate) return fail(c, 409, 'NODE_DUPLICATE', '相同连接参数的节点已存在')
 
+  const directTagNames = normalizeTagInputs(input.tags, 10)
   const id = crypto.randomUUID()
   const now = Date.now()
   const [{ position }] = await database
@@ -59,7 +69,7 @@ nodesRouter.post('/', async (c) => {
       config.server,
       config.port,
       JSON.stringify(config),
-      JSON.stringify([...new Set(input.tags)]),
+      JSON.stringify(directTagNames),
       input.enabled ? 1 : 0,
       now,
       now,
@@ -75,7 +85,10 @@ nodesRouter.post('/', async (c) => {
       MANUAL_SOURCE_ID,
     ),
   ])
+  await replaceNodeDirectTags(c.env, id, directTagNames)
   await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
+  const views = await nodeTagViews(c.env, [id])
+  const view = views.get(id) || { direct: [], inherited: [] }
   return c.json(
     {
       data: {
@@ -86,7 +99,7 @@ nodesRouter.post('/', async (c) => {
           protocol: config.type,
           server: config.server,
           port: config.port,
-          tags: [...new Set(input.tags)],
+          ...nodeTagPayload(view),
           enabled: input.enabled,
           updatedAt: new Date(now),
           management: 'manual',
@@ -132,11 +145,14 @@ nodesRouter.post('/import', async (c) => {
     return fail(c, 409, 'NODE_LIMIT', `最多还能导入 ${Math.max(0, 2000 - Number(value))} 个节点`)
 
   if (imported.length) {
+    const directTagNames = normalizeTagInputs(input.tags, 10)
     const now = Date.now()
-    const tags = JSON.stringify([...new Set(input.tags)])
+    const tags = JSON.stringify(directTagNames)
     const statements: D1PreparedStatement[] = []
+    const createdIds: string[] = []
     imported.forEach(({ config, fingerprint: nodeFingerprint }, index) => {
       const id = crypto.randomUUID()
+      createdIds.push(id)
       statements.push(
         c.env.DB.prepare(
           `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
@@ -164,6 +180,7 @@ nodesRouter.post('/import', async (c) => {
       ).bind(MANUAL_SOURCE_ID, now, MANUAL_SOURCE_ID),
     )
     await c.env.DB.batch(statements)
+    for (const id of createdIds) await replaceNodeDirectTags(c.env, id, directTagNames)
     await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
   }
 
@@ -179,9 +196,21 @@ nodesRouter.get('/', async (c) => {
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 50))
   const protocol = c.req.query('protocol')?.trim()
   const enabled = c.req.query('enabled')
+  const tagId = c.req.query('tagId')?.trim()
   const filters = and(
     protocol ? eq(nodes.protocol, protocol) : undefined,
     enabled === 'true' ? eq(nodes.enabled, true) : enabled === 'false' ? eq(nodes.enabled, false) : undefined,
+    tagId
+      ? sql`(
+          EXISTS (SELECT 1 FROM node_tags nt WHERE nt.node_id = ${nodes.id} AND nt.tag_id = ${tagId})
+          OR EXISTS (
+            SELECT 1 FROM source_nodes sn
+            JOIN sources s ON s.id = sn.source_id
+            JOIN source_tags st ON st.source_id = s.id
+            WHERE sn.node_id = ${nodes.id} AND s.enabled = 1 AND st.tag_id = ${tagId}
+          )
+        )`
+      : undefined,
     sql`EXISTS (
       SELECT 1 FROM source_nodes sn
       JOIN sources s ON s.id = sn.source_id
@@ -200,14 +229,15 @@ nodesRouter.get('/', async (c) => {
     database.select({ total: count() }).from(nodes).where(filters),
   ])
   const nodeIds = rows.map((node) => node.id)
-  const [kinds, sourceTags] = await Promise.all([nodeKinds(c.env, nodeIds), nodeSourceTags(c.env, nodeIds)])
+  const [kinds, tagViews] = await Promise.all([nodeKinds(c.env, nodeIds), nodeTagViews(c.env, nodeIds)])
   return ok(c, {
     items: rows.map(({ config, ...node }) => {
       const nodeManagement = management(kinds.get(node.id) || [])
+      const view = tagViews.get(node.id) || { direct: [], inherited: [] }
       return {
         ...node,
         name: node.alias || config.name,
-        tags: mergeNodeTags(node.tags, sourceTags.get(node.id) || []),
+        ...nodeTagPayload(view),
         management: nodeManagement,
         canEditConnection: nodeManagement === 'manual',
         canDelete: nodeManagement === 'manual' || nodeManagement === 'mixed',
@@ -236,13 +266,14 @@ nodesRouter.get('/:id', async (c) => {
     .where(eq(nodes.id, c.req.param('id')))
     .get()
   if (!current) return fail(c, 404, 'NODE_NOT_FOUND', '节点不存在')
-  const [kinds, sourceTags] = await Promise.all([nodeKinds(c.env, [current.id]), nodeSourceTags(c.env, [current.id])])
+  const [kinds, tagViews] = await Promise.all([nodeKinds(c.env, [current.id]), nodeTagViews(c.env, [current.id])])
   const nodeManagement = management(kinds.get(current.id) || [])
+  const view = tagViews.get(current.id) || { direct: [], inherited: [] }
   const { config, ...safe } = current
   return ok(c, {
     ...safe,
     name: safe.alias || config.name,
-    tags: mergeNodeTags(safe.tags, sourceTags.get(current.id) || []),
+    ...nodeTagPayload(view),
     management: nodeManagement,
     canEditConnection: nodeManagement === 'manual',
     canDelete: nodeManagement === 'manual' || nodeManagement === 'mixed',
@@ -256,7 +287,7 @@ nodesRouter.patch('/:id', async (c) => {
   const id = c.req.param('id')
   const current = await db(c.env).select().from(nodes).where(eq(nodes.id, id)).get()
   if (!current) return fail(c, 404, 'NODE_NOT_FOUND', '节点不存在')
-  const [kinds, sourceTags] = await Promise.all([nodeKinds(c.env, [id]), nodeSourceTags(c.env, [id])])
+  const [kinds, tagViews] = await Promise.all([nodeKinds(c.env, [id]), nodeTagViews(c.env, [id])])
   const nodeManagement = management(kinds.get(id) || [])
   if (input.connection && input.yaml) return fail(c, 422, 'NODE_UPDATE_CONFLICT', '表单参数和 YAML 不能同时提交')
   if ((input.connection || input.yaml) && nodeManagement !== 'manual')
@@ -285,13 +316,17 @@ nodesRouter.patch('/:id', async (c) => {
       .get()
     if (duplicate && duplicate.id !== id) return fail(c, 409, 'NODE_DUPLICATE', '相同连接参数的节点已存在')
   }
-  const inheritedTags = new Set(sourceTags.get(id) || [])
-  const tags = input.tags ? [...new Set(input.tags.filter((tag) => !inheritedTags.has(tag)))] : undefined
+  const inherited = tagViews.get(id)?.inherited || []
+  const inheritedNames = new Set(inherited.map((tag) => normalizeTagName(tag.name)))
+  const directTagNames =
+    input.tags === undefined
+      ? undefined
+      : normalizeTagInputs(input.tags, 10).filter((tag) => !inheritedNames.has(normalizeTagName(tag)))
   await db(c.env)
     .update(nodes)
     .set({
       alias: input.alias === undefined ? undefined : input.alias || null,
-      tags,
+      tags: directTagNames,
       enabled: input.enabled,
       fingerprint: nodeFingerprint,
       protocol: config.type,
@@ -301,6 +336,7 @@ nodesRouter.patch('/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(nodes.id, id))
+  if (directTagNames !== undefined) await replaceNodeDirectTags(c.env, id, directTagNames)
   if (connectionChanged)
     await db(c.env)
       .update(sourceNodes)
@@ -308,11 +344,13 @@ nodesRouter.patch('/:id', async (c) => {
       .where(and(eq(sourceNodes.sourceId, MANUAL_SOURCE_ID), eq(sourceNodes.nodeId, id)))
   await enqueueProfilesForNode(c.env, id)
   const updated = await db(c.env).select().from(nodes).where(eq(nodes.id, id)).get()
+  const updatedViews = await nodeTagViews(c.env, [id])
+  const view = updatedViews.get(id) || { direct: [], inherited: [] }
   const { config: updatedConfig, ...safe } = updated!
   return ok(c, {
     ...safe,
     name: safe.alias || updatedConfig.name,
-    tags: mergeNodeTags(safe.tags, [...inheritedTags]),
+    ...nodeTagPayload(view),
     management: nodeManagement,
     canEditConnection: nodeManagement === 'manual',
     canDelete: nodeManagement === 'manual' || nodeManagement === 'mixed',
