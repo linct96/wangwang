@@ -27,7 +27,12 @@ export function NodesPage() {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<NodeItem>()
   const [deleting, setDeleting] = useState<NodeItem>()
+  const [deletingBatch, setDeletingBatch] = useState<NodeItem[]>()
   const [deletingBusy, setDeletingBusy] = useState(false)
+  const selectedNodes = data?.items.filter((item) => selected.includes(item.id)) || []
+  const deletableSelected = selectedNodes.filter((item) => item.canDelete)
+  const deletingBatchCount = deletingBatch?.filter((item) => item.canDelete).length || 0
+  const deletingBatchSkipped = (deletingBatch?.length || 0) - deletingBatchCount
   const pages = Math.max(1, Math.ceil((data?.total || 0) / 50))
   async function batch(value: boolean) {
     try {
@@ -45,10 +50,34 @@ export function NodesPage() {
     try {
       await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
       setDeleting(undefined)
+      setSelected((ids) => ids.filter((id) => id !== deleting.id))
       await Promise.all([reload(), reloadTags()])
       toast.success('手动节点已删除')
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '删除失败')
+    } finally {
+      setDeletingBusy(false)
+    }
+  }
+  async function removeBatch() {
+    if (!deletingBatch?.length) return
+    setDeletingBusy(true)
+    try {
+      const result = await api<{ deleted: number; detached: number; skipped: number }>('/nodes/batch', {
+        method: 'DELETE',
+        body: JSON.stringify({ ids: deletingBatch.map((node) => node.id) }),
+      })
+      setDeletingBatch(undefined)
+      setSelected([])
+      await Promise.all([reload(), reloadTags()])
+      const details = [
+        result.deleted ? `删除 ${result.deleted} 个` : '',
+        result.detached ? `解除手动来源 ${result.detached} 个` : '',
+        result.skipped ? `跳过 ${result.skipped} 个订阅节点` : '',
+      ].filter(Boolean)
+      toast.success(details.join('，') || '没有可删除的节点')
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : '批量删除失败')
     } finally {
       setDeletingBusy(false)
     }
@@ -144,6 +173,15 @@ export function NodesPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={() => void batch(false)}>
               停用
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={!deletableSelected.length}
+              onClick={() => setDeletingBatch(selectedNodes)}
+            >
+              <Trash2 data-icon="inline-start" />
+              删除
             </Button>
           </div>
         )}
@@ -248,7 +286,10 @@ export function NodesPage() {
           size="icon"
           aria-label="上一页"
           disabled={page <= 1}
-          onClick={() => setPage(page - 1)}
+          onClick={() => {
+            setSelected([])
+            setPage(page - 1)
+          }}
         >
           <ChevronLeft />
         </Button>
@@ -260,7 +301,10 @@ export function NodesPage() {
           size="icon"
           aria-label="下一页"
           disabled={page >= pages}
-          onClick={() => setPage(page + 1)}
+          onClick={() => {
+            setSelected([])
+            setPage(page + 1)
+          }}
         >
           <ChevronRight />
         </Button>
@@ -305,6 +349,18 @@ export function NodesPage() {
           busy={deletingBusy}
           onClose={() => setDeleting(undefined)}
           onConfirm={() => void remove()}
+        />
+      )}
+      {deletingBatch && (
+        <AppConfirmDialog
+          title="批量删除节点"
+          description={`将删除 ${deletingBatchCount} 个手动节点${
+            deletingBatchSkipped ? `，跳过 ${deletingBatchSkipped} 个订阅节点` : ''
+          }。混合来源节点会解除手动来源，订阅来源仍持有的节点不会被删除。`}
+          confirmLabel="删除"
+          busy={deletingBusy}
+          onClose={() => setDeletingBatch(undefined)}
+          onConfirm={() => void removeBatch()}
         />
       )}
     </div>
