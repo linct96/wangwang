@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { body, fail, ok } from '../http'
 import { nodes, profileSources, sourceNodes } from '../db'
+import type { ProxyConfig } from '../db'
 import {
   editableProxyYaml,
   fingerprint,
@@ -22,9 +23,11 @@ import {
   nodeImportSchema,
   nodeKinds,
   nodeUpdateSchema,
+  preferredNodeCreateSchema,
 } from '../node-config'
 import { mergeTagViews, normalizeTagInputs } from '../tag-model'
 import { nodeTagViews, replaceNodeDirectTags, replaceNodeDirectTagsForNodes } from '../tag-store'
+import type { PreferredEndpoint } from '../../shared/preferred-node'
 
 export const nodesRouter = new Hono<{ Bindings: Env }>()
 const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic', 'anytls'])
@@ -38,6 +41,28 @@ function nodeTagPayload(view: {
     directTags: view.direct,
     inheritedTags: view.inherited,
   }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function preferredConfig(source: ProxyConfig, sourceName: string, endpoint: PreferredEndpoint) {
+  const config = structuredClone(source)
+  const originalServer = source.server
+  if (['hysteria2', 'tuic', 'anytls'].includes(config.type) && !config.sni) config.sni = originalServer
+  else if (config.tls && !config.servername && !config.sni) config.servername = originalServer
+  if (config.network === 'ws' || config['ws-opts']) {
+    const options = { ...record(config['ws-opts']) }
+    const headers = { ...record(options.headers) }
+    if (!Object.keys(headers).some((key) => key.toLowerCase() === 'host')) headers.Host = originalServer
+    config['ws-opts'] = { ...options, headers }
+  }
+  const suffix = ` | ${endpoint.name}`
+  config.name = suffix.length < 80 ? `${sourceName.slice(0, 80 - suffix.length)}${suffix}` : endpoint.name.slice(0, 80)
+  config.server = endpoint.server
+  if (endpoint.port !== undefined) config.port = endpoint.port
+  return config
 }
 
 nodesRouter.post('/', async (c) => {
@@ -195,12 +220,103 @@ nodesRouter.post('/import', async (c) => {
   })
 })
 
+nodesRouter.post('/preferred', async (c) => {
+  const input = await body(c, preferredNodeCreateSchema)
+  const database = db(c.env)
+  const sourceIds = [...new Set(input.sourceNodeIds)]
+  const sourceRows = await database
+    .select({ id: nodes.id, alias: nodes.alias, config: nodes.config })
+    .from(nodes)
+    .where(inArray(nodes.id, sourceIds))
+  const sourcesById = new Map(sourceRows.map((node) => [node.id, node]))
+  const warnings = sourceIds
+    .filter((id) => !sourcesById.has(id))
+    .map((id) => `节点 ${id} 不存在`)
+    .slice(0, 20)
+  const candidates = new Map<string, { config: ProxyConfig; fingerprint: string }>()
+
+  for (const sourceId of sourceIds) {
+    const source = sourcesById.get(sourceId)
+    if (!source) continue
+    for (const endpoint of input.addresses) {
+      const config = preferredConfig(source.config, source.alias || source.config.name, endpoint)
+      const configError = proxyConfigError(config)
+      if (configError) {
+        if (warnings.length < 20) warnings.push(`${config.name}：${configError}`)
+        continue
+      }
+      const nodeFingerprint = await fingerprint(config)
+      candidates.set(nodeFingerprint, { config, fingerprint: nodeFingerprint })
+    }
+  }
+
+  const [existing, [{ value }], [{ position }]] = await Promise.all([
+    database.select({ fingerprint: nodes.fingerprint }).from(nodes),
+    database.select({ value: count() }).from(nodes),
+    database
+      .select({ position: sql<number>`coalesce(max(${sourceNodes.position}), -1) + 1` })
+      .from(sourceNodes)
+      .where(eq(sourceNodes.sourceId, MANUAL_SOURCE_ID)),
+  ])
+  const fingerprints = new Set(existing.map((node) => node.fingerprint))
+  const created = [...candidates.values()].filter((node) => !fingerprints.has(node.fingerprint))
+  if (Number(value) + created.length > 2000)
+    return fail(c, 409, 'NODE_LIMIT', `最多还能生成 ${Math.max(0, 2000 - Number(value))} 个节点`)
+
+  if (created.length) {
+    const directTagNames = normalizeTagInputs(input.tags, 10)
+    const now = Date.now()
+    const tags = JSON.stringify(directTagNames)
+    const statements: D1PreparedStatement[] = []
+    const createdIds: string[] = []
+    created.forEach(({ config, fingerprint: nodeFingerprint }, index) => {
+      const id = crypto.randomUUID()
+      createdIds.push(id)
+      statements.push(
+        c.env.DB.prepare(
+          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+        ).bind(
+          id,
+          nodeFingerprint,
+          config.type,
+          config.server,
+          config.port,
+          JSON.stringify(config),
+          tags,
+          input.enabled ? 1 : 0,
+          now,
+          now,
+        ),
+        c.env.DB.prepare(
+          'INSERT INTO source_nodes (source_id, node_id, original_name, position) VALUES (?, ?, ?, ?)',
+        ).bind(MANUAL_SOURCE_ID, id, config.name, Number(position) + index),
+      )
+    })
+    statements.push(
+      c.env.DB.prepare(
+        'UPDATE sources SET node_count = (SELECT count(*) FROM source_nodes WHERE source_id = ?), updated_at = ? WHERE id = ?',
+      ).bind(MANUAL_SOURCE_ID, now, MANUAL_SOURCE_ID),
+    )
+    await c.env.DB.batch(statements)
+    await replaceNodeDirectTagsForNodes(c.env, createdIds, directTagNames)
+    await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
+  }
+
+  return ok(c, {
+    created: created.length,
+    skipped: input.sourceNodeIds.length * input.addresses.length - created.length,
+    warnings,
+  })
+})
+
 nodesRouter.get('/', async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 50))
   const protocol = c.req.query('protocol')?.trim()
   const enabled = c.req.query('enabled')
   const tagId = c.req.query('tagId')?.trim()
+  const query = c.req.query('q')?.trim().slice(0, 100)
   const filters = and(
     protocol ? eq(nodes.protocol, protocol) : undefined,
     enabled === 'true' ? eq(nodes.enabled, true) : enabled === 'false' ? eq(nodes.enabled, false) : undefined,
@@ -214,6 +330,9 @@ nodesRouter.get('/', async (c) => {
             WHERE sn.node_id = ${nodes.id} AND s.enabled = 1 AND st.tag_id = ${tagId}
           )
         )`
+      : undefined,
+    query
+      ? sql`instr(lower(coalesce(${nodes.alias}, json_extract(${nodes.config}, '$.name'), '') || ' ' || ${nodes.server} || ' ' || ${nodes.protocol}), lower(${query})) > 0`
       : undefined,
     sql`EXISTS (
       SELECT 1 FROM source_nodes sn

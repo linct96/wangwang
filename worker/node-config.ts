@@ -1,5 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
+import { parsePreferredEndpoint } from '../shared/preferred-node'
 import { db } from './tasks'
 import { sourceNodes, sources } from './db'
 import type { ProxyConfig } from './db'
@@ -93,6 +94,29 @@ export const nodeImportSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(24)).max(10).default([]),
   enabled: z.boolean().default(true),
 })
+const preferredAddressSchema = z
+  .string()
+  .trim()
+  .min(1, '优选地址不能为空')
+  .max(340, '单行优选配置不能超过 340 个字符')
+  .transform((value, context) => {
+    try {
+      return parsePreferredEndpoint(value)
+    } catch (reason) {
+      context.addIssue({ code: 'custom', message: reason instanceof Error ? reason.message : '优选地址无效' })
+      return z.NEVER
+    }
+  })
+export const preferredNodeCreateSchema = z
+  .object({
+    sourceNodeIds: z.array(z.string().min(1).max(64)).min(1, '请至少选择一个节点').max(20, '最多选择 20 个节点'),
+    addresses: z.array(preferredAddressSchema).min(1, '请至少填写一个优选地址').max(20, '最多填写 20 个优选地址'),
+    tags: z.array(z.string().trim().min(1).max(24)).max(10).default([]),
+    enabled: z.boolean().default(true),
+  })
+  .refine(({ sourceNodeIds, addresses }) => sourceNodeIds.length * addresses.length <= 100, {
+    message: '单次最多生成 100 个节点',
+  })
 export const nodeUpdateSchema = z.object({
   alias: z.string().trim().max(80).nullable().optional(),
   enabled: z.boolean().optional(),
