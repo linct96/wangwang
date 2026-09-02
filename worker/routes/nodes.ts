@@ -9,6 +9,7 @@ import {
   parseProxyText,
   proxyConfigError,
   restoreProxySecrets,
+  shareUri,
 } from '../proxy/index'
 import { db, enqueueAffectedProfiles, enqueueProfilesForNode, enqueueProfilesForNodes } from '../tasks'
 import {
@@ -240,6 +241,7 @@ nodesRouter.get('/', async (c) => {
       return {
         ...node,
         name: node.alias || config.name,
+        url: shareUri(config, node.alias || config.name),
         ...nodeTagPayload(view),
         management: nodeManagement,
         canEditConnection: nodeManagement === 'manual',
@@ -276,6 +278,7 @@ nodesRouter.get('/:id', async (c) => {
   return ok(c, {
     ...safe,
     name: safe.alias || config.name,
+    url: shareUri(config, safe.alias || config.name),
     ...nodeTagPayload(view),
     management: nodeManagement,
     canEditConnection: nodeManagement === 'manual',

@@ -12,6 +12,8 @@ import { fingerprint as fingerprintNode } from './fingerprint'
 import { validate } from './validate'
 import { detectFormat } from './subscription'
 
+export { shareUri } from './share-uri'
+
 const MAX_TEXT_BYTES = 1024 * 1024
 const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hysteria2:', 'hy2:', 'tuic:', 'anytls:'])
 const SECRET_FIELDS = ['password', 'uuid', 'obfs-password'] as const
