@@ -184,6 +184,7 @@ export function buildManualConfig(input: ManualConnection, current?: ProxyConfig
 export function connectionView(config: ProxyConfig) {
   if (
     Object.hasOwn(config, 'ech-opts') ||
+    Object.hasOwn(config, 'encryption') ||
     (Object.hasOwn(config, 'client-fingerprint') && !['vmess', 'vless', 'trojan'].includes(config.type))
   )
     return null
@@ -210,7 +211,7 @@ export function connectionView(config: ProxyConfig) {
     return {
       ...common,
       cipher: String(config.cipher || ''),
-      password: '',
+      password: String(config.password || ''),
       hasPassword: Boolean(config.password),
       plugin: String(config.plugin || ''),
       pluginOptions: (config['plugin-opts'] || {}) as Record<string, string>,
@@ -220,31 +221,44 @@ export function connectionView(config: ProxyConfig) {
       ...common,
       ...transport,
       ...tls,
-      uuid: '',
+      uuid: String(config.uuid || ''),
       hasUuid: Boolean(config.uuid),
       alterId: Number(config.alterId || 0),
       cipher: String(config.cipher || 'auto'),
     }
   if (config.type === 'vless')
-    return { ...common, ...transport, ...tls, uuid: '', hasUuid: Boolean(config.uuid), flow: String(config.flow || '') }
+    return {
+      ...common,
+      ...transport,
+      ...tls,
+      uuid: String(config.uuid || ''),
+      hasUuid: Boolean(config.uuid),
+      flow: String(config.flow || ''),
+    }
   if (config.type === 'trojan')
-    return { ...common, ...transport, ...tls, password: '', hasPassword: Boolean(config.password) }
+    return {
+      ...common,
+      ...transport,
+      ...tls,
+      password: String(config.password || ''),
+      hasPassword: Boolean(config.password),
+    }
   if (config.type === 'hysteria2')
     return {
       ...common,
-      password: '',
+      password: String(config.password || ''),
       hasPassword: Boolean(config.password),
       sni: String(config.sni || ''),
       skipCertVerify: Boolean(config['skip-cert-verify']),
       obfs: String(config.obfs || ''),
-      obfsPassword: '',
+      obfsPassword: String(config['obfs-password'] || ''),
       hasObfsPassword: Boolean(config['obfs-password']),
     }
   return {
     ...common,
-    uuid: '',
+    uuid: String(config.uuid || ''),
     hasUuid: Boolean(config.uuid),
-    password: '',
+    password: String(config.password || ''),
     hasPassword: Boolean(config.password),
     sni: String(config.sni || ''),
     congestionController: String(config['congestion-controller'] || 'bbr'),
