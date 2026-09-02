@@ -19,34 +19,32 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   respect-rules: true
+  prefer-h3: false
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "*.lan"
-    - "*.local"
-    - "*.localdomain"
+    - +.lan
+    - +.local
+    - +.localdomain
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
     - localhost.weixin.qq.com
-    - localhost.work.weixin.qq.com
-    - "localhost.*.weixin.qq.com"
-    - "*.ntp.org"
+    - localhost.*.weixin.qq.com
+    - +.ntp.org
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - "*.n.n.srv.nintendo.net"
+    - +.n.n.srv.nintendo.net
     - +.stun.playstation.net
-    - "*.xboxlive.com"
+    - +.xboxlive.com
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://dns.google/dns-query"
-    - "https://cloudflare-dns.com/dns-query"
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
   proxy-server-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   direct-nameserver:
@@ -54,10 +52,9 @@ dns:
     - https://doh.pub/dns-query
   direct-nameserver-follow-policy: true
   nameserver-policy:
-    "rule-set:private-domain":
-      - https://dns.alidns.com/dns-query
-      - https://doh.pub/dns-query
-    "rule-set:cn-domain":
+    "geosite:private":
+      - system
+    "geosite:cn":
       - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
 proxy-groups:
@@ -123,34 +120,32 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   respect-rules: true
+  prefer-h3: false
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "*.lan"
-    - "*.local"
-    - "*.localdomain"
+    - +.lan
+    - +.local
+    - +.localdomain
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
     - localhost.weixin.qq.com
-    - localhost.work.weixin.qq.com
-    - "localhost.*.weixin.qq.com"
-    - "*.ntp.org"
+    - localhost.*.weixin.qq.com
+    - +.ntp.org
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - "*.n.n.srv.nintendo.net"
+    - +.n.n.srv.nintendo.net
     - +.stun.playstation.net
-    - "*.xboxlive.com"
+    - +.xboxlive.com
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://dns.google/dns-query"
-    - "https://cloudflare-dns.com/dns-query"
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
   proxy-server-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   direct-nameserver:
@@ -158,10 +153,9 @@ dns:
     - https://doh.pub/dns-query
   direct-nameserver-follow-policy: true
   nameserver-policy:
-    "rule-set:private-domain":
-      - https://dns.alidns.com/dns-query
-      - https://doh.pub/dns-query
-    "rule-set:cn-domain":
+    "geosite:private":
+      - system
+    "geosite:cn":
       - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
 proxy-groups:
@@ -311,34 +305,32 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   respect-rules: true
+  prefer-h3: false
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "*.lan"
-    - "*.local"
-    - "*.localdomain"
+    - +.lan
+    - +.local
+    - +.localdomain
     - localhost
     - localhost.ptlogin2.qq.com
     - localhost.sec.qq.com
     - localhost.weixin.qq.com
-    - localhost.work.weixin.qq.com
-    - "localhost.*.weixin.qq.com"
-    - "*.ntp.org"
+    - localhost.*.weixin.qq.com
+    - +.ntp.org
     - +.stun.*.*
     - +.stun.*.*.*
     - +.stun.*.*.*.*
     - +.stun.*.*.*.*.*
-    - "*.n.n.srv.nintendo.net"
+    - +.n.n.srv.nintendo.net
     - +.stun.playstation.net
-    - "*.xboxlive.com"
+    - +.xboxlive.com
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
   nameserver:
-    - "https://dns.google/dns-query"
-    - "https://cloudflare-dns.com/dns-query"
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
   proxy-server-nameserver:
-    - 223.5.5.5
-    - 119.29.29.29
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   direct-nameserver:
@@ -346,10 +338,9 @@ dns:
     - https://doh.pub/dns-query
   direct-nameserver-follow-policy: true
   nameserver-policy:
-    "rule-set:private-domain":
-      - https://dns.alidns.com/dns-query
-      - https://doh.pub/dns-query
-    "rule-set:cn-domain":
+    "geosite:private":
+      - system
+    "geosite:cn":
       - https://dns.alidns.com/dns-query
       - https://doh.pub/dns-query
 proxy-groups:
