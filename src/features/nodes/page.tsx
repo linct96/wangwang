@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
@@ -52,6 +52,13 @@ export function NodesPage() {
     } finally {
       setDeletingBusy(false)
     }
+  }
+  function copyUrl(node: NodeItem) {
+    if (!node.url) return
+    void navigator.clipboard.writeText(node.url).then(
+      () => toast.success('节点链接已复制'),
+      () => toast.error('复制失败'),
+    )
   }
   return (
     <div className="nodes-page">
@@ -209,6 +216,11 @@ export function NodesPage() {
                     <Status value={node.enabled ? 'ready' : 'idle'} />
                   </TableCell>
                   <TableCell className="actions">
+                    {node.url && (
+                      <IconButton label="复制链接" onClick={() => copyUrl(node)}>
+                        <Copy />
+                      </IconButton>
+                    )}
                     <IconButton label="编辑" onClick={() => setEditing(node)}>
                       <Pencil />
                     </IconButton>

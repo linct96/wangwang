@@ -48,6 +48,7 @@ export type NodeItem = {
   protocol: string
   server: string
   port: number
+  url: string | null
   tags: string[]
   directTags: TagOption[]
   inheritedTags: TagOption[]
