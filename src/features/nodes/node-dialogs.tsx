@@ -293,7 +293,7 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
   }
   return (
     <form className="form" onSubmit={submit} noValidate>
-      {node.canEditConnection && (
+      {node.canEditConnection && node.connection && (
         <Segmented
           block
           value={mode}
