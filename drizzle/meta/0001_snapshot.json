@@ -75,9 +75,7 @@
       "indexes": {
         "admin_sessions_expiry_idx": {
           "name": "admin_sessions_expiry_idx",
-          "columns": [
-            "expires_at"
-          ],
+          "columns": ["expires_at"],
           "isUnique": false
         }
       },
@@ -150,11 +148,7 @@
       "indexes": {
         "jobs_entity_idx": {
           "name": "jobs_entity_idx",
-          "columns": [
-            "type",
-            "entity_id",
-            "created_at"
-          ],
+          "columns": ["type", "entity_id", "created_at"],
           "isUnique": false
         }
       },
@@ -184,10 +178,7 @@
       "indexes": {
         "node_tags_tag_idx": {
           "name": "node_tags_tag_idx",
-          "columns": [
-            "tag_id",
-            "node_id"
-          ],
+          "columns": ["tag_id", "node_id"],
           "isUnique": false
         }
       },
@@ -196,12 +187,8 @@
           "name": "node_tags_node_id_nodes_id_fk",
           "tableFrom": "node_tags",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -209,22 +196,15 @@
           "name": "node_tags_tag_id_tags_id_fk",
           "tableFrom": "node_tags",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "node_tags_node_id_tag_id_pk": {
-          "columns": [
-            "node_id",
-            "tag_id"
-          ],
+          "columns": ["node_id", "tag_id"],
           "name": "node_tags_node_id_tag_id_pk"
         }
       },
@@ -317,9 +297,7 @@
       "indexes": {
         "nodes_fingerprint_idx": {
           "name": "nodes_fingerprint_idx",
-          "columns": [
-            "fingerprint"
-          ],
+          "columns": ["fingerprint"],
           "isUnique": true
         }
       },
@@ -352,12 +330,8 @@
           "name": "profile_sources_profile_id_profiles_id_fk",
           "tableFrom": "profile_sources",
           "tableTo": "profiles",
-          "columnsFrom": [
-            "profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -365,22 +339,15 @@
           "name": "profile_sources_source_id_sources_id_fk",
           "tableFrom": "profile_sources",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "profile_sources_profile_id_source_id_pk": {
-          "columns": [
-            "profile_id",
-            "source_id"
-          ],
+          "columns": ["profile_id", "source_id"],
           "name": "profile_sources_profile_id_source_id_pk"
         }
       },
@@ -408,10 +375,7 @@
       "indexes": {
         "profile_tag_filters_tag_idx": {
           "name": "profile_tag_filters_tag_idx",
-          "columns": [
-            "tag_id",
-            "profile_id"
-          ],
+          "columns": ["tag_id", "profile_id"],
           "isUnique": false
         }
       },
@@ -420,12 +384,8 @@
           "name": "profile_tag_filters_profile_id_profiles_id_fk",
           "tableFrom": "profile_tag_filters",
           "tableTo": "profiles",
-          "columnsFrom": [
-            "profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -433,22 +393,15 @@
           "name": "profile_tag_filters_tag_id_tags_id_fk",
           "tableFrom": "profile_tag_filters",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "profile_tag_filters_profile_id_tag_id_pk": {
-          "columns": [
-            "profile_id",
-            "tag_id"
-          ],
+          "columns": ["profile_id", "tag_id"],
           "name": "profile_tag_filters_profile_id_tag_id_pk"
         }
       },
@@ -551,9 +504,7 @@
       "indexes": {
         "profiles_template_id_idx": {
           "name": "profiles_template_id_idx",
-          "columns": [
-            "template_id"
-          ],
+          "columns": ["template_id"],
           "isUnique": false
         }
       },
@@ -597,9 +548,7 @@
       "indexes": {
         "source_nodes_node_idx": {
           "name": "source_nodes_node_idx",
-          "columns": [
-            "node_id"
-          ],
+          "columns": ["node_id"],
           "isUnique": false
         }
       },
@@ -608,12 +557,8 @@
           "name": "source_nodes_source_id_sources_id_fk",
           "tableFrom": "source_nodes",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -621,22 +566,15 @@
           "name": "source_nodes_node_id_nodes_id_fk",
           "tableFrom": "source_nodes",
           "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "source_nodes_source_id_node_id_pk": {
-          "columns": [
-            "source_id",
-            "node_id"
-          ],
+          "columns": ["source_id", "node_id"],
           "name": "source_nodes_source_id_node_id_pk"
         }
       },
@@ -664,10 +602,7 @@
       "indexes": {
         "source_tags_tag_idx": {
           "name": "source_tags_tag_idx",
-          "columns": [
-            "tag_id",
-            "source_id"
-          ],
+          "columns": ["tag_id", "source_id"],
           "isUnique": false
         }
       },
@@ -676,12 +611,8 @@
           "name": "source_tags_source_id_sources_id_fk",
           "tableFrom": "source_tags",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -689,22 +620,15 @@
           "name": "source_tags_tag_id_tags_id_fk",
           "tableFrom": "source_tags",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "source_tags_source_id_tag_id_pk": {
-          "columns": [
-            "source_id",
-            "tag_id"
-          ],
+          "columns": ["source_id", "tag_id"],
           "name": "source_tags_source_id_tag_id_pk"
         }
       },
@@ -898,10 +822,7 @@
       "indexes": {
         "sources_due_idx": {
           "name": "sources_due_idx",
-          "columns": [
-            "enabled",
-            "next_refresh_at"
-          ],
+          "columns": ["enabled", "next_refresh_at"],
           "isUnique": false
         }
       },
@@ -952,9 +873,7 @@
       "indexes": {
         "tags_normalized_name_idx": {
           "name": "tags_normalized_name_idx",
-          "columns": [
-            "normalized_name"
-          ],
+          "columns": ["normalized_name"],
           "isUnique": true
         }
       },
