@@ -12,7 +12,6 @@ import { TagCombobox } from '@/components/tag-combobox'
 import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Combobox,
   ComboboxChip,
@@ -589,7 +588,7 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
           </form.Field>
         ) : (
           <Alert>
-            <AlertDescription>连接参数由外部订阅维护，此处只保存显示名称、标签和启停状态。</AlertDescription>
+            <AlertDescription>连接参数由外部订阅维护，此处只保存显示名称和标签。</AlertDescription>
           </Alert>
         )}
         {(!node.canEditConnection || mode === 'form') && (
@@ -635,18 +634,6 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
             )
           }}
         </form.Field>
-        <Field orientation="horizontal">
-          <form.Field name="enabled">
-            {(field) => (
-              <Checkbox
-                id="node-enabled"
-                checked={field.state.value}
-                onCheckedChange={(checked) => field.handleChange(checked === true)}
-              />
-            )}
-          </form.Field>
-          <FieldLabel htmlFor="node-enabled">启用节点</FieldLabel>
-        </Field>
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
