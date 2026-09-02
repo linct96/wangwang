@@ -81,6 +81,34 @@ export const nodes = sqliteTable(
   (table) => [uniqueIndex('nodes_fingerprint_idx').on(table.fingerprint)],
 )
 
+export const tags = sqliteTable(
+  'tags',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    normalizedName: text('normalized_name').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [uniqueIndex('tags_normalized_name_idx').on(table.normalizedName)],
+)
+
+export const nodeTags = sqliteTable(
+  'node_tags',
+  {
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => nodes.id, { onDelete: 'cascade' }),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.nodeId, table.tagId] }),
+    index('node_tags_tag_idx').on(table.tagId, table.nodeId),
+  ],
+)
+
 export const sourceNodes = sqliteTable(
   'source_nodes',
   {
@@ -94,6 +122,22 @@ export const sourceNodes = sqliteTable(
     position: integer('position').notNull(),
   },
   (table) => [primaryKey({ columns: [table.sourceId, table.nodeId] }), index('source_nodes_node_idx').on(table.nodeId)],
+)
+
+export const sourceTags = sqliteTable(
+  'source_tags',
+  {
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sourceId, table.tagId] }),
+    index('source_tags_tag_idx').on(table.tagId, table.sourceId),
+  ],
 )
 
 export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
@@ -139,6 +183,22 @@ export const profileSources = sqliteTable(
   (table) => [primaryKey({ columns: [table.profileId, table.sourceId] })],
 )
 
+export const profileTagFilters = sqliteTable(
+  'profile_tag_filters',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.tagId] }),
+    index('profile_tag_filters_tag_idx').on(table.tagId, table.profileId),
+  ],
+)
+
 export type JobType = 'refresh_source' | 'compile_profile'
 export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 
@@ -162,8 +222,17 @@ export const jobs = sqliteTable(
   (table) => [index('jobs_entity_idx').on(table.type, table.entityId, table.createdAt)],
 )
 
-export const sourcesRelations = relations(sources, ({ many }) => ({ nodes: many(sourceNodes) }))
-export const nodesRelations = relations(nodes, ({ many }) => ({ sources: many(sourceNodes) }))
+export const sourcesRelations = relations(sources, ({ many }) => ({ nodes: many(sourceNodes), tags: many(sourceTags) }))
+export const nodesRelations = relations(nodes, ({ many }) => ({ sources: many(sourceNodes), tags: many(nodeTags) }))
+export const tagsRelations = relations(tags, ({ many }) => ({
+  nodes: many(nodeTags),
+  sources: many(sourceTags),
+  profiles: many(profileTagFilters),
+}))
+export const profilesRelations = relations(profiles, ({ many }) => ({
+  sources: many(profileSources),
+  tagFilters: many(profileTagFilters),
+}))
 
 export type QueueMessage = {
   jobId: string
