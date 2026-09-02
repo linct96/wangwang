@@ -4,6 +4,8 @@ import { jobs, nodes, profiles, profileSources, sourceNodes, sources } from './d
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
+import { matchesAnyTag, mergeTagViews } from './tag-model'
+import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
 
@@ -56,10 +58,6 @@ function subscriptionMetadata(headers: Headers, fallbackName: string | null = nu
 
 export function db(env: Env) {
   return drizzle(env.DB)
-}
-
-export function mergeNodeTags(tags: string[], sourceTags: Array<string | null>) {
-  return [...new Set([...tags, ...sourceTags.filter((tag): tag is string => Boolean(tag))])]
 }
 
 export async function createJob(env: Env, type: JobType, entityId: string) {
@@ -318,8 +316,6 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
       id: nodes.id,
       config: nodes.config,
       alias: nodes.alias,
-      tags: nodes.tags,
-      sourceTag: sources.nodeTag,
       originalName: sourceNodes.originalName,
     })
     .from(nodes)
@@ -332,10 +328,13 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
     .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
     .orderBy(asc(sourceNodes.position), asc(nodes.createdAt))
 
+  const filterTagIds = await profileFilterTagIds(env, profile.id)
+  const views = await nodeTagViews(env, [...new Set(selected.map((node) => node.id))])
   const unique = new Map<string, (typeof selected)[number]>()
   for (const node of selected) {
-    const tags = mergeNodeTags(node.tags, [node.sourceTag])
-    if (profile.tags.length && !profile.tags.some((tag) => tags.includes(tag))) continue
+    const view = views.get(node.id) || { direct: [], inherited: [] }
+    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map((tag) => tag.id)
+    if (!matchesAnyTag(effectiveTagIds, filterTagIds)) continue
     if (!unique.has(node.id)) unique.set(node.id, node)
   }
   return [...unique.values()].map((node) => ({ config: node.config, name: node.alias || node.originalName }))

@@ -5,6 +5,7 @@ import { body, fail, ok } from '../http'
 import { profileSources, sources } from '../db'
 import { createJob, db, enqueueAffectedProfiles } from '../tasks'
 import { assertRemoteUrl } from '../security'
+import { replaceSourceTags } from '../tag-store'
 
 const nodeNameFilterSchema = z
   .string()
@@ -102,6 +103,7 @@ sourcesRouter.post('/', async (c) => {
     updatedAt: now,
   }
   await database.insert(sources).values(source)
+  await replaceSourceTags(c.env, source.id, source.nodeTag ? [source.nodeTag] : [])
   const job = await createJob(c.env, 'refresh_source', source.id)
   return c.json({ data: { sourceId: source.id, jobId: job.id } }, 202)
 })
@@ -145,6 +147,7 @@ sourcesRouter.patch('/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(sources.id, current.id))
+  if (nodeTagChanged) await replaceSourceTags(c.env, current.id, nodeTag ? [nodeTag] : [])
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagChanged)
     await enqueueAffectedProfiles(c.env, current.id)
