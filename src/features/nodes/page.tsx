@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { NodeItem } from '@/api/types'
+import type { NodeItem, TagOption } from '@/api/types'
 import { AppConfirmDialog, IconButton, PageState, Status } from '@/components/app-primitives'
 import { AddNodeDialog, NodeDialog } from './node-dialogs'
 import '@/styles/nodes.css'
@@ -17,9 +17,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 export function NodesPage() {
   const [protocol, setProtocol] = useState('')
   const [enabled, setEnabled] = useState('')
+  const [tagId, setTagId] = useState('')
   const [page, setPage] = useState(1)
+  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const { data, error, loading, reload } = useApi<{ items: NodeItem[]; total: number; page: number; pageSize: number }>(
-    `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}`,
+    `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}`,
   )
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
@@ -65,10 +67,33 @@ export function NodesPage() {
       </div>
       <div className="toolbar">
         <Select
+          value={tagId || 'all'}
+          onValueChange={(value) => {
+            setTagId(value === 'all' ? '' : value)
+            setPage(1)
+            setSelected([])
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">全部标签</SelectItem>
+              {tagOptions.map((tag) => (
+                <SelectItem key={tag.id} value={tag.id}>
+                  {tag.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <Select
           value={protocol || 'all'}
           onValueChange={(value) => {
             setProtocol(value === 'all' ? '' : value)
             setPage(1)
+            setSelected([])
           }}
         >
           <SelectTrigger>
@@ -90,6 +115,7 @@ export function NodesPage() {
           onValueChange={(value) => {
             setEnabled(value === 'all' ? '' : value)
             setPage(1)
+            setSelected([])
           }}
         >
           <SelectTrigger>
