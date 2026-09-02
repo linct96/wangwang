@@ -7,7 +7,7 @@ import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { Profile, Source, TagOption, TemplateId, TemplateSummary } from '@/api/types'
 import { AppDialog } from '@/components/app-primitives'
-import { TagMultiSelect } from '@/components/tag-multi-select'
+import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -250,13 +250,14 @@ export function ProfileDialog({
               return (
                 <Field data-invalid={invalid}>
                   <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
-                  <TagMultiSelect
+                  <TagCombobox
                     id="profile-tags"
                     value={field.state.value}
                     options={tagOptions}
                     max={20}
                     allowCreate={false}
                     placeholder="选择节点标签；留空表示不过滤"
+                    invalid={invalid}
                     onBlur={field.handleBlur}
                     onChange={field.handleChange}
                   />

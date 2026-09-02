@@ -24,6 +24,7 @@ export function TagCombobox({
   options,
   inherited = [],
   max,
+  allowCreate = true,
   placeholder,
   invalid,
   onChange,
@@ -34,10 +35,11 @@ export function TagCombobox({
   options: TagOption[]
   inherited?: TagOption[]
   max: number
+  allowCreate?: boolean
   placeholder: string
-  invalid: boolean
+  invalid?: boolean
   onChange: (value: string[]) => void
-  onBlur: () => void
+  onBlur?: () => void
 }) {
   const [query, setQuery] = useState('')
   const anchor = useComboboxAnchor()
@@ -45,6 +47,7 @@ export function TagCombobox({
   const selected = new Set(value.map(normalizeTag))
   const optionNames = options.map((option) => option.name)
   const canCreate =
+    allowCreate &&
     Boolean(trimmedQuery) &&
     trimmedQuery.length <= 24 &&
     !optionNames.some((name) => normalizeTag(name) === normalizeTag(trimmedQuery)) &&
