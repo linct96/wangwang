@@ -7,6 +7,8 @@ import type { TemplateId } from '../db'
 import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
+import { normalizeTagInputs } from '../tag-model'
+import { replaceProfileTagFilters } from '../tag-store'
 
 const templateIdSchema = z
   .string()
@@ -81,18 +83,22 @@ profilesRouter.post('/', async (c) => {
   if (Number(value) >= 20) return fail(c, 409, 'PROFILE_LIMIT', '配置数量已达到 20 个')
   const sourceIds = await assertSourceIds(c.env, input.sourceIds)
   if (!(await resolveTemplate(c.env, input.templateId))) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const filterNames = normalizeTagInputs(input.tags, 20)
   const now = new Date()
   const profile = {
     id: crypto.randomUUID(),
     name: input.name,
     enabled: input.enabled,
-    tags: [...new Set(input.tags)],
+    tags: filterNames,
     templateId: input.templateId as TemplateId,
     createdAt: now,
     updatedAt: now,
   }
   await database.insert(profiles).values(profile)
-  await saveProfileSources(c.env, profile.id, sourceIds)
+  await Promise.all([
+    saveProfileSources(c.env, profile.id, sourceIds),
+    replaceProfileTagFilters(c.env, profile.id, filterNames),
+  ])
   const job = await createJob(c.env, 'compile_profile', profile.id)
   const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
   return c.json(
@@ -120,17 +126,21 @@ profilesRouter.patch('/:id', async (c) => {
   if (input.templateId && !(await resolveTemplate(c.env, input.templateId)))
     return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const sourceIds = input.sourceIds ? await assertSourceIds(c.env, input.sourceIds) : null
-  const { sourceIds: _sourceIds, ...values } = input
+  const filterNames = input.tags === undefined ? undefined : normalizeTagInputs(input.tags, 20)
+  const { sourceIds: _sourceIds, tags: _tags, ...values } = input
   await database
     .update(profiles)
     .set({
       ...values,
-      tags: values.tags ? [...new Set(values.tags)] : undefined,
+      tags: filterNames,
       templateId: values.templateId as TemplateId | undefined,
       updatedAt: new Date(),
     })
     .where(eq(profiles.id, id))
-  if (sourceIds) await saveProfileSources(c.env, id, sourceIds)
+  const syncs: Promise<unknown>[] = []
+  if (sourceIds) syncs.push(saveProfileSources(c.env, id, sourceIds))
+  if (filterNames !== undefined) syncs.push(replaceProfileTagFilters(c.env, id, filterNames))
+  await Promise.all(syncs)
   const job = await createJob(c.env, 'compile_profile', id)
   const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   return c.json(
