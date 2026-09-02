@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { RefreshCw, WandSparkles } from 'lucide-react'
+import { ChevronDown, RefreshCw, Search, WandSparkles, X } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
 import { useTheme } from 'next-themes'
 import { z } from 'zod'
@@ -11,14 +11,18 @@ import { AppDialog, PageState } from '@/components/app-primitives'
 import { TagMultiSelect } from '@/components/tag-multi-select'
 import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Segmented } from '@/components/ui/segmented'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { formatYaml } from '@/lib/yaml-editor'
 import { defaultConnection, ManualConnectionFields } from './node-form'
+import { parsePreferredEndpoint } from '../../../shared/preferred-node'
 
 const tagsSchema = z
   .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
@@ -43,6 +47,126 @@ const connectionSchema = z
     if (message) context.addIssue({ code: 'custom', message })
   })
 
+function preferredAddresses(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function preferredAddressError(value: string) {
+  try {
+    parsePreferredEndpoint(value)
+    return ''
+  } catch (reason) {
+    return reason instanceof Error ? reason.message : '优选地址无效'
+  }
+}
+
+function PreferredNodeSelect({
+  value,
+  invalid,
+  onChange,
+  onBlur,
+}: {
+  value: NodeItem[]
+  invalid: boolean
+  onChange: (value: NodeItem[]) => void
+  onBlur: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const { data, error, loading } = useApi<{ items: NodeItem[] }>(
+    `/nodes?page=1&pageSize=100&q=${encodeURIComponent(query)}`,
+  )
+  const selectedIds = new Set(value.map((node) => node.id))
+
+  function toggle(node: NodeItem) {
+    onChange(selectedIds.has(node.id) ? value.filter((item) => item.id !== node.id) : [...value, node])
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((node) => (
+            <Badge key={node.id} variant="outline" className="max-w-full">
+              <span className="truncate">{node.name}</span>
+              <button type="button" aria-label={`移除节点 ${node.name}`} onClick={() => toggle(node)}>
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            id="preferred-source-nodes"
+            type="button"
+            variant="outline"
+            className="w-full justify-between font-normal"
+            aria-invalid={invalid}
+            onBlur={onBlur}
+          >
+            <span className="text-muted-foreground">{value.length ? `已选择 ${value.length} 个节点` : '选择节点'}</span>
+            <ChevronDown />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              className="pl-8"
+              value={query}
+              maxLength={100}
+              placeholder="搜索节点"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto py-1">
+            {loading && !data ? (
+              <div className="flex flex-col gap-2 p-1">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : error ? (
+              <p className="px-2 py-3 text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : data?.items.length ? (
+              data.items.map((node) => {
+                const checked = selectedIds.has(node.id)
+                return (
+                  <label
+                    key={node.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted has-disabled:cursor-not-allowed has-disabled:opacity-50"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={!checked && value.length >= 20}
+                      aria-label={`选择节点 ${node.name}`}
+                      onCheckedChange={() => toggle(node)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{node.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {node.protocol} · {node.server}:{node.port}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })
+            ) : (
+              <p className="px-2 py-3 text-center text-sm text-muted-foreground">没有匹配节点</p>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
 export function AddNodeDialog({
   onClose,
   onSaved,
@@ -50,25 +174,60 @@ export function AddNodeDialog({
   onClose: () => void
   onSaved: (result?: NodeImportResult) => void
 }) {
-  const [mode, setMode] = useState<'import' | 'form'>('import')
+  const [mode, setMode] = useState<'import' | 'form' | 'preferred'>('import')
   const [error, setError] = useState('')
   const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const form = useForm({
-    defaultValues: { content: '', connection: defaultConnection(), tags: [] as string[], enabled: true },
+    defaultValues: {
+      content: '',
+      connection: defaultConnection(),
+      sourceNodes: [] as NodeItem[],
+      addresses: '',
+      tags: [] as string[],
+      enabled: true,
+    },
     validators: {
-      onSubmit: z.object({
-        content:
-          mode === 'import'
-            ? z
-                .string()
-                .trim()
-                .min(1, '请输入节点内容')
-                .refine((value) => new TextEncoder().encode(value).byteLength <= 1024 * 1024, '节点内容不能超过 1 MiB')
-            : z.string(),
-        connection: mode === 'form' ? connectionSchema : z.any(),
-        tags: tagsSchema,
-        enabled: z.boolean(),
-      }),
+      onSubmit: z
+        .object({
+          content:
+            mode === 'import'
+              ? z
+                  .string()
+                  .trim()
+                  .min(1, '请输入节点内容')
+                  .refine(
+                    (value) => new TextEncoder().encode(value).byteLength <= 1024 * 1024,
+                    '节点内容不能超过 1 MiB',
+                  )
+              : z.string(),
+          connection: mode === 'form' ? connectionSchema : z.any(),
+          sourceNodes:
+            mode === 'preferred'
+              ? z
+                  .array(z.custom<NodeItem>((value) => Boolean(value && typeof value === 'object')))
+                  .min(1, '请至少选择一个节点')
+                  .max(20, '最多选择 20 个节点')
+              : z.array(z.any()),
+          addresses:
+            mode === 'preferred'
+              ? z.string().superRefine((value, context) => {
+                  const addresses = preferredAddresses(value)
+                  if (!addresses.length) context.addIssue({ code: 'custom', message: '请至少填写一个优选地址' })
+                  else if (addresses.length > 20)
+                    context.addIssue({ code: 'custom', message: '最多填写 20 个优选地址' })
+                  else {
+                    const error = addresses.map(preferredAddressError).find(Boolean)
+                    if (error) context.addIssue({ code: 'custom', message: error })
+                  }
+                })
+              : z.string(),
+          tags: tagsSchema,
+          enabled: z.boolean(),
+        })
+        .superRefine((value, context) => {
+          if (mode === 'preferred' && value.sourceNodes.length * preferredAddresses(value.addresses).length > 100)
+            context.addIssue({ code: 'custom', path: ['addresses'], message: '单次最多生成 100 个节点' })
+        }),
     },
     onSubmit: async ({ value }) => {
       setError('')
@@ -80,12 +239,22 @@ export function AddNodeDialog({
             body: JSON.stringify({ content: value.content, ...options }),
           })
           onSaved(result)
-        } else {
+        } else if (mode === 'form') {
           await api('/nodes', {
             method: 'POST',
             body: JSON.stringify({ connection: value.connection, ...options }),
           })
           onSaved()
+        } else {
+          const result = await api<NodeImportResult>('/nodes/preferred', {
+            method: 'POST',
+            body: JSON.stringify({
+              sourceNodeIds: value.sourceNodes.map((node) => node.id),
+              addresses: preferredAddresses(value.addresses),
+              ...options,
+            }),
+          })
+          onSaved(result)
         }
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '添加失败')
@@ -105,6 +274,7 @@ export function AddNodeDialog({
           options={[
             { label: '导入', value: 'import' },
             { label: '表单', value: 'form' },
+            { label: '节点优选', value: 'preferred' },
           ]}
           onChange={(value) => {
             setMode(value)
@@ -113,9 +283,9 @@ export function AddNodeDialog({
         />
         <FieldGroup
           className={
-            mode === 'form'
-              ? 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
-              : 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
+            mode === 'import'
+              ? 'h-[calc(100dvh-20rem)] min-h-0 p-1 pr-2'
+              : 'h-[calc(100dvh-20rem)] overflow-y-auto overscroll-contain p-1 pr-2 [scrollbar-gutter:stable]'
           }
         >
           {mode === 'import' ? (
@@ -139,7 +309,7 @@ export function AddNodeDialog({
                 )
               }}
             </form.Field>
-          ) : (
+          ) : mode === 'form' ? (
             <form.Field name="connection">
               {(field) => {
                 const invalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -151,6 +321,58 @@ export function AddNodeDialog({
                 )
               }}
             </form.Field>
+          ) : (
+            <>
+              <form.Field name="sourceNodes">
+                {(field) => {
+                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                  return (
+                    <Field data-invalid={invalid}>
+                      <FieldLabel htmlFor="preferred-source-nodes">源节点</FieldLabel>
+                      <PreferredNodeSelect
+                        value={field.state.value}
+                        invalid={invalid}
+                        onBlur={field.handleBlur}
+                        onChange={field.handleChange}
+                      />
+                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+              <form.Field name="addresses">
+                {(field) => {
+                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                  return (
+                    <Field data-invalid={invalid}>
+                      <FieldLabel htmlFor="preferred-addresses">优选域名或 IP</FieldLabel>
+                      <Textarea
+                        id="preferred-addresses"
+                        className="min-h-32 resize-y"
+                        value={field.state.value}
+                        placeholder={
+                          'nexusmods.com:443#企业域名 | NexusMods\n104.16.1.1#Cloudflare\n[2606:4700::6810:101]:443#Cloudflare IPv6'
+                        }
+                        aria-invalid={invalid}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => field.handleChange(event.target.value)}
+                      />
+                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                    </Field>
+                  )
+                }}
+              </form.Field>
+              <form.Subscribe
+                selector={(state) => ({
+                  sourceCount: state.values.sourceNodes.length,
+                  addressCount: preferredAddresses(state.values.addresses).length,
+                })}
+              >
+                {({ sourceCount, addressCount }) => (
+                  <FieldDescription>将生成 {sourceCount * addressCount} 个节点</FieldDescription>
+                )}
+              </form.Subscribe>
+            </>
           )}
           <form.Field name="tags">
             {(field) => {
@@ -198,7 +420,7 @@ export function AddNodeDialog({
             {([isSubmitting]) => (
               <Button disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
-                {mode === 'import' ? '导入节点' : '添加节点'}
+                {mode === 'import' ? '导入节点' : mode === 'preferred' ? '生成节点' : '添加节点'}
               </Button>
             )}
           </form.Subscribe>

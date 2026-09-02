@@ -287,11 +287,11 @@ export function NodesPage() {
               return
             }
             const summary = result.created
-              ? `已导入 ${result.created} 个节点${result.skipped ? `，跳过 ${result.skipped} 个节点` : ''}`
-              : `未导入新节点，跳过 ${result.skipped} 个节点`
+              ? `已添加 ${result.created} 个节点${result.skipped ? `，跳过 ${result.skipped} 个节点` : ''}`
+              : `未添加新节点，跳过 ${result.skipped} 个节点`
             toast.success(summary)
             if (result.warnings.length)
-              toast.warning(`有 ${result.warnings.length} 行未导入`, {
+              toast.warning(`有 ${result.warnings.length} 条未处理`, {
                 description: result.warnings.slice(0, 3).join('；'),
               })
           }}
