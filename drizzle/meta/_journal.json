@@ -15,6 +15,13 @@
       "when": 1788333833921,
       "tag": "0001_normalize_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788335000000,
+      "tag": "0002_node_entries",
+      "breakpoints": true
     }
   ]
 }

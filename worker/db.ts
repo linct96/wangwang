@@ -81,6 +81,26 @@ export const nodes = sqliteTable(
   (table) => [uniqueIndex('nodes_fingerprint_idx').on(table.fingerprint)],
 )
 
+/**
+ * A node is the physical connection, while an entry is the independently
+ * selectable name/tag/enabled variant shown to users and profiles.
+ */
+export const nodeEntries = sqliteTable(
+  'node_entries',
+  {
+    id: text('id').primaryKey(),
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => nodes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    alias: text('alias'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('node_entries_node_idx').on(table.nodeId)],
+)
+
 export const tags = sqliteTable(
   'tags',
   {
@@ -109,6 +129,22 @@ export const nodeTags = sqliteTable(
   ],
 )
 
+export const nodeEntryTags = sqliteTable(
+  'node_entry_tags',
+  {
+    entryId: text('entry_id')
+      .notNull()
+      .references(() => nodeEntries.id, { onDelete: 'cascade' }),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.entryId, table.tagId] }),
+    index('node_entry_tags_tag_idx').on(table.tagId, table.entryId),
+  ],
+)
+
 export const sourceNodes = sqliteTable(
   'source_nodes',
   {
@@ -122,6 +158,26 @@ export const sourceNodes = sqliteTable(
     position: integer('position').notNull(),
   },
   (table) => [primaryKey({ columns: [table.sourceId, table.nodeId] }), index('source_nodes_node_idx').on(table.nodeId)],
+)
+
+export const sourceEntries = sqliteTable(
+  'source_entries',
+  {
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+    entryId: text('entry_id')
+      .notNull()
+      .references(() => nodeEntries.id, { onDelete: 'cascade' }),
+    sourceKey: text('source_key').notNull(),
+    originalName: text('original_name').notNull(),
+    position: integer('position').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sourceId, table.entryId] }),
+    uniqueIndex('source_entries_key_idx').on(table.sourceId, table.sourceKey),
+    index('source_entries_entry_idx').on(table.entryId),
+  ],
 )
 
 export const sourceTags = sqliteTable(
@@ -222,10 +278,24 @@ export const jobs = sqliteTable(
   (table) => [index('jobs_entity_idx').on(table.type, table.entityId, table.createdAt)],
 )
 
-export const sourcesRelations = relations(sources, ({ many }) => ({ nodes: many(sourceNodes), tags: many(sourceTags) }))
-export const nodesRelations = relations(nodes, ({ many }) => ({ sources: many(sourceNodes), tags: many(nodeTags) }))
+export const sourcesRelations = relations(sources, ({ many }) => ({
+  nodes: many(sourceNodes),
+  entries: many(sourceEntries),
+  tags: many(sourceTags),
+}))
+export const nodesRelations = relations(nodes, ({ many }) => ({
+  sources: many(sourceNodes),
+  entries: many(nodeEntries),
+  tags: many(nodeTags),
+}))
+export const nodeEntriesRelations = relations(nodeEntries, ({ one, many }) => ({
+  node: one(nodes, { fields: [nodeEntries.nodeId], references: [nodes.id] }),
+  sources: many(sourceEntries),
+  tags: many(nodeEntryTags),
+}))
 export const tagsRelations = relations(tags, ({ many }) => ({
   nodes: many(nodeTags),
+  entries: many(nodeEntryTags),
   sources: many(sourceTags),
   profiles: many(profileTagFilters),
 }))
