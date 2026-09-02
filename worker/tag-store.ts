@@ -64,6 +64,38 @@ export async function replaceNodeDirectTagsForNodes(env: Env, nodeIds: string[],
   return tags
 }
 
+export async function replaceEntryDirectTags(env: Env, entryId: string, names: string[]) {
+  const tags = await ensureTags(env, names)
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare('DELETE FROM node_entry_tags WHERE entry_id = ?').bind(entryId),
+  ]
+  for (const tag of tags)
+    statements.push(
+      env.DB.prepare('INSERT INTO node_entry_tags (entry_id, tag_id) VALUES (?, ?)').bind(entryId, tag.id),
+    )
+  await env.DB.batch(statements)
+  return tags
+}
+
+export async function replaceEntryDirectTagsForEntries(env: Env, entryIds: string[], names: string[]) {
+  if (!entryIds.length) return []
+  const tags = await ensureTags(env, names)
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare('DELETE FROM node_entry_tags WHERE entry_id IN (SELECT value FROM json_each(?))').bind(
+      JSON.stringify(entryIds),
+    ),
+  ]
+  if (tags.length)
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO node_entry_tags (entry_id, tag_id)
+         SELECT entry_ids.value, tag_ids.value FROM json_each(?) entry_ids CROSS JOIN json_each(?) tag_ids`,
+      ).bind(JSON.stringify(entryIds), JSON.stringify(tags.map((tag) => tag.id))),
+    )
+  await env.DB.batch(statements)
+  return tags
+}
+
 export async function replaceSourceTags(env: Env, sourceId: string, names: string[]) {
   const tags = await ensureTags(env, names)
   await replaceRelations(env, 'source_tags', 'source_id', sourceId, tags)
@@ -120,6 +152,64 @@ export async function nodeTagViews(env: Env, nodeIds: string[]) {
       .bind(...chunk)
       .all<{ nodeId: string; id: string; name: string; normalizedName: string }>()
     for (const row of inherited.results) result.get(row.nodeId)?.inherited.push({ id: row.id, name: row.name })
+  }
+  return result
+}
+
+export async function entryTagViews(
+  env: Env,
+  entryIds: string[],
+  sourcePairs?: Array<{ entryId: string; sourceId: string }>,
+) {
+  const result = new Map<string, { direct: TagView[]; inherited: TagView[] }>()
+  for (const entryId of entryIds) result.set(entryId, { direct: [], inherited: [] })
+  for (let index = 0; index < entryIds.length; index += 100) {
+    const chunk = entryIds.slice(index, index + 100)
+    const vars = placeholders(chunk.length)
+    const direct = await env.DB.prepare(
+      `SELECT net.entry_id AS entryId, t.id, t.name
+       FROM node_entry_tags net JOIN tags t ON t.id = net.tag_id
+       WHERE net.entry_id IN (${vars})
+       ORDER BY t.normalized_name`,
+    )
+      .bind(...chunk)
+      .all<{ entryId: string; id: string; name: string }>()
+    for (const row of direct.results) result.get(row.entryId)?.direct.push({ id: row.id, name: row.name })
+  }
+
+  const inherited = sourcePairs
+    ? await env.DB.prepare(
+        `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
+         FROM source_entries se
+         JOIN sources s ON s.id = se.source_id
+         JOIN source_tags st ON st.source_id = s.id
+         JOIN tags t ON t.id = st.tag_id
+         JOIN json_each(?) selected
+           ON se.entry_id = json_extract(json(selected.value), '$.entryId')
+          AND se.source_id = json_extract(json(selected.value), '$.sourceId')
+         WHERE s.enabled = 1
+         ORDER BY t.normalized_name`,
+      )
+        .bind(JSON.stringify(sourcePairs))
+        .all<{ entryId: string; id: string; name: string }>()
+    : entryIds.length
+      ? await env.DB.prepare(
+          `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
+           FROM source_entries se
+           JOIN sources s ON s.id = se.source_id
+           JOIN source_tags st ON st.source_id = se.source_id
+           JOIN tags t ON t.id = st.tag_id
+           JOIN json_each(?) selected ON se.entry_id = selected.value
+           WHERE s.enabled = 1
+           ORDER BY t.normalized_name`,
+        )
+          .bind(JSON.stringify(entryIds))
+          .all<{ entryId: string; id: string; name: string }>()
+      : { results: [] }
+  for (const row of inherited.results) {
+    if (!result.has(row.entryId)) continue
+    const tags = result.get(row.entryId)!.inherited
+    if (!tags.some((tag) => tag.id === row.id)) tags.push({ id: row.id, name: row.name })
   }
   return result
 }

@@ -3,7 +3,7 @@ import { asc, count, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileSources, sources } from '../db'
-import { createJob, db, enqueueAffectedProfiles } from '../tasks'
+import { cleanupOrphanNodes, createJob, db, enqueueAffectedProfiles } from '../tasks'
 import { assertRemoteUrl } from '../security'
 import { normalizeTagInputs, normalizeTagName } from '../tag-model'
 import { replaceSourceTags, sourceTagViews } from '../tag-store'
@@ -172,9 +172,7 @@ sourcesRouter.delete('/:id', async (c) => {
     .from(profileSources)
     .where(eq(profileSources.sourceId, id))
   await db(c.env).delete(sources).where(eq(sources.id, id))
-  await c.env.DB.prepare(
-    'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)',
-  ).run()
+  await cleanupOrphanNodes(c.env)
   for (const profile of affected) await createJob(c.env, 'compile_profile', profile.id)
   return ok(c, { id, detachedProfileCount: affected.length, removedNodeCount: current.nodeCount })
 })

@@ -1,15 +1,33 @@
 import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { jobs, nodes, profiles, profileSources, sourceNodes, sources } from './db'
+import { jobs, nodeEntries, nodes, profiles, profileSources, sourceEntries, sources } from './db'
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews } from './tag-model'
-import { nodeTagViews, profileFilterTagIds } from './tag-store'
+import { entryTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
+
+async function runBatches(env: Env, statements: D1PreparedStatement[]) {
+  for (let index = 0; index < statements.length; index += 80) await env.DB.batch(statements.slice(index, index + 80))
+}
+
+export async function cleanupOrphanNodes(env: Env) {
+  await env.DB.batch([
+    env.DB.prepare(
+      'DELETE FROM node_entries WHERE NOT EXISTS (SELECT 1 FROM source_entries WHERE source_entries.entry_id = node_entries.id)',
+    ),
+    env.DB.prepare(
+      'DELETE FROM source_nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = source_nodes.node_id)',
+    ),
+    env.DB.prepare(
+      'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = nodes.id)',
+    ),
+  ])
+}
 
 export function parseSubscriptionUserinfo(value: string | null) {
   if (!value) return null
@@ -135,6 +153,7 @@ export async function fetchSource(
 }
 
 async function ensureNodeCapacity(env: Env, fingerprints: string[]) {
+  fingerprints = [...new Set(fingerprints)]
   const database = db(env)
   const [{ count }] = await database.select({ count: sql<number>`count(*)` }).from(nodes)
   let existing = 0
@@ -149,7 +168,7 @@ async function ensureNodeCapacity(env: Env, fingerprints: string[]) {
   if (Number(count) + fingerprints.length - existing > 2000) throw new Error('全局节点数量超过 2000')
 }
 
-async function replaceSourceNodes(
+async function replaceSourceEntries(
   env: Env,
   sourceId: string,
   parsed: Awaited<ReturnType<typeof parseProxyText>>,
@@ -162,51 +181,111 @@ async function replaceSourceNodes(
 ) {
   const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
-  const nodes = parsed.nodes
+  const parsedNodes = parsed.nodes
   await ensureNodeCapacity(
     env,
-    nodes.map((node) => node.fingerprint),
+    parsedNodes.map((node) => node.fingerprint),
   )
   const now = Date.now()
-  const statements: D1PreparedStatement[] = []
-  for (const node of nodes) {
-    statements.push(
-      env.DB.prepare(
-        `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
-         ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
-      ).bind(
-        node.fingerprint,
-        node.fingerprint,
-        node.config.type,
-        node.config.server,
-        node.config.port,
-        JSON.stringify(node.config),
-        now,
-        now,
+  for (let index = 0; index < parsedNodes.length; index += 40) {
+    const chunk = parsedNodes.slice(index, index + 40)
+    await env.DB.batch(
+      chunk.map((node) =>
+        env.DB.prepare(
+          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
+           ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
+        ).bind(
+          crypto.randomUUID(),
+          node.fingerprint,
+          node.config.type,
+          node.config.server,
+          node.config.port,
+          JSON.stringify(node.config),
+          now,
+          now,
+        ),
       ),
     )
   }
-  statements.push(env.DB.prepare('DELETE FROM source_nodes WHERE source_id = ?').bind(sourceId))
-  nodes.forEach((node, position) => {
-    statements.push(
+  const fingerprints = parsedNodes.map((node) => node.fingerprint)
+  const physicalByFingerprint = new Map<string, string>()
+  for (let index = 0; index < fingerprints.length; index += 90) {
+    const rows = await db(env)
+      .select({ id: nodes.id, fingerprint: nodes.fingerprint })
+      .from(nodes)
+      .where(inArray(nodes.fingerprint, fingerprints.slice(index, index + 90)))
+    for (const row of rows) physicalByFingerprint.set(row.fingerprint, row.id)
+  }
+  const entryByFingerprint = new Map<string, string>()
+  for (let index = 0; index < fingerprints.length; index += 90) {
+    const rows = await db(env)
+      .select({ entryId: sourceEntries.entryId, fingerprint: nodes.fingerprint })
+      .from(sourceEntries)
+      .innerJoin(nodeEntries, eq(nodeEntries.id, sourceEntries.entryId))
+      .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
+      .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
+      .where(
+        and(
+          eq(sources.kind, 'url'),
+          eq(sourceEntries.sourceKey, nodes.fingerprint),
+          inArray(nodes.fingerprint, fingerprints.slice(index, index + 90)),
+        ),
+      )
+    for (const row of rows)
+      if (!entryByFingerprint.has(row.fingerprint)) entryByFingerprint.set(row.fingerprint, row.entryId)
+  }
+  const entryIdsByFingerprint = new Map<string, string>()
+  const entryStatements: D1PreparedStatement[] = []
+  for (const node of parsedNodes) {
+    const nodeId = physicalByFingerprint.get(node.fingerprint)
+    if (!nodeId) continue
+    let entryId = entryByFingerprint.get(node.fingerprint)
+    if (!entryId) {
+      entryId = crypto.randomUUID()
+      entryStatements.push(
+        env.DB.prepare(
+          `INSERT INTO node_entries (id, node_id, name, alias, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, 1, ?, ?)`,
+        ).bind(entryId, nodeId, node.config.name, now, now),
+      )
+    } else {
+      entryStatements.push(
+        env.DB.prepare('UPDATE node_entries SET node_id = ?, name = ?, updated_at = ? WHERE id = ?').bind(
+          nodeId,
+          node.config.name,
+          now,
+          entryId,
+        ),
+      )
+    }
+    entryIdsByFingerprint.set(node.fingerprint, entryId)
+  }
+  if (entryStatements.length) await runBatches(env, entryStatements)
+  const relationStatements: D1PreparedStatement[] = [
+    env.DB.prepare('DELETE FROM source_entries WHERE source_id = ?').bind(sourceId),
+  ]
+  parsedNodes.forEach((node, position) => {
+    const entryId = entryIdsByFingerprint.get(node.fingerprint)
+    if (!entryId) return
+    relationStatements.push(
       env.DB.prepare(
-        `INSERT INTO source_nodes (source_id, node_id, original_name, position)
-         SELECT ?, id, ?, ? FROM nodes WHERE fingerprint = ?`,
-      ).bind(sourceId, node.config.name, position, node.fingerprint),
+        `INSERT INTO source_entries (source_id, entry_id, source_key, original_name, position)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(sourceId, entryId, node.fingerprint, node.config.name, position),
     )
   })
   const nextRefresh =
     source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0
       ? now + source.refreshIntervalHours * 3_600_000
       : null
-  statements.push(
+  relationStatements.push(
     env.DB.prepare(
       `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, name=COALESCE(?, name), status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
     ).bind(
       responseMeta?.name ?? null,
       parsed.warnings.join('\n') || null,
-      nodes.length,
+      parsedNodes.length,
       responseMeta?.etag ?? source.etag,
       responseMeta?.lastModified ?? source.lastModified,
       responseMeta?.subscriptionInfo?.upload ?? null,
@@ -220,12 +299,8 @@ async function replaceSourceNodes(
       sourceId,
     ),
   )
-  statements.push(
-    env.DB.prepare(
-      'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM source_nodes WHERE source_nodes.node_id = nodes.id)',
-    ),
-  )
-  await env.DB.batch(statements)
+  await runBatches(env, relationStatements)
+  await cleanupOrphanNodes(env)
 }
 
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
@@ -245,8 +320,8 @@ export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
   const affected = await db(env)
     .select({ id: profileSources.profileId })
     .from(profileSources)
-    .innerJoin(sourceNodes, eq(sourceNodes.sourceId, profileSources.sourceId))
-    .where(inArray(sourceNodes.nodeId, nodeIds))
+    .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSources.sourceId))
+    .where(inArray(sourceEntries.entryId, nodeIds))
   for (const profileId of new Set(affected.map((profile) => profile.id)))
     await createJob(env, 'compile_profile', profileId)
 }
@@ -306,30 +381,41 @@ export async function refreshSource(env: Env, sourceId: string) {
   }
 
   const parsed = await parseProxyText(response.text, source.nodeNameFilter)
-  await replaceSourceNodes(env, sourceId, parsed, response)
+  await replaceSourceEntries(env, sourceId, parsed, response)
   await enqueueAffectedProfiles(env, sourceId)
 }
 
 export async function selectProfileNodes(env: Env, profile: typeof profiles.$inferSelect) {
   const selected = await db(env)
     .select({
-      id: nodes.id,
+      id: nodeEntries.id,
       config: nodes.config,
-      alias: nodes.alias,
-      originalName: sourceNodes.originalName,
+      alias: nodeEntries.alias,
+      entryName: nodeEntries.name,
+      sourceId: sourceEntries.sourceId,
+      originalName: sourceEntries.originalName,
+      position: sourceEntries.position,
+      createdAt: nodeEntries.createdAt,
     })
-    .from(nodes)
-    .innerJoin(sourceNodes, eq(sourceNodes.nodeId, nodes.id))
+    .from(nodeEntries)
+    .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
+    .innerJoin(sourceEntries, eq(sourceEntries.entryId, nodeEntries.id))
     .innerJoin(
       profileSources,
-      and(eq(profileSources.sourceId, sourceNodes.sourceId), eq(profileSources.profileId, profile.id)),
+      and(eq(profileSources.sourceId, sourceEntries.sourceId), eq(profileSources.profileId, profile.id)),
     )
-    .innerJoin(sources, eq(sources.id, sourceNodes.sourceId))
-    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(sourceNodes.position), asc(nodes.createdAt))
+    .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
+    .where(and(eq(nodeEntries.enabled, true), eq(sources.enabled, true)))
+    .orderBy(asc(sourceEntries.position), asc(nodeEntries.createdAt))
 
   const filterTagIds = await profileFilterTagIds(env, profile.id)
-  const views = await nodeTagViews(env, [...new Set(selected.map((node) => node.id))])
+  const entryIds = [...new Set(selected.map((node) => node.id))]
+  const sourcePairs = [
+    ...new Map(
+      selected.map((node) => [`${node.id}:${node.sourceId}`, { entryId: node.id, sourceId: node.sourceId }]),
+    ).values(),
+  ]
+  const views = await entryTagViews(env, entryIds, sourcePairs)
   const unique = new Map<string, (typeof selected)[number]>()
   for (const node of selected) {
     const view = views.get(node.id) || { direct: [], inherited: [] }
@@ -337,7 +423,10 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
     if (!matchesAnyTag(effectiveTagIds, filterTagIds)) continue
     if (!unique.has(node.id)) unique.set(node.id, node)
   }
-  return [...unique.values()].map((node) => ({ config: node.config, name: node.alias || node.originalName }))
+  return [...unique.values()].map((node) => ({
+    config: node.config,
+    name: node.alias || node.originalName || node.entryName,
+  }))
 }
 
 export async function compileProfile(env: Env, profileId: string) {
