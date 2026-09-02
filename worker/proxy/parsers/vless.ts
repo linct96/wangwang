@@ -3,6 +3,7 @@ import { parseTransport } from './transport'
 export function parseVless(url: URL, config: ProxyConfig) {
   config.uuid = decodeURIComponent(url.username)
   if (url.searchParams.get('flow')) config.flow = url.searchParams.get('flow')
+  if (url.searchParams.has('encryption')) config.encryption = url.searchParams.get('encryption') ?? ''
   const network = url.searchParams.get('type') || url.searchParams.get('network') || 'tcp'
   parseTransport(config, {
     network,
@@ -28,5 +29,12 @@ export function parseVless(url: URL, config: ProxyConfig) {
     config['reality-opts'] = {
       'public-key': url.searchParams.get('pbk') || '',
       'short-id': url.searchParams.get('sid') || '',
+    }
+  const ech = url.searchParams.get('ech')
+  if (ech)
+    config['ech-opts'] = {
+      enable: true,
+      ...(url.searchParams.has('config') ? { config: url.searchParams.get('config') ?? '' } : {}),
+      'query-server-name': ech.split('+', 1)[0],
     }
 }

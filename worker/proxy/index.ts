@@ -135,12 +135,10 @@ function yamlNodes(text: string): ProxyConfig[] | null {
 export function parseEditableProxyYaml(text: string): ProxyConfig {
   if (!text.trim()) throw new Error('节点内容为空')
   if (new TextEncoder().encode(text).byteLength > MAX_TEXT_BYTES) throw new Error('节点内容超过 1 MiB')
-  const configs = yamlNodes(text)
-  if (!configs || configs.length !== 1) throw new Error('YAML 必须且只能包含一个节点')
-  const config = configs[0]!
-  if (config.__warning) throw new Error(String(config.__warning))
-  delete config.__warning
-  return config
+  const document = parse(text, { maxAliasCount: 20 }) as unknown
+  if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('YAML 必须是单个节点对象')
+  const proxy = document as Record<string, unknown>
+  return normalize({ ...proxy, port: Number(proxy.port) } as ProxyConfig)
 }
 
 export async function parseProxyText(text: string, nodeNameFilter: string | null = null): Promise<ParseResult> {
@@ -201,9 +199,7 @@ export async function parseProxyText(text: string, nodeNameFilter: string | null
 }
 
 export function editableProxyYaml(config: ProxyConfig) {
-  const editable = { ...config }
-  for (const field of SECRET_FIELDS) if (field in editable) editable[field] = ''
-  return stringify({ proxies: [editable] }, { lineWidth: 0 })
+  return stringify(config, { lineWidth: 0 })
 }
 
 export function restoreProxySecrets(config: ProxyConfig, current: ProxyConfig) {
