@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { parsePreferredEndpoint } from '../shared/preferred-node'
 import { db } from './tasks'
-import { sourceEntries, sourceTags, sources, tags } from './db'
+import { sourceEntries, sources } from './db'
 import type { ProxyConfig } from './db'
 
 export const MANUAL_SOURCE_ID = 'system-manual'
@@ -109,12 +109,12 @@ const preferredAddressSchema = z
   })
 export const preferredNodeCreateSchema = z
   .object({
-    sourceNodeIds: z.array(z.string().min(1).max(64)).min(1, '请至少选择一个节点').max(20, '最多选择 20 个节点'),
+    sourceEntryIds: z.array(z.string().min(1).max(64)).min(1, '请至少选择一个节点').max(20, '最多选择 20 个节点'),
     addresses: z.array(preferredAddressSchema).min(1, '请至少填写一个优选地址').max(100, '最多填写 100 个优选地址'),
     tags: z.array(z.string().trim().min(1).max(24)).max(10).default([]),
     enabled: z.boolean().default(true),
   })
-  .refine(({ sourceNodeIds, addresses }) => sourceNodeIds.length * addresses.length <= 100, {
+  .refine(({ sourceEntryIds, addresses }) => sourceEntryIds.length * addresses.length <= 100, {
     message: '单次最多生成 100 个节点',
   })
 export const nodeUpdateSchema = z.object({
@@ -298,28 +298,14 @@ export function management(kinds: Array<'url' | 'manual'>) {
   return manual && subscription ? 'mixed' : manual ? 'manual' : 'subscription'
 }
 
-export async function nodeKinds(env: Env, nodeIds: string[]) {
+export async function nodeKinds(env: Env, entryIds: string[]) {
   const result = new Map<string, Array<'url' | 'manual'>>()
-  if (!nodeIds.length) return result
+  if (!entryIds.length) return result
   const rows = await db(env)
-    .select({ nodeId: sourceEntries.entryId, kind: sources.kind })
+    .select({ entryId: sourceEntries.entryId, kind: sources.kind })
     .from(sourceEntries)
     .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
-    .where(and(inArray(sourceEntries.entryId, nodeIds), eq(sources.enabled, true)))
-  for (const row of rows) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.kind])
-  return result
-}
-
-export async function nodeSourceTags(env: Env, nodeIds: string[]) {
-  const result = new Map<string, string[]>()
-  if (!nodeIds.length) return result
-  const rows = await db(env)
-    .select({ nodeId: sourceEntries.entryId, tag: tags.name })
-    .from(sourceEntries)
-    .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
-    .innerJoin(sourceTags, eq(sourceTags.sourceId, sourceEntries.sourceId))
-    .innerJoin(tags, eq(tags.id, sourceTags.tagId))
-    .where(and(inArray(sourceEntries.entryId, nodeIds), eq(sources.enabled, true)))
-  for (const row of rows) if (row.tag) result.set(row.nodeId, [...(result.get(row.nodeId) || []), row.tag])
+    .where(and(inArray(sourceEntries.entryId, entryIds), eq(sources.enabled, true)))
+  for (const row of rows) result.set(row.entryId, [...(result.get(row.entryId) || []), row.kind])
   return result
 }

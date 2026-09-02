@@ -31,7 +31,6 @@ export const sources = sqliteTable(
     url: text('url'),
     pendingUrl: text('pending_url'),
     nodeNameFilter: text('node_name_filter'),
-    nodeTag: text('node_tag'),
     userAgent: text('user_agent').notNull().default('mihomo'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
@@ -72,9 +71,6 @@ export const nodes = sqliteTable(
     server: text('server').notNull(),
     port: integer('port').notNull(),
     config: text('config', { mode: 'json' }).$type<ProxyConfig>().notNull(),
-    alias: text('alias'),
-    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
-    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -113,22 +109,6 @@ export const tags = sqliteTable(
   (table) => [uniqueIndex('tags_normalized_name_idx').on(table.normalizedName)],
 )
 
-export const nodeTags = sqliteTable(
-  'node_tags',
-  {
-    nodeId: text('node_id')
-      .notNull()
-      .references(() => nodes.id, { onDelete: 'cascade' }),
-    tagId: text('tag_id')
-      .notNull()
-      .references(() => tags.id, { onDelete: 'cascade' }),
-  },
-  (table) => [
-    primaryKey({ columns: [table.nodeId, table.tagId] }),
-    index('node_tags_tag_idx').on(table.tagId, table.nodeId),
-  ],
-)
-
 export const nodeEntryTags = sqliteTable(
   'node_entry_tags',
   {
@@ -143,21 +123,6 @@ export const nodeEntryTags = sqliteTable(
     primaryKey({ columns: [table.entryId, table.tagId] }),
     index('node_entry_tags_tag_idx').on(table.tagId, table.entryId),
   ],
-)
-
-export const sourceNodes = sqliteTable(
-  'source_nodes',
-  {
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => sources.id, { onDelete: 'cascade' }),
-    nodeId: text('node_id')
-      .notNull()
-      .references(() => nodes.id, { onDelete: 'cascade' }),
-    originalName: text('original_name').notNull(),
-    position: integer('position').notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.sourceId, table.nodeId] }), index('source_nodes_node_idx').on(table.nodeId)],
 )
 
 export const sourceEntries = sqliteTable(
@@ -213,7 +178,6 @@ export const profiles = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
     templateId: text('template_id').$type<TemplateId>().notNull().default('builtin:minimal'),
     tokenVersion: integer('token_version').notNull().default(1),
     revision: integer('revision').notNull().default(0),
@@ -279,14 +243,11 @@ export const jobs = sqliteTable(
 )
 
 export const sourcesRelations = relations(sources, ({ many }) => ({
-  nodes: many(sourceNodes),
   entries: many(sourceEntries),
   tags: many(sourceTags),
 }))
 export const nodesRelations = relations(nodes, ({ many }) => ({
-  sources: many(sourceNodes),
   entries: many(nodeEntries),
-  tags: many(nodeTags),
 }))
 export const nodeEntriesRelations = relations(nodeEntries, ({ one, many }) => ({
   node: one(nodes, { fields: [nodeEntries.nodeId], references: [nodes.id] }),
@@ -294,7 +255,6 @@ export const nodeEntriesRelations = relations(nodeEntries, ({ one, many }) => ({
   tags: many(nodeEntryTags),
 }))
 export const tagsRelations = relations(tags, ({ many }) => ({
-  nodes: many(nodeTags),
   entries: many(nodeEntryTags),
   sources: many(sourceTags),
   profiles: many(profileTagFilters),

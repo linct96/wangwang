@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c1105ff7-aae6-4a64-b64d-f9f866352d04",
+  "id": "137c0c9f-1d89-48dc-a489-a1e33aa9c14d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "admin_account": {
@@ -157,6 +157,136 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "node_entries": {
+      "name": "node_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "alias": {
+          "name": "alias",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "node_entries_node_idx": {
+          "name": "node_entries_node_idx",
+          "columns": ["node_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "node_entries_node_id_nodes_id_fk": {
+          "name": "node_entries_node_id_nodes_id_fk",
+          "tableFrom": "node_entries",
+          "tableTo": "nodes",
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "node_entry_tags": {
+      "name": "node_entry_tags",
+      "columns": {
+        "entry_id": {
+          "name": "entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "node_entry_tags_tag_idx": {
+          "name": "node_entry_tags_tag_idx",
+          "columns": ["tag_id", "entry_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "node_entry_tags_entry_id_node_entries_id_fk": {
+          "name": "node_entry_tags_entry_id_node_entries_id_fk",
+          "tableFrom": "node_entry_tags",
+          "tableTo": "node_entries",
+          "columnsFrom": ["entry_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "node_entry_tags_tag_id_tags_id_fk": {
+          "name": "node_entry_tags_tag_id_tags_id_fk",
+          "tableFrom": "node_entry_tags",
+          "tableTo": "tags",
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "node_entry_tags_entry_id_tag_id_pk": {
+          "columns": ["entry_id", "tag_id"],
+          "name": "node_entry_tags_entry_id_tag_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "nodes": {
       "name": "nodes",
       "columns": {
@@ -201,29 +331,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "alias": {
-          "name": "alias",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "tags": {
-          "name": "tags",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -300,6 +407,60 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "profile_tag_filters": {
+      "name": "profile_tag_filters",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "profile_tag_filters_tag_idx": {
+          "name": "profile_tag_filters_tag_idx",
+          "columns": ["tag_id", "profile_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "profile_tag_filters_profile_id_profiles_id_fk": {
+          "name": "profile_tag_filters_profile_id_profiles_id_fk",
+          "tableFrom": "profile_tag_filters",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "profile_tag_filters_tag_id_tags_id_fk": {
+          "name": "profile_tag_filters_tag_id_tags_id_fk",
+          "tableFrom": "profile_tag_filters",
+          "tableTo": "tags",
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_tag_filters_profile_id_tag_id_pk": {
+          "columns": ["profile_id", "tag_id"],
+          "name": "profile_tag_filters_profile_id_tag_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "profiles": {
       "name": "profiles",
       "columns": {
@@ -324,14 +485,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
-        },
-        "tags": {
-          "name": "tags",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
         },
         "template_id": {
           "name": "template_id",
@@ -405,8 +558,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "source_nodes": {
-      "name": "source_nodes",
+    "source_entries": {
+      "name": "source_entries",
       "columns": {
         "source_id": {
           "name": "source_id",
@@ -415,8 +568,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "node_id": {
-          "name": "node_id",
+        "entry_id": {
+          "name": "entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_key": {
+          "name": "source_key",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -438,36 +598,95 @@
         }
       },
       "indexes": {
-        "source_nodes_node_idx": {
-          "name": "source_nodes_node_idx",
-          "columns": ["node_id"],
+        "source_entries_key_idx": {
+          "name": "source_entries_key_idx",
+          "columns": ["source_id", "source_key"],
+          "isUnique": true
+        },
+        "source_entries_entry_idx": {
+          "name": "source_entries_entry_idx",
+          "columns": ["entry_id"],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "source_nodes_source_id_sources_id_fk": {
-          "name": "source_nodes_source_id_sources_id_fk",
-          "tableFrom": "source_nodes",
+        "source_entries_source_id_sources_id_fk": {
+          "name": "source_entries_source_id_sources_id_fk",
+          "tableFrom": "source_entries",
           "tableTo": "sources",
           "columnsFrom": ["source_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "source_nodes_node_id_nodes_id_fk": {
-          "name": "source_nodes_node_id_nodes_id_fk",
-          "tableFrom": "source_nodes",
-          "tableTo": "nodes",
-          "columnsFrom": ["node_id"],
+        "source_entries_entry_id_node_entries_id_fk": {
+          "name": "source_entries_entry_id_node_entries_id_fk",
+          "tableFrom": "source_entries",
+          "tableTo": "node_entries",
+          "columnsFrom": ["entry_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "source_nodes_source_id_node_id_pk": {
-          "columns": ["source_id", "node_id"],
-          "name": "source_nodes_source_id_node_id_pk"
+        "source_entries_source_id_entry_id_pk": {
+          "columns": ["source_id", "entry_id"],
+          "name": "source_entries_source_id_entry_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "source_tags": {
+      "name": "source_tags",
+      "columns": {
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "source_tags_tag_idx": {
+          "name": "source_tags_tag_idx",
+          "columns": ["tag_id", "source_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "source_tags_source_id_sources_id_fk": {
+          "name": "source_tags_source_id_sources_id_fk",
+          "tableFrom": "source_tags",
+          "tableTo": "sources",
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "source_tags_tag_id_tags_id_fk": {
+          "name": "source_tags_tag_id_tags_id_fk",
+          "tableFrom": "source_tags",
+          "tableTo": "tags",
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "source_tags_source_id_tag_id_pk": {
+          "columns": ["source_id", "tag_id"],
+          "name": "source_tags_source_id_tag_id_pk"
         }
       },
       "uniqueConstraints": {},
@@ -513,13 +732,6 @@
         },
         "node_name_filter": {
           "name": "node_name_filter",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "node_tag": {
-          "name": "node_tag",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -662,6 +874,57 @@
           "name": "sources_due_idx",
           "columns": ["enabled", "next_refresh_at"],
           "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tags": {
+      "name": "tags",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_name": {
+          "name": "normalized_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tags_normalized_name_idx": {
+          "name": "tags_normalized_name_idx",
+          "columns": ["normalized_name"],
+          "isUnique": true
         }
       },
       "foreignKeys": {},

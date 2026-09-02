@@ -21,9 +21,6 @@ export async function cleanupOrphanNodes(env: Env) {
       'DELETE FROM node_entries WHERE NOT EXISTS (SELECT 1 FROM source_entries WHERE source_entries.entry_id = node_entries.id)',
     ),
     env.DB.prepare(
-      'DELETE FROM source_nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = source_nodes.node_id)',
-    ),
-    env.DB.prepare(
       'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = nodes.id)',
     ),
   ])
@@ -192,8 +189,8 @@ async function replaceSourceEntries(
     await env.DB.batch(
       chunk.map((node) =>
         env.DB.prepare(
-          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
+          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
         ).bind(
           crypto.randomUUID(),
@@ -311,17 +308,17 @@ export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
   for (const profile of affected) await createJob(env, 'compile_profile', profile.id)
 }
 
-export async function enqueueProfilesForNode(env: Env, nodeId: string) {
-  return enqueueProfilesForNodes(env, [nodeId])
+export async function enqueueProfilesForEntry(env: Env, entryId: string) {
+  return enqueueProfilesForEntries(env, [entryId])
 }
 
-export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
-  if (!nodeIds.length) return
+export async function enqueueProfilesForEntries(env: Env, entryIds: string[]) {
+  if (!entryIds.length) return
   const affected = await db(env)
     .select({ id: profileSources.profileId })
     .from(profileSources)
     .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSources.sourceId))
-    .where(inArray(sourceEntries.entryId, nodeIds))
+    .where(inArray(sourceEntries.entryId, entryIds))
   for (const profileId of new Set(affected.map((profile) => profile.id)))
     await createJob(env, 'compile_profile', profileId)
 }

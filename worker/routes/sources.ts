@@ -55,8 +55,7 @@ function normalizeNodeNameFilter(value: string | undefined) {
 }
 
 export function sourceView(source: typeof sources.$inferSelect, profileCount = 0, nodeTags: string[] = []) {
-  const { nodeTag: _nodeTag, ...view } = source
-  return { ...view, nodeTags, pendingUrl: Boolean(source.pendingUrl), profileCount }
+  return { ...source, nodeTags, pendingUrl: Boolean(source.pendingUrl), profileCount }
 }
 
 export const sourcesRouter = new Hono<{ Bindings: Env }>()

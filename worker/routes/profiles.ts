@@ -8,7 +8,7 @@ import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
 import { normalizeTagInputs } from '../tag-model'
-import { replaceProfileTagFilters } from '../tag-store'
+import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
 const templateIdSchema = z
   .string()
@@ -55,13 +55,17 @@ export async function profileView(
   origin: string,
   includeYaml = false,
 ) {
-  const sourceRows = await db(env)
-    .select({ id: profileSources.sourceId })
-    .from(profileSources)
-    .where(eq(profileSources.profileId, profile.id))
+  const [sourceRows, tagRows] = await Promise.all([
+    db(env)
+      .select({ id: profileSources.sourceId })
+      .from(profileSources)
+      .where(eq(profileSources.profileId, profile.id)),
+    profileTagViews(env, profile.id),
+  ])
   const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
+    tags: tagRows.map((tag) => tag.name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     sourceIds: sourceRows.map((item) => item.id),
     subscriptionUrl: `${origin}/s/${token}/config.yaml`,
@@ -89,7 +93,6 @@ profilesRouter.post('/', async (c) => {
     id: crypto.randomUUID(),
     name: input.name,
     enabled: input.enabled,
-    tags: filterNames,
     templateId: input.templateId as TemplateId,
     createdAt: now,
     updatedAt: now,
@@ -127,13 +130,12 @@ profilesRouter.patch('/:id', async (c) => {
     return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   const sourceIds = input.sourceIds ? await assertSourceIds(c.env, input.sourceIds) : null
   const filterNames = input.tags === undefined ? undefined : normalizeTagInputs(input.tags, 20)
-  const { sourceIds: _sourceIds, tags: _tags, ...values } = input
   await database
     .update(profiles)
     .set({
-      ...values,
-      tags: filterNames,
-      templateId: values.templateId as TemplateId | undefined,
+      name: input.name,
+      enabled: input.enabled,
+      templateId: input.templateId as TemplateId | undefined,
       updatedAt: new Date(),
     })
     .where(eq(profiles.id, id))

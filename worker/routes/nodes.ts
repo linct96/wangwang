@@ -16,8 +16,8 @@ import {
   cleanupOrphanNodes,
   db,
   enqueueAffectedProfiles,
-  enqueueProfilesForNode,
-  enqueueProfilesForNodes,
+  enqueueProfilesForEntry,
+  enqueueProfilesForEntries,
 } from '../tasks'
 import {
   buildManualConfig,
@@ -42,8 +42,8 @@ const importProtocols = new Set(['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 
 async function ensurePhysicalNode(env: Env, config: ProxyConfig, nodeFingerprint: string, now: number) {
   const id = crypto.randomUUID()
   await env.DB.prepare(
-    `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
+    `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(fingerprint) DO NOTHING`,
   )
     .bind(id, nodeFingerprint, config.type, config.server, config.port, JSON.stringify(config), now, now)
@@ -87,7 +87,7 @@ async function entryView(env: Env, entryId: string) {
     server: row.server,
     port: row.port,
     url: shareUri({ ...row.config, name: row.alias || row.name }, row.alias || row.name),
-    ...nodeTagPayload(view),
+    ...entryTagPayload(view),
     enabled: row.enabled,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -109,7 +109,7 @@ async function runBatches(env: Env, statements: D1PreparedStatement[]) {
   for (let index = 0; index < statements.length; index += 80) await env.DB.batch(statements.slice(index, index + 80))
 }
 
-function nodeTagPayload(view: {
+function entryTagPayload(view: {
   direct: Array<{ id: string; name: string }>
   inherited: Array<{ id: string; name: string }>
 }) {
@@ -214,8 +214,8 @@ nodesRouter.post('/import', async (c) => {
       fingerprints.add(node.fingerprint)
       statements.push(
         c.env.DB.prepare(
-          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
+          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(fingerprint) DO NOTHING`,
         ).bind(
           crypto.randomUUID(),
@@ -273,21 +273,21 @@ nodesRouter.post('/import', async (c) => {
 nodesRouter.post('/preferred', async (c) => {
   const input = await body(c, preferredNodeCreateSchema)
   const database = db(c.env)
-  const sourceIds = [...new Set(input.sourceNodeIds)]
+  const sourceEntryIds = [...new Set(input.sourceEntryIds)]
   const sourceRows = await database
     .select({ id: nodeEntries.id, name: nodeEntries.name, alias: nodeEntries.alias, config: nodes.config })
     .from(nodeEntries)
     .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
-    .where(inArray(nodeEntries.id, sourceIds))
+    .where(inArray(nodeEntries.id, sourceEntryIds))
   const sourcesById = new Map(sourceRows.map((node) => [node.id, node]))
-  const warnings = sourceIds
+  const warnings = sourceEntryIds
     .filter((id) => !sourcesById.has(id))
     .map((id) => `节点 ${id} 不存在`)
     .slice(0, 20)
   const candidates = new Map<string, { config: ProxyConfig; fingerprint: string }>()
 
-  for (const sourceId of sourceIds) {
-    const source = sourcesById.get(sourceId)
+  for (const sourceEntryId of sourceEntryIds) {
+    const source = sourcesById.get(sourceEntryId)
     if (!source) continue
     for (const endpoint of input.addresses) {
       const config = preferredConfig(source.config, source.alias || source.name, endpoint)
@@ -321,8 +321,8 @@ nodesRouter.post('/preferred', async (c) => {
       createdIds.push(id)
       statements.push(
         c.env.DB.prepare(
-          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, alias, tags, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, '[]', 1, ?, ?)
+          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(fingerprint) DO NOTHING`,
         ).bind(id, nodeFingerprint, config.type, config.server, config.port, JSON.stringify(config), now, now),
         c.env.DB.prepare(
@@ -347,7 +347,7 @@ nodesRouter.post('/preferred', async (c) => {
 
   return ok(c, {
     created: created.length,
-    skipped: input.sourceNodeIds.length * input.addresses.length - created.length,
+    skipped: input.sourceEntryIds.length * input.addresses.length - created.length,
     warnings,
   })
 })
@@ -414,8 +414,8 @@ nodesRouter.get('/', async (c) => {
       .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
       .where(filters),
   ])
-  const nodeIds = rows.map((node) => node.id)
-  const [kinds, tagViews] = await Promise.all([nodeKinds(c.env, nodeIds), entryTagViews(c.env, nodeIds)])
+  const entryIds = rows.map((node) => node.id)
+  const [kinds, tagViews] = await Promise.all([nodeKinds(c.env, entryIds), entryTagViews(c.env, entryIds)])
   return ok(c, {
     items: rows.map(({ config, ...node }) => {
       const nodeManagement = management(kinds.get(node.id) || [])
@@ -424,7 +424,7 @@ nodesRouter.get('/', async (c) => {
         ...node,
         name: node.alias || node.name,
         url: shareUri({ ...config, name: node.alias || node.name }, node.alias || node.name),
-        ...nodeTagPayload(view),
+        ...entryTagPayload(view),
         management: nodeManagement,
         canEditConnection: nodeManagement === 'manual',
         canDelete: nodeManagement === 'manual' || nodeManagement === 'mixed',
@@ -442,7 +442,7 @@ nodesRouter.patch('/batch', async (c) => {
   await c.env.DB.prepare(`UPDATE node_entries SET enabled = ?, updated_at = ? WHERE id IN (${placeholders})`)
     .bind(input.enabled ? 1 : 0, Date.now(), ...input.ids)
     .run()
-  await enqueueProfilesForNodes(c.env, input.ids)
+  await enqueueProfilesForEntries(c.env, input.ids)
   return ok(c, { updated: input.ids.length })
 })
 
@@ -506,7 +506,7 @@ nodesRouter.get('/:id', async (c) => {
     ...safe,
     name: safe.alias || safe.name,
     url: shareUri({ ...entryConfig, name: safe.alias || safe.name }, safe.alias || safe.name),
-    ...nodeTagPayload(view),
+    ...entryTagPayload(view),
     management: nodeManagement,
     canEditConnection: nodeManagement === 'manual',
     canDelete: nodeManagement === 'manual' || nodeManagement === 'mixed',
@@ -587,7 +587,7 @@ nodesRouter.patch('/:id', async (c) => {
       .set({ originalName: config.name })
       .where(and(eq(sourceEntries.sourceId, MANUAL_SOURCE_ID), eq(sourceEntries.entryId, id)))
   await cleanupOrphanNodes(c.env)
-  await enqueueProfilesForNode(c.env, id)
+  await enqueueProfilesForEntry(c.env, id)
   return ok(c, await entryView(c.env, id))
 })
 

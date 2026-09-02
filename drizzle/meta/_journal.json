@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1788164769308,
-      "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1788333833921,
-      "tag": "0001_normalize_tags",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1788335000000,
-      "tag": "0002_node_entries",
+      "when": 1788369523286,
+      "tag": "0000_noisy_giant_girl",
       "breakpoints": true
     }
   ]

@@ -25,6 +25,27 @@ CREATE TABLE `jobs` (
 );
 --> statement-breakpoint
 CREATE INDEX `jobs_entity_idx` ON `jobs` (`type`,`entity_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE `node_entries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`node_id` text NOT NULL,
+	`name` text NOT NULL,
+	`alias` text,
+	`enabled` integer DEFAULT true NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `node_entries_node_idx` ON `node_entries` (`node_id`);--> statement-breakpoint
+CREATE TABLE `node_entry_tags` (
+	`entry_id` text NOT NULL,
+	`tag_id` text NOT NULL,
+	PRIMARY KEY(`entry_id`, `tag_id`),
+	FOREIGN KEY (`entry_id`) REFERENCES `node_entries`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `node_entry_tags_tag_idx` ON `node_entry_tags` (`tag_id`,`entry_id`);--> statement-breakpoint
 CREATE TABLE `nodes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`fingerprint` text NOT NULL,
@@ -32,9 +53,6 @@ CREATE TABLE `nodes` (
 	`server` text NOT NULL,
 	`port` integer NOT NULL,
 	`config` text NOT NULL,
-	`alias` text,
-	`tags` text DEFAULT '[]' NOT NULL,
-	`enabled` integer DEFAULT true NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
@@ -48,11 +66,19 @@ CREATE TABLE `profile_sources` (
 	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE TABLE `profile_tag_filters` (
+	`profile_id` text NOT NULL,
+	`tag_id` text NOT NULL,
+	PRIMARY KEY(`profile_id`, `tag_id`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_tag_filters_tag_idx` ON `profile_tag_filters` (`tag_id`,`profile_id`);--> statement-breakpoint
 CREATE TABLE `profiles` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
-	`tags` text DEFAULT '[]' NOT NULL,
 	`template_id` text DEFAULT 'builtin:minimal' NOT NULL,
 	`token_version` integer DEFAULT 1 NOT NULL,
 	`revision` integer DEFAULT 0 NOT NULL,
@@ -64,17 +90,28 @@ CREATE TABLE `profiles` (
 );
 --> statement-breakpoint
 CREATE INDEX `profiles_template_id_idx` ON `profiles` (`template_id`);--> statement-breakpoint
-CREATE TABLE `source_nodes` (
+CREATE TABLE `source_entries` (
 	`source_id` text NOT NULL,
-	`node_id` text NOT NULL,
+	`entry_id` text NOT NULL,
+	`source_key` text NOT NULL,
 	`original_name` text NOT NULL,
 	`position` integer NOT NULL,
-	PRIMARY KEY(`source_id`, `node_id`),
+	PRIMARY KEY(`source_id`, `entry_id`),
 	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`entry_id`) REFERENCES `node_entries`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `source_nodes_node_idx` ON `source_nodes` (`node_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `source_entries_key_idx` ON `source_entries` (`source_id`,`source_key`);--> statement-breakpoint
+CREATE INDEX `source_entries_entry_idx` ON `source_entries` (`entry_id`);--> statement-breakpoint
+CREATE TABLE `source_tags` (
+	`source_id` text NOT NULL,
+	`tag_id` text NOT NULL,
+	PRIMARY KEY(`source_id`, `tag_id`),
+	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `source_tags_tag_idx` ON `source_tags` (`tag_id`,`source_id`);--> statement-breakpoint
 CREATE TABLE `sources` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -82,7 +119,6 @@ CREATE TABLE `sources` (
 	`url` text,
 	`pending_url` text,
 	`node_name_filter` text,
-	`node_tag` text,
 	`user_agent` text DEFAULT 'mihomo' NOT NULL,
 	`refresh_interval_hours` integer DEFAULT 0 NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
@@ -104,6 +140,15 @@ CREATE TABLE `sources` (
 );
 --> statement-breakpoint
 CREATE INDEX `sources_due_idx` ON `sources` (`enabled`,`next_refresh_at`);--> statement-breakpoint
+CREATE TABLE `tags` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`normalized_name` text NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `tags_normalized_name_idx` ON `tags` (`normalized_name`);--> statement-breakpoint
 CREATE TABLE `templates` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -112,6 +157,3 @@ CREATE TABLE `templates` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
---> statement-breakpoint
-INSERT INTO `sources` (`id`, `name`, `kind`, `status`, `created_at`, `updated_at`)
-VALUES ('system-manual', '手动节点', 'manual', 'ready', unixepoch() * 1000, unixepoch() * 1000);

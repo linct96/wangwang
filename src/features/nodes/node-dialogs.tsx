@@ -176,7 +176,7 @@ export function AddNodeDialog({
     defaultValues: {
       content: '',
       connection: defaultConnection(),
-      sourceNodes: [] as string[],
+      sourceEntries: [] as string[],
       addresses: '',
       tags: [] as string[],
       enabled: true,
@@ -196,7 +196,7 @@ export function AddNodeDialog({
                   )
               : z.string(),
           connection: mode === 'form' ? connectionSchema : z.any(),
-          sourceNodes:
+          sourceEntries:
             mode === 'preferred'
               ? z.array(z.string()).min(1, '请至少选择一个节点').max(20, '最多选择 20 个节点')
               : z.array(z.any()),
@@ -217,7 +217,7 @@ export function AddNodeDialog({
           enabled: z.boolean(),
         })
         .superRefine((value, context) => {
-          if (mode === 'preferred' && value.sourceNodes.length * preferredAddresses(value.addresses).length > 100)
+          if (mode === 'preferred' && value.sourceEntries.length * preferredAddresses(value.addresses).length > 100)
             context.addIssue({ code: 'custom', path: ['addresses'], message: '单次最多生成 100 个节点' })
         }),
     },
@@ -241,7 +241,7 @@ export function AddNodeDialog({
           const result = await api<NodeImportResult>('/nodes/preferred', {
             method: 'POST',
             body: JSON.stringify({
-              sourceNodeIds: value.sourceNodes,
+              sourceEntryIds: value.sourceEntries,
               addresses: preferredAddresses(value.addresses),
               ...options,
             }),
@@ -362,7 +362,7 @@ export function AddNodeDialog({
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <form.Field name="sourceNodes">
+                <form.Field name="sourceEntries">
                   {(field) => {
                     const invalid = field.state.meta.isTouched && !field.state.meta.isValid
                     return (

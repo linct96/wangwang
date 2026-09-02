@@ -28,8 +28,8 @@ export async function ensureTags(env: Env, names: string[]): Promise<TagRecord[]
 
 async function replaceRelations(
   env: Env,
-  table: 'node_tags' | 'source_tags' | 'profile_tag_filters',
-  ownerColumn: 'node_id' | 'source_id' | 'profile_id',
+  table: 'node_entry_tags' | 'source_tags' | 'profile_tag_filters',
+  ownerColumn: 'entry_id' | 'source_id' | 'profile_id',
   ownerId: string,
   tags: TagRecord[],
 ) {
@@ -41,39 +41,9 @@ async function replaceRelations(
   await env.DB.batch(statements)
 }
 
-export async function replaceNodeDirectTags(env: Env, nodeId: string, names: string[]) {
-  return replaceNodeDirectTagsForNodes(env, [nodeId], names)
-}
-
-export async function replaceNodeDirectTagsForNodes(env: Env, nodeIds: string[], names: string[]) {
-  if (!nodeIds.length) return []
-  const tags = await ensureTags(env, names)
-  const statements = [
-    env.DB.prepare('DELETE FROM node_tags WHERE node_id IN (SELECT value FROM json_each(?))').bind(
-      JSON.stringify(nodeIds),
-    ),
-  ]
-  if (tags.length)
-    statements.push(
-      env.DB.prepare(
-        `INSERT INTO node_tags (node_id, tag_id)
-         SELECT node_ids.value, tag_ids.value FROM json_each(?) node_ids CROSS JOIN json_each(?) tag_ids`,
-      ).bind(JSON.stringify(nodeIds), JSON.stringify(tags.map((tag) => tag.id))),
-    )
-  await env.DB.batch(statements)
-  return tags
-}
-
 export async function replaceEntryDirectTags(env: Env, entryId: string, names: string[]) {
   const tags = await ensureTags(env, names)
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM node_entry_tags WHERE entry_id = ?').bind(entryId),
-  ]
-  for (const tag of tags)
-    statements.push(
-      env.DB.prepare('INSERT INTO node_entry_tags (entry_id, tag_id) VALUES (?, ?)').bind(entryId, tag.id),
-    )
-  await env.DB.batch(statements)
+  await replaceRelations(env, 'node_entry_tags', 'entry_id', entryId, tags)
   return tags
 }
 
@@ -121,38 +91,6 @@ export async function sourceTagViews(env: Env, sourceIds: string[]) {
     .bind(...sourceIds)
     .all<{ sourceId: string; id: string; name: string }>()
   for (const row of rows.results) result.get(row.sourceId)?.push({ id: row.id, name: row.name })
-  return result
-}
-
-export async function nodeTagViews(env: Env, nodeIds: string[]) {
-  const result = new Map<string, { direct: TagView[]; inherited: TagView[] }>()
-  for (const nodeId of nodeIds) result.set(nodeId, { direct: [], inherited: [] })
-  for (let index = 0; index < nodeIds.length; index += 100) {
-    const chunk = nodeIds.slice(index, index + 100)
-    const vars = placeholders(chunk.length)
-    const direct = await env.DB.prepare(
-      `SELECT nt.node_id AS nodeId, t.id, t.name
-       FROM node_tags nt JOIN tags t ON t.id = nt.tag_id
-       WHERE nt.node_id IN (${vars})
-       ORDER BY t.normalized_name`,
-    )
-      .bind(...chunk)
-      .all<{ nodeId: string; id: string; name: string }>()
-    for (const row of direct.results) result.get(row.nodeId)?.direct.push({ id: row.id, name: row.name })
-
-    const inherited = await env.DB.prepare(
-      `SELECT DISTINCT sn.node_id AS nodeId, t.id, t.name, t.normalized_name AS normalizedName
-       FROM source_nodes sn
-       JOIN sources s ON s.id = sn.source_id
-       JOIN source_tags st ON st.source_id = s.id
-       JOIN tags t ON t.id = st.tag_id
-       WHERE s.enabled = 1 AND sn.node_id IN (${vars})
-       ORDER BY t.normalized_name`,
-    )
-      .bind(...chunk)
-      .all<{ nodeId: string; id: string; name: string; normalizedName: string }>()
-    for (const row of inherited.results) result.get(row.nodeId)?.inherited.push({ id: row.id, name: row.name })
-  }
   return result
 }
 
@@ -212,6 +150,19 @@ export async function entryTagViews(
     if (!tags.some((tag) => tag.id === row.id)) tags.push({ id: row.id, name: row.name })
   }
   return result
+}
+
+export async function profileTagViews(env: Env, profileId: string) {
+  const rows = await env.DB.prepare(
+    `SELECT t.id, t.name
+     FROM profile_tag_filters ptf
+     JOIN tags t ON t.id = ptf.tag_id
+     WHERE ptf.profile_id = ?
+     ORDER BY t.normalized_name`,
+  )
+    .bind(profileId)
+    .all<TagView>()
+  return rows.results
 }
 
 export async function profileFilterTagIds(env: Env, profileId: string) {
