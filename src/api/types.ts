@@ -36,6 +36,11 @@ export type Source = {
   infoRefreshedAt: string | null
 }
 
+export type TagOption = {
+  id: string
+  name: string
+}
+
 export type NodeItem = {
   id: string
   name: string
@@ -44,6 +49,8 @@ export type NodeItem = {
   server: string
   port: number
   tags: string[]
+  directTags: TagOption[]
+  inheritedTags: TagOption[]
   enabled: boolean
   updatedAt: string
   management: 'subscription' | 'manual' | 'mixed'
