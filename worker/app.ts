@@ -8,6 +8,7 @@ import { authenticated, authRouter } from './routes/auth'
 import { sourcesRouter } from './routes/sources'
 import { nodesRouter } from './routes/nodes'
 import { profilesRouter } from './routes/profiles'
+import { tagsRouter } from './routes/tags'
 import { templatesRouter } from './routes/templates'
 import { geoRouter } from './routes/geo'
 import { ruleSetPresetsRouter } from './routes/rule-set-presets'
@@ -27,6 +28,7 @@ app.route('/api/auth', authRouter)
 app.route('/api/sources', sourcesRouter)
 app.route('/api/nodes', nodesRouter)
 app.route('/api/profiles', profilesRouter)
+app.route('/api/tags', tagsRouter)
 app.route('/api/templates', templatesRouter)
 app.route('/api/geo', geoRouter)
 app.route('/api/rule-set-presets', ruleSetPresetsRouter)
