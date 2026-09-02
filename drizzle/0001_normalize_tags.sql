@@ -33,4 +33,31 @@ CREATE TABLE `tags` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `tags_normalized_name_idx` ON `tags` (`normalized_name`);
+CREATE UNIQUE INDEX `tags_normalized_name_idx` ON `tags` (`normalized_name`);--> statement-breakpoint
+INSERT OR IGNORE INTO tags (id, name, normalized_name, created_at, updated_at)
+SELECT 'tag_' || lower(hex(randomblob(12))), trim(CAST(j.value AS TEXT)), lower(trim(CAST(j.value AS TEXT))), CAST(strftime('%s','now') AS INTEGER) * 1000, CAST(strftime('%s','now') AS INTEGER) * 1000
+FROM nodes n, json_each(n.tags) j
+WHERE trim(CAST(j.value AS TEXT)) <> '';--> statement-breakpoint
+INSERT OR IGNORE INTO tags (id, name, normalized_name, created_at, updated_at)
+SELECT 'tag_' || lower(hex(randomblob(12))), trim(s.node_tag), lower(trim(s.node_tag)), CAST(strftime('%s','now') AS INTEGER) * 1000, CAST(strftime('%s','now') AS INTEGER) * 1000
+FROM sources s
+WHERE s.node_tag IS NOT NULL AND trim(s.node_tag) <> '';--> statement-breakpoint
+INSERT OR IGNORE INTO tags (id, name, normalized_name, created_at, updated_at)
+SELECT 'tag_' || lower(hex(randomblob(12))), trim(CAST(j.value AS TEXT)), lower(trim(CAST(j.value AS TEXT))), CAST(strftime('%s','now') AS INTEGER) * 1000, CAST(strftime('%s','now') AS INTEGER) * 1000
+FROM profiles p, json_each(p.tags) j
+WHERE trim(CAST(j.value AS TEXT)) <> '';--> statement-breakpoint
+INSERT OR IGNORE INTO node_tags (node_id, tag_id)
+SELECT n.id, t.id
+FROM nodes n, json_each(n.tags) j
+JOIN tags t ON t.normalized_name = lower(trim(CAST(j.value AS TEXT)))
+WHERE trim(CAST(j.value AS TEXT)) <> '';--> statement-breakpoint
+INSERT OR IGNORE INTO source_tags (source_id, tag_id)
+SELECT s.id, t.id
+FROM sources s
+JOIN tags t ON t.normalized_name = lower(trim(s.node_tag))
+WHERE s.node_tag IS NOT NULL AND trim(s.node_tag) <> '';--> statement-breakpoint
+INSERT OR IGNORE INTO profile_tag_filters (profile_id, tag_id)
+SELECT p.id, t.id
+FROM profiles p, json_each(p.tags) j
+JOIN tags t ON t.normalized_name = lower(trim(CAST(j.value AS TEXT)))
+WHERE trim(CAST(j.value AS TEXT)) <> '';
