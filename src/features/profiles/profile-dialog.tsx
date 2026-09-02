@@ -5,8 +5,9 @@ import { RefreshCw } from 'lucide-react'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { Profile, Source, TemplateId, TemplateSummary } from '@/api/types'
+import type { Profile, Source, TagOption, TemplateId, TemplateSummary } from '@/api/types'
 import { AppDialog } from '@/components/app-primitives'
+import { TagMultiSelect } from '@/components/tag-multi-select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,25 +41,20 @@ export function ProfileDialog({
 }) {
   const [error, setError] = useState('')
   const { data: templates = [], error: templateError } = useApi<TemplateSummary[]>('/templates')
+  const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
   const form = useForm({
     defaultValues: {
       name: profile?.name || '',
-      tags: profile?.tags.join(', ') || '',
+      tags: profile?.tags || ([] as string[]),
       sourceIds: profile?.sourceIds || [],
       templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {
       onSubmit: z.object({
         name: z.string().trim().min(1, '请输入名称').max(60, '名称不能超过 60 个字符'),
-        tags: z.string().superRefine((value, context) => {
-          const tags = value
-            .split(',')
-            .map((tag) => tag.trim())
-            .filter(Boolean)
-          if (tags.length > 20) context.addIssue({ code: 'custom', message: '标签不能超过 20 个' })
-          if (tags.some((tag) => tag.length > 24))
-            context.addIssue({ code: 'custom', message: '单个标签不能超过 24 个字符' })
-        }),
+        tags: z
+          .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
+          .max(20, '标签不能超过 20 个'),
         sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源').max(20, '节点源不能超过 20 个'),
         templateId: z.custom<TemplateId>((val) => typeof val === 'string' && val.length > 0, '请选择订阅模板'),
       }),
@@ -73,10 +69,7 @@ export function ProfileDialog({
             body: JSON.stringify({
               name: value.name,
               sourceIds: value.sourceIds,
-              tags: value.tags
-                .split(',')
-                .map((tag) => tag.trim())
-                .filter(Boolean),
+              tags: value.tags,
               templateId: value.templateId,
               enabled: profile?.enabled ?? true,
             }),
@@ -257,13 +250,15 @@ export function ProfileDialog({
               return (
                 <Field data-invalid={invalid}>
                   <FieldLabel htmlFor="profile-tags">标签筛选</FieldLabel>
-                  <Input
+                  <TagMultiSelect
                     id="profile-tags"
                     value={field.state.value}
+                    options={tagOptions}
+                    max={20}
+                    allowCreate={false}
+                    placeholder="选择节点标签；留空表示不过滤"
                     onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="例如：香港, 日本 (逗号分隔，留空表示不过滤)"
-                    aria-invalid={invalid}
+                    onChange={field.handleChange}
                   />
                   {invalid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
