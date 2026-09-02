@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { count, desc, eq, sql } from 'drizzle-orm'
 import { jobs, nodes, profiles, sources } from './db'
 import { db } from './tasks'
 import { fail, ok } from './http'
@@ -58,15 +58,15 @@ app.get('/api/jobs/:id', async (c) => {
 })
 
 app.get('/s/:token/config.yaml', async (c) => {
-  const token = await verifySubscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, c.req.param('token'))
-  if (!token) return c.notFound()
-  const profile = await db(c.env)
-    .select()
-    .from(profiles)
-    .where(and(eq(profiles.id, token.profileId), eq(profiles.enabled, true)))
-    .get()
+  const token = c.req.param('token')
+  const candidates = await db(c.env).select().from(profiles).where(eq(profiles.enabled, true))
+  const matches = await Promise.all(
+    candidates.map((profile) =>
+      verifySubscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, token, profile.id, profile.tokenVersion),
+    ),
+  )
+  const profile = candidates[matches.findIndex(Boolean)]
   if (!profile?.compiledYaml) return c.notFound()
-  if (profile.tokenVersion !== token.tokenVersion) return c.notFound()
   const key = `profile:${profile.id}:revision:${profile.revision}`
   let yaml = await c.env.KV.get(key)
   if (!yaml) {

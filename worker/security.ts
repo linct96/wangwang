@@ -51,13 +51,6 @@ function base64Url(bytes: Uint8Array) {
     .replace(/=+$/, '')
 }
 
-function fromBase64Url(value: string) {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
-  return Uint8Array.from(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')), (char) =>
-    char.charCodeAt(0),
-  )
-}
-
 async function signSubscriptionPayload(secret: string, payload: string) {
   if (!secret) throw new Error('SUBSCRIPTION_TOKEN_SECRET 未配置')
   const key = await crypto.subtle.importKey(
@@ -67,29 +60,17 @@ async function signSubscriptionPayload(secret: string, payload: string) {
     false,
     ['sign'],
   )
-  return base64Url(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))))
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload)))
 }
 
 export async function subscriptionToken(secret: string, profileId: string, tokenVersion: number) {
-  const payload = base64Url(new TextEncoder().encode(`${profileId}:${tokenVersion}`))
-  return `${payload}.${await signSubscriptionPayload(secret, payload)}`
+  const signature = await signSubscriptionPayload(secret, `${profileId}:${tokenVersion}`)
+  return base64Url(signature.slice(0, 16))
 }
 
-export async function verifySubscriptionToken(secret: string, token: string) {
-  const [payload, signature, extra] = token.split('.')
-  if (!payload || !signature || extra) return null
-  let decoded: string
-  try {
-    decoded = new TextDecoder().decode(fromBase64Url(payload))
-  } catch {
-    return null
-  }
-  const separator = decoded.lastIndexOf(':')
-  const profileId = decoded.slice(0, separator)
-  const tokenVersion = Number(decoded.slice(separator + 1))
-  if (!profileId || !Number.isSafeInteger(tokenVersion) || tokenVersion < 1) return null
-  const expected = await signSubscriptionPayload(secret, payload)
-  return constantTimeEqual(expected, signature) ? { profileId, tokenVersion } : null
+export async function verifySubscriptionToken(secret: string, token: string, profileId: string, tokenVersion: number) {
+  if (!/^[A-Za-z0-9_-]{22}$/.test(token)) return false
+  return constantTimeEqual(await subscriptionToken(secret, profileId, tokenVersion), token)
 }
 
 export function constantTimeEqual(left: string, right: string) {
