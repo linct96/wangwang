@@ -17,19 +17,47 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format'
+import { useMinimumLoading } from '@/lib/use-minimum-loading'
 import { cn } from '@/lib/utils'
 import { ProfileDialog } from './profile-dialog'
 import '@/styles/profiles.css'
+
+function ProfileCardSkeleton() {
+  return (
+    <article className="profile-card" aria-hidden="true">
+      <div className="profile-card-header">
+        <div className="profile-card-title-wrap">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+      </div>
+      <div className="profile-card-body">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+      <div className="profile-card-footer">
+        <Skeleton className="h-4 w-20" />
+        <div className="profile-action-buttons">
+          <Skeleton className="h-7 w-16" />
+          <Skeleton className="h-7 w-20" />
+        </div>
+      </div>
+    </article>
+  )
+}
 
 export function ProfilesPage() {
   const { data: profiles, error, loading, reload } = useApi<Profile[]>('/profiles')
   const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const { data: templates = [] } = useApi<TemplateSummary[]>('/templates')
   const [adding, setAdding] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [editingProfile, setEditingProfile] = useState<Profile>()
   const [deleting, setDeleting] = useState<Profile>()
   const [compileStatus, setCompileStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [busyId, setBusyId] = useState('')
+  const initialLoading = useMinimumLoading(loading && !profiles)
+  const creatingPlaceholder = useMinimumLoading(creating)
 
   const items = profiles || []
   const enabledCount = items.filter((p) => p.enabled).length
@@ -104,36 +132,18 @@ export function ProfilesPage() {
         </Button>
       </div>
 
-      {error && <PageState loading={false} error={error} />}
+      {error && !initialLoading && <PageState loading={false} error={error} />}
 
-      {loading && !profiles ? (
+      {initialLoading ? (
         <section className="profile-grid">
           {Array.from({ length: 3 }, (_, index) => (
-            <article className="profile-card" key={index} aria-hidden="true">
-              <div className="profile-card-header">
-                <div className="profile-card-title-wrap">
-                  <Skeleton className="h-9 w-9 rounded-lg" />
-                  <Skeleton className="h-5 w-32" />
-                </div>
-              </div>
-              <div className="profile-card-body">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-              <div className="profile-card-footer">
-                <Skeleton className="h-4 w-20" />
-                <div className="profile-action-buttons">
-                  <Skeleton className="h-7 w-16" />
-                  <Skeleton className="h-7 w-20" />
-                </div>
-              </div>
-            </article>
+            <ProfileCardSkeleton key={index} />
           ))}
         </section>
       ) : (
         profiles && (
           <>
-            {items.length > 0 ? (
+            {items.length > 0 || creatingPlaceholder ? (
               <section className="profile-grid">
                 {items.map((profile) => {
                   const status = compileStatus[profile.id]
@@ -231,6 +241,7 @@ export function ProfilesPage() {
                     </article>
                   )
                 })}
+                {creatingPlaceholder && <ProfileCardSkeleton />}
               </section>
             ) : (
               <div className="empty-block">
@@ -249,13 +260,16 @@ export function ProfilesPage() {
           onClose={() => setAdding(false)}
           onSaved={async (jobId) => {
             setAdding(false)
+            setCreating(true)
             try {
               await waitForJob(jobId)
               toast.success('配置生成成功')
             } catch (reason) {
               toast.error(reason instanceof Error ? reason.message : '生成失败')
+            } finally {
+              await reload()
+              setCreating(false)
             }
-            await reload()
           }}
         />
       )}

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ProfileDialog } from '@/features/profiles/profile-dialog'
 import { formatDate } from '@/lib/format'
+import { useMinimumLoading } from '@/lib/use-minimum-loading'
 import { TemplatePreview } from './template-preview'
 import '@/styles/templates.css'
 
@@ -63,6 +64,7 @@ export function TemplatesPage() {
   const [deleting, setDeleting] = useState<TemplateSummary>()
   const [choosingSource, setChoosingSource] = useState(false)
   const [busy, setBusy] = useState('')
+  const initialLoading = useMinimumLoading(loading && !templates)
   const builtin = templates?.filter((template) => template.kind === 'builtin') ?? builtinFallback
   const custom = templates?.filter((template) => template.kind === 'custom') ?? []
 
@@ -113,7 +115,7 @@ export function TemplatesPage() {
           新建模板
         </Button>
       </div>
-      {error && <PageState loading={false} error={error} />}
+      {error && !initialLoading && <PageState loading={false} error={error} />}
 
       <>
         <section className="template-section">
@@ -177,7 +179,7 @@ export function TemplatesPage() {
             <h2>我的模板</h2>
             <span className="template-section-count">{custom.length}</span>
           </div>
-          {loading && !templates ? (
+          {initialLoading ? (
             <section className="template-grid" aria-busy="true" aria-label="正在加载我的模板">
               {Array.from({ length: 3 }, (_, index) => (
                 <article className="template-card" key={index} aria-hidden="true">

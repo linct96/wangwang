@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatBytes, formatDate, formatRelativeTime } from '@/lib/format'
+import { useMinimumLoading } from '@/lib/use-minimum-loading'
 
 const customUserAgent = '__custom__'
 const userAgentPresets = [
@@ -36,7 +37,8 @@ export function SourcesPage() {
   const [busy, setBusy] = useState('')
   const [pendingAdd, setPendingAdd] = useState(false)
   const [refreshStatus, setRefreshStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
-  const initialLoading = loading && data.length === 0
+  const initialLoading = useMinimumLoading(loading && data.length === 0)
+  const pendingAddPlaceholder = useMinimumLoading(pendingAdd)
   const refreshing = loading && data.length > 0
 
   async function action(id: string, operation: 'refresh' | 'toggle' | 'delete', enabled?: boolean) {
@@ -129,9 +131,9 @@ export function SourcesPage() {
                   {error}
                 </TableCell>
               </TableRow>
-            ) : data.length || pendingAdd ? (
+            ) : data.length || pendingAddPlaceholder ? (
               <>
-                {pendingAdd && (
+                {pendingAddPlaceholder && (
                   <TableRow aria-hidden="true">
                     <TableCell colSpan={7}>
                       <Skeleton className="h-8 w-full" />
