@@ -354,9 +354,8 @@ export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
   const template = await resolveTemplate(env, templateId)
   if (!template) return []
   if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') return []
-  let slots: ReturnType<typeof parseTemplateSourceSlots>
   try {
-    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+    parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
   } catch {
     return []
   }
@@ -462,7 +461,7 @@ export async function selectProfileSlotNodes(
   const seenSlotEntries = new Set<string>()
 
   for (const node of selected) {
-    const view = views.get(node.id) || { direct: [], inherited: [] }
+    const view = views.get(node.id, node.sourceId) || { direct: [], inherited: [] }
     const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map((tag) => tag.id)
     if (!matchesAnyTag(effectiveTagIds, filterTagIds)) continue
 

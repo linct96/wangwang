@@ -99,8 +99,8 @@ export async function entryTagViews(
   entryIds: string[],
   sourcePairs?: Array<{ entryId: string; sourceId: string }>,
 ) {
-  const result = new Map<string, { direct: TagView[]; inherited: TagView[] }>()
-  for (const entryId of entryIds) result.set(entryId, { direct: [], inherited: [] })
+  const directMap = new Map<string, TagView[]>()
+  for (const entryId of entryIds) directMap.set(entryId, [])
   for (let index = 0; index < entryIds.length; index += 100) {
     const chunk = entryIds.slice(index, index + 100)
     const vars = placeholders(chunk.length)
@@ -112,12 +112,19 @@ export async function entryTagViews(
     )
       .bind(...chunk)
       .all<{ entryId: string; id: string; name: string }>()
-    for (const row of direct.results) result.get(row.entryId)?.direct.push({ id: row.id, name: row.name })
+    for (const row of direct.results) directMap.get(row.entryId)?.push({ id: row.id, name: row.name })
+  }
+
+  const inheritedMap = new Map<string, TagView[]>()
+  if (sourcePairs && sourcePairs.length > 0) {
+    for (const sp of sourcePairs) {
+      inheritedMap.set(`${sp.entryId}:${sp.sourceId}`, [])
+    }
   }
 
   const inherited = sourcePairs
     ? await env.DB.prepare(
-        `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
+        `SELECT DISTINCT se.entry_id AS entryId, se.source_id AS sourceId, t.id, t.name
          FROM source_entries se
          JOIN sources s ON s.id = se.source_id
          JOIN source_tags st ON st.source_id = s.id
@@ -129,10 +136,10 @@ export async function entryTagViews(
          ORDER BY t.normalized_name`,
       )
         .bind(JSON.stringify(sourcePairs))
-        .all<{ entryId: string; id: string; name: string }>()
+        .all<{ entryId: string; sourceId: string; id: string; name: string }>()
     : entryIds.length
       ? await env.DB.prepare(
-          `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
+          `SELECT DISTINCT se.entry_id AS entryId, se.source_id AS sourceId, t.id, t.name
            FROM source_entries se
            JOIN sources s ON s.id = se.source_id
            JOIN source_tags st ON st.source_id = se.source_id
@@ -142,14 +149,39 @@ export async function entryTagViews(
            ORDER BY t.normalized_name`,
         )
           .bind(JSON.stringify(entryIds))
-          .all<{ entryId: string; id: string; name: string }>()
+          .all<{ entryId: string; sourceId: string; id: string; name: string }>()
       : { results: [] }
+
   for (const row of inherited.results) {
-    if (!result.has(row.entryId)) continue
-    const tags = result.get(row.entryId)!.inherited
+    const key = `${row.entryId}:${row.sourceId}`
+    if (!inheritedMap.has(key)) inheritedMap.set(key, [])
+    const tags = inheritedMap.get(key)!
     if (!tags.some((tag) => tag.id === row.id)) tags.push({ id: row.id, name: row.name })
   }
-  return result
+
+  return {
+    direct: directMap,
+    inherited: inheritedMap,
+    get(entryId: string, sourceId?: string): { direct: TagView[]; inherited: TagView[] } {
+      const direct = directMap.get(entryId) || []
+      if (sourceId) {
+        const inherited = inheritedMap.get(`${entryId}:${sourceId}`) || []
+        return { direct, inherited }
+      }
+      const inherited: TagView[] = []
+      for (const [key, tags] of inheritedMap.entries()) {
+        if (key.startsWith(`${entryId}:`)) {
+          for (const t of tags) {
+            if (!inherited.some((x) => x.id === t.id)) inherited.push(t)
+          }
+        }
+      }
+      return { direct, inherited }
+    },
+    has(entryId: string) {
+      return directMap.has(entryId)
+    },
+  }
 }
 
 export async function profileTagViews(env: Env, profileId: string) {

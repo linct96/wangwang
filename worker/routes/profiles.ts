@@ -18,6 +18,7 @@ import {
 } from '../profile-source-bindings'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
+import { withDbLock } from '../locks'
 
 const templateIdSchema = z
   .string()
@@ -118,9 +119,30 @@ profilesRouter.post('/', async (c) => {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
   }
 
-  let validBindings: ProfileSourceBindingInput[]
+  const filterNames = normalizeTagInputs(input.tags, 20)
+  const now = new Date()
+  const profileId = crypto.randomUUID()
+  const profile = {
+    id: profileId,
+    name: input.name,
+    enabled: input.enabled,
+    templateId: input.templateId as TemplateId,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  let stored: typeof profiles.$inferSelect | undefined
   try {
-    validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings)
+    stored = await withDbLock(c.env, 'source-binding-integrity', async () => {
+      const validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings)
+      await database.insert(profiles).values(profile)
+      await Promise.all([
+        replaceProfileSourceBindings(c.env, profile.id, validBindings),
+        replaceProfileTagFilters(c.env, profile.id, filterNames),
+      ])
+      const res = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
+      return res
+    })
   } catch (error) {
     return fail(
       c,
@@ -130,25 +152,7 @@ profilesRouter.post('/', async (c) => {
     )
   }
 
-  const filterNames = normalizeTagInputs(input.tags, 20)
-  const now = new Date()
-  const profile = {
-    id: crypto.randomUUID(),
-    name: input.name,
-    enabled: input.enabled,
-    templateId: input.templateId as TemplateId,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await database.insert(profiles).values(profile)
-  await Promise.all([
-    replaceProfileSourceBindings(c.env, profile.id, validBindings),
-    replaceProfileTagFilters(c.env, profile.id, filterNames),
-  ])
-
   const job = await createJob(c.env, 'compile_profile', profile.id)
-  const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
   return c.json(
     { data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } },
     202,
@@ -186,55 +190,51 @@ profilesRouter.patch('/:id', async (c) => {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
   }
 
-  const existingBindings = await readProfileSourceBindings(c.env, id)
-  let validBindings: ProfileSourceBindingInput[] | null = null
-
-  if (input.sourceBindings !== undefined) {
-    try {
-      validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings, existingBindings)
-    } catch (error) {
-      return fail(
-        c,
-        400,
-        'PROFILE_SOURCE_BINDINGS_INVALID',
-        error instanceof Error ? error.message : '节点源槽位绑定无效',
-      )
-    }
-  } else if (input.templateId !== undefined && input.templateId !== current.templateId) {
-    try {
-      validBindings = await validateProfileSourceBindings(c.env, slots, existingBindings, existingBindings)
-    } catch (error) {
-      return fail(
-        c,
-        400,
-        'PROFILE_SOURCE_BINDINGS_INVALID',
-        error instanceof Error ? error.message : '节点源槽位绑定无效',
-      )
-    }
-  }
-
   const filterNames = input.tags === undefined ? undefined : normalizeTagInputs(input.tags, 20)
-  await database
-    .update(profiles)
-    .set({
-      name: input.name,
-      enabled: input.enabled,
-      templateId: input.templateId as TemplateId | undefined,
-      updatedAt: new Date(),
-    })
-    .where(eq(profiles.id, id))
+  let updated: typeof profiles.$inferSelect | undefined
 
-  const syncs: Promise<unknown>[] = []
-  if (validBindings) {
-    syncs.push(replaceProfileSourceBindings(c.env, id, validBindings))
+  try {
+    updated = await withDbLock(c.env, 'source-binding-integrity', async () => {
+      const existingBindings = await readProfileSourceBindings(c.env, id)
+      let validBindings: ProfileSourceBindingInput[] | null = null
+
+      if (input.sourceBindings !== undefined) {
+        validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings, existingBindings)
+      } else if (input.templateId !== undefined && input.templateId !== current.templateId) {
+        validBindings = await validateProfileSourceBindings(c.env, slots, existingBindings, existingBindings)
+      }
+
+      await database
+        .update(profiles)
+        .set({
+          name: input.name,
+          enabled: input.enabled,
+          templateId: input.templateId as TemplateId | undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(profiles.id, id))
+
+      const syncs: Promise<unknown>[] = []
+      if (validBindings) {
+        syncs.push(replaceProfileSourceBindings(c.env, id, validBindings))
+      }
+      if (filterNames !== undefined) {
+        syncs.push(replaceProfileTagFilters(c.env, id, filterNames))
+      }
+      await Promise.all(syncs)
+
+      return database.select().from(profiles).where(eq(profiles.id, id)).get()
+    })
+  } catch (error) {
+    return fail(
+      c,
+      400,
+      'PROFILE_SOURCE_BINDINGS_INVALID',
+      error instanceof Error ? error.message : '节点源槽位绑定无效',
+    )
   }
-  if (filterNames !== undefined) {
-    syncs.push(replaceProfileTagFilters(c.env, id, filterNames))
-  }
-  await Promise.all(syncs)
 
   const job = await createJob(c.env, 'compile_profile', id)
-  const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   return c.json(
     { data: { profile: await profileView(c.env, updated!, new URL(c.req.url).origin, true), jobId: job.id } },
     202,

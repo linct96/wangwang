@@ -11,14 +11,28 @@ import {
   canDisableSource,
   validateProfileSourceBindings,
 } from '../worker/profile-source-bindings'
-import { profiles, profileSources, profileSourceBindings, templates, sources, jobs } from '../worker/db'
+import {
+  profiles,
+  profileSources,
+  profileSourceBindings,
+  templates,
+  sources,
+  jobs,
+  nodes,
+  nodeEntries,
+  sourceEntries,
+  sourceTags,
+  tags,
+  profileTagFilters,
+} from '../worker/db'
 import { BUILTIN_TEMPLATE_SLOT_KEYS } from '../worker/templates/builtin'
 import { parseTemplateYaml } from '../worker/templates/validator'
 import { parseTemplateSourceSlots } from '../worker/templates/source-slots'
-import { enqueueProfilesForTemplate } from '../worker/tasks'
+import { enqueueProfilesForTemplate, selectProfileSlotNodes } from '../worker/tasks'
 import { profileSchema, profilesRouter } from '../worker/routes/profiles'
 import { templatesRouter } from '../worker/routes/templates'
 import { sourcesRouter } from '../worker/routes/sources'
+import { resetLocksTableInitializedForTests } from '../worker/locks'
 
 function createD1Adapter(sqliteDb: DatabaseSync) {
   function createStatement(query: string, params: any[] = []) {
@@ -362,7 +376,155 @@ rules:
     expect(bindings.every((b) => b.slotKey === slots[0].key)).toBe(true)
   })
 
-  it('enforces atomic concurrent invariant guards on source disable and delete', async () => {
+  it('migration state machine: retries on failed status and completes', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const env = createTestEnv(sqlite)
+    const database = drizzle(env.DB)
+
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0000_initial.sql'), 'utf8'))
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0001_seed_manual_source.sql'), 'utf8'))
+
+    const now = new Date()
+    await database
+      .insert(sources)
+      .values([{ id: 'src-m1', name: '源1', kind: 'url', enabled: true, createdAt: now, updatedAt: now }])
+
+    const validLegacyYaml = `proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies:
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+rules:
+  - MATCH,节点选择
+`
+    sqlite
+      .prepare(`
+      INSERT INTO templates (id, name, yaml, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+      .run('tpl-m1', '模板1', validLegacyYaml, now.getTime(), now.getTime())
+
+    await database
+      .insert(profiles)
+      .values([
+        { id: 'p-m1', name: '配置1', templateId: 'tpl-m1', compiledYaml: '# yaml', createdAt: now, updatedAt: now },
+      ])
+    await database.insert(profileSources).values([{ profileId: 'p-m1', sourceId: 'src-m1' }])
+
+    for (const stmt of fs
+      .readFileSync(path.resolve('drizzle/0002_windy_nightshade.sql'), 'utf8')
+      .split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt.trim())
+    }
+
+    // Pre-populate _app_migrations with status = 'failed'
+    await database.run(sql`
+      CREATE TABLE IF NOT EXISTS _app_migrations (name TEXT PRIMARY KEY, status TEXT NOT NULL, applied_at INTEGER NOT NULL)
+    `)
+    await database.run(sql`
+      INSERT INTO _app_migrations (name, status, applied_at)
+      VALUES ('source_slots_v1', 'failed', ${Date.now() - 5000})
+    `)
+
+    // Execute migration: should CAS takeover from failed, run migration, and complete!
+    const result = await migrateLegacySourceSlots(env)
+    expect(result.migratedTemplates).toBe(1)
+    expect(result.migratedProfiles).toBe(1)
+
+    const statusRecord = await database.get<{ status: string }>(
+      sql`SELECT status FROM _app_migrations WHERE name = 'source_slots_v1'`,
+    )
+    expect(statusRecord?.status).toBe('completed')
+  })
+
+  it('migration state machine: takes over stale running status and completes', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const env = createTestEnv(sqlite)
+    const database = drizzle(env.DB)
+
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0000_initial.sql'), 'utf8'))
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0001_seed_manual_source.sql'), 'utf8'))
+
+    const now = new Date()
+    await database
+      .insert(sources)
+      .values([{ id: 'src-m2', name: '源2', kind: 'url', enabled: true, createdAt: now, updatedAt: now }])
+
+    const validLegacyYaml = `proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies:
+      - __WANGWANG_CUSTOM_SOURCE_NODES__
+rules:
+  - MATCH,节点选择
+`
+    sqlite
+      .prepare(`
+      INSERT INTO templates (id, name, yaml, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+      .run('tpl-m2', '模板2', validLegacyYaml, now.getTime(), now.getTime())
+
+    await database
+      .insert(profiles)
+      .values([
+        { id: 'p-m2', name: '配置2', templateId: 'tpl-m2', compiledYaml: '# yaml', createdAt: now, updatedAt: now },
+      ])
+    await database.insert(profileSources).values([{ profileId: 'p-m2', sourceId: 'src-m2' }])
+
+    for (const stmt of fs
+      .readFileSync(path.resolve('drizzle/0002_windy_nightshade.sql'), 'utf8')
+      .split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt.trim())
+    }
+
+    // Pre-populate _app_migrations with status = 'running' older than 60s
+    await database.run(sql`
+      CREATE TABLE IF NOT EXISTS _app_migrations (name TEXT PRIMARY KEY, status TEXT NOT NULL, applied_at INTEGER NOT NULL)
+    `)
+    await database.run(sql`
+      INSERT INTO _app_migrations (name, status, applied_at)
+      VALUES ('source_slots_v1', 'running', ${Date.now() - 70_000})
+    `)
+
+    // Execute migration: should CAS takeover from stale running, run migration, and complete!
+    const result = await migrateLegacySourceSlots(env)
+    expect(result.migratedTemplates).toBe(1)
+    expect(result.migratedProfiles).toBe(1)
+
+    const statusRecord = await database.get<{ status: string }>(
+      sql`SELECT status FROM _app_migrations WHERE name = 'source_slots_v1'`,
+    )
+    expect(statusRecord?.status).toBe('completed')
+  })
+
+  it('migration state machine: active running status times out and fails-closed', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const env = createTestEnv(sqlite)
+    const database = drizzle(env.DB)
+
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0000_initial.sql'), 'utf8'))
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0001_seed_manual_source.sql'), 'utf8'))
+    for (const stmt of fs
+      .readFileSync(path.resolve('drizzle/0002_windy_nightshade.sql'), 'utf8')
+      .split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt.trim())
+    }
+
+    // Pre-populate _app_migrations with status = 'running' created just now (< 60s)
+    await database.run(sql`
+      CREATE TABLE IF NOT EXISTS _app_migrations (name TEXT PRIMARY KEY, status TEXT NOT NULL, applied_at INTEGER NOT NULL)
+    `)
+    await database.run(sql`
+      INSERT INTO _app_migrations (name, status, applied_at)
+      VALUES ('source_slots_v1', 'running', ${Date.now()})
+    `)
+
+    // Should poll for ~2.5s and throw MIGRATION_IN_PROGRESS (fail-closed, not returning success)
+    await expect(migrateLegacySourceSlots(env)).rejects.toThrow(/MIGRATION_IN_PROGRESS/)
+  })
+
+  it('enforces real concurrent invariant guards on source disable and delete using Promise.all', async () => {
     const sqlite = new DatabaseSync(':memory:')
     const env = createTestEnv(sqlite)
     const database = drizzle(env.DB)
@@ -418,64 +580,267 @@ rules:
       { profileId: 'p1', slotKey, sourceId: 's2' },
     ])
 
-    // Test 1: Disable s1 -> allowed because s2 remains enabled
-    const patchRes1 = await sourcesRouter.request(
-      '/s1',
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: false }),
-      },
-      env,
-    )
-    expect(patchRes1.status).toBe(200)
+    // Concurrent disable: s1 and s2 both attempt disable at the same time
+    const [patchRes1, patchRes2] = await Promise.all([
+      sourcesRouter.request(
+        '/s1',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        },
+        env,
+      ),
+      sourcesRouter.request(
+        '/s2',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        },
+        env,
+      ),
+    ])
 
-    // Test 2: Disable s2 -> atomically rejected because s2 is sole remaining enabled source
-    const patchRes2 = await sourcesRouter.request(
-      '/s2',
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: false }),
-      },
-      env,
-    )
-    expect(patchRes2.status).toBe(409)
-    const patchError = (await patchRes2.json()) as any
-    expect(patchError.error.code).toBe('SOURCE_REQUIRED_BY_SLOT')
+    const patchStatuses = [patchRes1.status, patchRes2.status].sort()
+    expect(patchStatuses).toEqual([200, 409])
 
-    // Re-enable s1
-    await sourcesRouter.request(
-      '/s1',
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: true }),
-      },
-      env,
-    )
+    // Verify DB invariant: between s1 and s2, exactly 1 source remains enabled
+    const remainingSources = await database.select().from(sources)
+    const testSources = remainingSources.filter((s) => s.id === 's1' || s.id === 's2')
+    const enabledCount = testSources.filter((s) => s.enabled).length
+    expect(enabledCount).toBe(1)
 
-    // Test 3: Delete s1 -> allowed because s2 remains bound
-    const delRes1 = await sourcesRouter.request(
-      '/s1',
-      {
-        method: 'DELETE',
-      },
-      env,
-    )
-    expect(delRes1.status).toBe(200)
+    // Re-enable so both are enabled
+    await database.update(sources).set({ enabled: true })
 
-    // Test 4: Delete s2 -> atomically rejected because s2 is sole remaining bound source
-    const delRes2 = await sourcesRouter.request(
-      '/s2',
-      {
-        method: 'DELETE',
-      },
-      env,
-    )
-    expect(delRes2.status).toBe(409)
-    const delError = (await delRes2.json()) as any
-    expect(delError.error.code).toBe('SOURCE_REQUIRED_BY_SLOT')
+    // Concurrent delete: s1 and s2 both attempt delete at the same time
+    const [delRes1, delRes2] = await Promise.all([
+      sourcesRouter.request('/s1', { method: 'DELETE' }, env),
+      sourcesRouter.request('/s2', { method: 'DELETE' }, env),
+    ])
+
+    const delStatuses = [delRes1.status, delRes2.status].sort()
+    expect(delStatuses).toEqual([200, 409])
+
+    // Verify DB invariant: exactly 1 source remains bound
+    const remainingBindings = await database.select().from(profileSourceBindings)
+    expect(remainingBindings).toHaveLength(1)
+  })
+
+  it('enforces integrity lock on concurrent profile patch and source disable', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const env = createTestEnv(sqlite)
+    const database = drizzle(env.DB)
+
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0000_initial.sql'), 'utf8'))
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0001_seed_manual_source.sql'), 'utf8'))
+    for (const stmt of fs
+      .readFileSync(path.resolve('drizzle/0002_windy_nightshade.sql'), 'utf8')
+      .split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt.trim())
+    }
+
+    const now = new Date()
+    await database.insert(sources).values([
+      { id: 'src-a', name: '源A', kind: 'url', enabled: true, createdAt: now, updatedAt: now },
+      { id: 'src-b', name: '源B', kind: 'url', enabled: true, createdAt: now, updatedAt: now },
+    ])
+
+    const slotKey = '__WANGWANG_SOURCE_SLOT_race__'
+    const tplYaml = `x-wangwang:
+  sources:
+    - key: ${slotKey}
+      name: 竞态槽位
+proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies:
+      - ${slotKey}
+rules:
+  - MATCH,节点选择
+`
+    await database.insert(templates).values({
+      id: 'tpl-race',
+      name: '竞态模板',
+      yaml: tplYaml,
+      migrationStatus: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(profiles).values({
+      id: 'p-race',
+      name: '竞态配置',
+      templateId: 'tpl-race',
+      compiledYaml: '# yaml',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(profileSourceBindings).values([
+      { profileId: 'p-race', slotKey, sourceId: 'src-a' },
+      { profileId: 'p-race', slotKey, sourceId: 'src-b' },
+    ])
+
+    // Concurrently run:
+    // 1) Profile patch to restrict slot to ONLY src-a
+    // 2) Source disable on src-a
+    const [patchProfileRes, disableSourceRes] = await Promise.all([
+      profilesRouter.request(
+        '/p-race',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceBindings: [{ slotKey, sourceIds: ['src-a'] }],
+          }),
+        },
+        env,
+      ),
+      sourcesRouter.request(
+        '/src-a',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        },
+        env,
+      ),
+    ])
+
+    // At least one must maintain the invariant
+    expect([patchProfileRes.status, disableSourceRes.status].some((s) => s >= 400)).toBe(true)
+
+    // Invariant check: the slot must still have at least 1 enabled source
+    const currentBindings = await database
+      .select()
+      .from(profileSourceBindings)
+      .where(eq(profileSourceBindings.profileId, 'p-race'))
+    const allSources = await database.select().from(sources)
+    const sourceMap = new Map(allSources.map((s) => [s.id, s.enabled]))
+    const enabledInSlot = currentBindings.filter((b) => sourceMap.get(b.sourceId)).length
+    expect(enabledInSlot).toBeGreaterThanOrEqual(1)
+  })
+
+  it('isolates inherited source tags by (entryId, sourceId) in selectProfileSlotNodes', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    const env = createTestEnv(sqlite)
+    const database = drizzle(env.DB)
+
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0000_initial.sql'), 'utf8'))
+    sqlite.exec(fs.readFileSync(path.resolve('drizzle/0001_seed_manual_source.sql'), 'utf8'))
+    for (const stmt of fs
+      .readFileSync(path.resolve('drizzle/0002_windy_nightshade.sql'), 'utf8')
+      .split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt.trim())
+    }
+
+    const now = new Date()
+    // Create Sources: src-hk and src-jp
+    await database.insert(sources).values([
+      { id: 'src-hk', name: '香港源', kind: 'url', enabled: true, createdAt: now, updatedAt: now },
+      { id: 'src-jp', name: '日本源', kind: 'url', enabled: true, createdAt: now, updatedAt: now },
+    ])
+
+    // Create Tags: HK and JP
+    await database.insert(tags).values([
+      { id: 'tag-hk', name: '香港', normalizedName: '香港', createdAt: now, updatedAt: now },
+      { id: 'tag-jp', name: '日本', normalizedName: '日本', createdAt: now, updatedAt: now },
+    ])
+
+    // Associate tags with sources
+    await database.insert(sourceTags).values([
+      { sourceId: 'src-hk', tagId: 'tag-hk' },
+      { sourceId: 'src-jp', tagId: 'tag-jp' },
+    ])
+
+    // Shared node and entry
+    await database.insert(nodes).values({
+      id: 'node-shared',
+      fingerprint: 'fp-shared',
+      protocol: 'ss',
+      server: '1.2.3.4',
+      port: 8388,
+      config: { name: '香港日本双线节点', type: 'ss', server: '1.2.3.4', port: 8388 },
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(nodeEntries).values({
+      id: 'entry-shared',
+      nodeId: 'node-shared',
+      name: '双线节点入口',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(sourceEntries).values([
+      { sourceId: 'src-hk', entryId: 'entry-shared', sourceKey: 'k-hk-1', originalName: '节点1', position: 0 },
+      { sourceId: 'src-jp', entryId: 'entry-shared', sourceKey: 'k-jp-1', originalName: '节点1', position: 0 },
+    ])
+
+    // Template with 2 slots: slot-hk and slot-jp
+    const slotHkKey = '__WANGWANG_SOURCE_SLOT_hk__'
+    const slotJpKey = '__WANGWANG_SOURCE_SLOT_jp__'
+    const templateYaml = `x-wangwang:
+  sources:
+    - key: ${slotHkKey}
+      name: 香港槽位
+    - key: ${slotJpKey}
+      name: 日本槽位
+proxy-groups:
+  - name: 节点选择
+    type: select
+    proxies:
+      - ${slotHkKey}
+      - ${slotJpKey}
+rules:
+  - MATCH,节点选择
+`
+    await database.insert(templates).values({
+      id: 'tpl-tags',
+      name: '多标签模板',
+      yaml: templateYaml,
+      migrationStatus: 'ready',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(profiles).values({
+      id: 'p-tags',
+      name: '日本过滤配置',
+      templateId: 'tpl-tags',
+      compiledYaml: '# yaml',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await database.insert(profileSourceBindings).values([
+      { profileId: 'p-tags', slotKey: slotHkKey, sourceId: 'src-hk' },
+      { profileId: 'p-tags', slotKey: slotJpKey, sourceId: 'src-jp' },
+    ])
+
+    // Filter by tag-jp (日本)
+    await database.insert(profileTagFilters).values({
+      profileId: 'p-tags',
+      tagId: 'tag-jp',
+    })
+
+    // Execute selectProfileSlotNodes
+    const prof = await database.select().from(profiles).where(eq(profiles.id, 'p-tags')).get()
+    const selected = await selectProfileSlotNodes(env, prof!)
+
+    // slot-hk MUST NOT select entry-shared (cannot borrow JP tag from src-jp)
+    // slot-jp MUST select entry-shared (inherits JP from src-jp)
+    const inSlotHk = selected.filter((n) => n.slotKey === slotHkKey)
+    const inSlotJp = selected.filter((n) => n.slotKey === slotJpKey)
+
+    expect(inSlotHk).toHaveLength(0)
+    expect(inSlotJp).toHaveLength(1)
+    expect(inSlotJp[0].entryId).toBe('entry-shared')
+    expect(inSlotJp[0].sourceId).toBe('src-jp')
   })
 
   it('does not enqueue compile for incomplete profiles when repairing a needs_repair template', async () => {

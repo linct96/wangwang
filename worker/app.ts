@@ -18,7 +18,15 @@ import { ensureLegacySourceSlotsMigrated } from './migrations/source-slots-migra
 export const app = new Hono<{ Bindings: Env }>()
 
 app.use('/api/*', async (c, next) => {
-  await ensureLegacySourceSlotsMigrated(c.env)
+  try {
+    await ensureLegacySourceSlotsMigrated(c.env)
+  } catch (error) {
+    const text = error instanceof Error ? error.message : '迁移进行中'
+    if (text.includes('MIGRATION_IN_PROGRESS')) {
+      return fail(c, 503, 'MIGRATION_IN_PROGRESS', '数据迁移正在进行中，请稍后重试')
+    }
+    return fail(c, 500, 'MIGRATION_FAILED', text)
+  }
   if (c.req.path === '/api/auth/login' || c.req.path === '/api/auth/init' || c.req.path === '/api/auth/status')
     return next()
   if (!(await authenticated(c))) return fail(c, 401, 'AUTH_REQUIRED', '请先登录')

@@ -190,17 +190,24 @@ export async function migrateLegacySourceSlots(env: Env): Promise<{
     sql`CREATE TABLE IF NOT EXISTS _app_migrations (name TEXT PRIMARY KEY, status TEXT NOT NULL, applied_at INTEGER NOT NULL)`,
   )
 
-  // Atomic claim: only one isolate can insert with PRIMARY KEY constraint
+  const now = Date.now()
+  // 1. Atomic initial claim: only one isolate can insert with PRIMARY KEY constraint
   const claim = await database.run(
-    sql`INSERT OR IGNORE INTO _app_migrations (name, status, applied_at) VALUES (${MIGRATION_NAME}, 'running', ${Date.now()})`,
+    sql`INSERT OR IGNORE INTO _app_migrations (name, status, applied_at) VALUES (${MIGRATION_NAME}, 'running', ${now})`,
   )
 
-  // If another isolate claimed or already completed the migration
-  if (claim.meta.changes === 0) {
-    for (let attempt = 0; attempt < 50; attempt++) {
+  let executeMigration = claim.meta.changes === 1
+
+  // 2. If another isolate claimed or already completed the migration
+  if (!executeMigration) {
+    const maxWaitMs = 2500
+    const startWait = Date.now()
+
+    while (Date.now() - startWait < maxWaitMs) {
       const record = await database.get<{ status: string; applied_at: number }>(
         sql`SELECT status, applied_at FROM _app_migrations WHERE name = ${MIGRATION_NAME}`,
       )
+
       if (record?.status === 'completed') {
         return {
           migratedTemplates: 0,
@@ -208,19 +215,39 @@ export async function migrateLegacySourceSlots(env: Env): Promise<{
           migratedProfiles: 0,
         }
       }
-      // Recover from stale lock if isolate crashed (> 60s)
-      if (record?.status === 'running' && Date.now() - record.applied_at > 60_000) {
-        const steal = await database.run(
-          sql`UPDATE _app_migrations SET status = 'running', applied_at = ${Date.now()} WHERE name = ${MIGRATION_NAME} AND status = 'running'`,
+
+      const currentTime = Date.now()
+      const isFailed = record?.status === 'failed'
+      const isStaleRunning = record?.status === 'running' && currentTime - record.applied_at > 60_000
+
+      // CAS takeover: only changes === 1 enters migration body
+      if (isFailed || isStaleRunning) {
+        const casResult = await database.run(
+          sql`UPDATE _app_migrations
+              SET status = 'running', applied_at = ${currentTime}
+              WHERE name = ${MIGRATION_NAME} AND status = ${record.status} AND applied_at = ${record.applied_at}`,
         )
-        if (steal.meta.changes > 0) break // Acquired stale lock
+        if (casResult.meta.changes === 1) {
+          executeMigration = true
+          break // Fall through to execute migration body!
+        }
       }
+
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    return {
-      migratedTemplates: 0,
-      failedTemplates: 0,
-      migratedProfiles: 0,
+
+    if (!executeMigration) {
+      const finalCheck = await database.get<{ status: string }>(
+        sql`SELECT status FROM _app_migrations WHERE name = ${MIGRATION_NAME}`,
+      )
+      if (finalCheck?.status === 'completed') {
+        return {
+          migratedTemplates: 0,
+          failedTemplates: 0,
+          migratedProfiles: 0,
+        }
+      }
+      throw new Error('MIGRATION_IN_PROGRESS: 数据迁移正在进行中，请稍后重试')
     }
   }
 
@@ -313,4 +340,8 @@ export async function ensureLegacySourceSlotsMigrated(env: Env) {
   if (migrationDone) return
   await migrateLegacySourceSlots(env)
   migrationDone = true
+}
+
+export function resetMigrationDoneForTests() {
+  migrationDone = false
 }
