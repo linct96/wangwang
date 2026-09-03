@@ -60,19 +60,12 @@ export function ProfileDialog({
   const currentTemplate = templates.find((t) => t.id === templateId)
 
   function handleTemplateChange(nextTemplateId: TemplateId) {
-    const prevTemplate = templates.find((t) => t.id === templateId)
     const nextTemplate = templates.find((t) => t.id === nextTemplateId)
-    const prevKeys = new Set(prevTemplate?.sourceSlots.map((s) => s.key) || [])
-    const nextKeys = new Set(nextTemplate?.sourceSlots.map((s) => s.key) || [])
-
-    const sameKeys = prevKeys.size === nextKeys.size && [...prevKeys].every((k) => nextKeys.has(k))
-    if (!sameKeys) {
-      const freshBindings: Record<string, string[]> = {}
-      for (const slot of nextTemplate?.sourceSlots || []) {
-        freshBindings[slot.key] = []
-      }
-      setBindings(freshBindings)
+    const nextBindings: Record<string, string[]> = {}
+    for (const slot of nextTemplate?.sourceSlots || []) {
+      nextBindings[slot.key] = bindings[slot.key] || []
     }
+    setBindings(nextBindings)
     setTemplateId(nextTemplateId)
   }
 
@@ -238,14 +231,15 @@ export function ProfileDialog({
                             variant="ghost"
                             size="xs"
                             className="text-xs text-muted-foreground hover:text-foreground h-6 px-1.5"
-                            onClick={() =>
-                              setSlotSources(
-                                slot.key,
-                                sources.map((s) => s.id),
+                            onClick={() => {
+                              const enabledIds = sources.filter((s) => s.enabled).map((s) => s.id)
+                              const existingDisabled = (bindings[slot.key] || []).filter(
+                                (id) => !sourceById.get(id)?.enabled,
                               )
-                            }
+                              setSlotSources(slot.key, [...new Set([...enabledIds, ...existingDisabled])])
+                            }}
                           >
-                            全选
+                            全选可用
                           </Button>
                           <span className="text-muted-foreground text-xs">/</span>
                           <Button
@@ -269,27 +263,35 @@ export function ProfileDialog({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-0.5">
                         {sources.map((source) => {
                           const checked = boundSourceIds.includes(source.id)
+                          const canToggle = source.enabled || checked
                           return (
                             <label
                               key={source.id}
                               htmlFor={`source-${slot.key}-${source.id}`}
                               className={cn(
-                                'flex items-center justify-between gap-2.5 p-2 rounded-lg border text-sm cursor-pointer transition-all select-none',
+                                'flex items-center justify-between gap-2.5 p-2 rounded-lg border text-sm transition-all select-none',
+                                canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
                                 checked
                                   ? 'border-primary/40 bg-primary/5 shadow-xs dark:bg-primary/10'
                                   : 'border-border/70 hover:border-border hover:bg-muted/40',
-                                !source.enabled && 'opacity-70',
+                                !source.enabled && 'opacity-75',
                               )}
+                              title={!canToggle ? '该节点源已停用，无法新选择' : undefined}
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <Checkbox
                                   id={`source-${slot.key}-${source.id}`}
                                   checked={checked}
-                                  onCheckedChange={() => toggleSlotSource(slot.key, source.id)}
+                                  disabled={!canToggle}
+                                  onCheckedChange={() => {
+                                    if (canToggle) toggleSlotSource(slot.key, source.id)
+                                  }}
                                 />
                                 <span className="truncate font-medium text-xs sm:text-sm">
                                   {source.name}
-                                  {!source.enabled && <span className="text-destructive text-xs ml-1">(已停用)</span>}
+                                  {!source.enabled && (
+                                    <span className="text-destructive text-xs ml-1 font-normal">(已停用)</span>
+                                  )}
                                 </span>
                               </div>
                               <Badge
