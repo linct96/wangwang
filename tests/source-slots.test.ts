@@ -398,3 +398,65 @@ rules:
     expect(rendered).not.toContain('__WANGWANG_')
   })
 })
+
+import { sameSourceSlotStructure } from '../worker/templates/source-slots'
+
+describe('sameSourceSlotStructure', () => {
+  const slotA = '__WANGWANG_SOURCE_SLOT_slot01__'
+  const slotB = '__WANGWANG_SOURCE_SLOT_slot02__'
+  const slotC = '__WANGWANG_SOURCE_SLOT_slot03__'
+
+  const templateBase = (slots: string, proxies: string) => `x-wangwang:
+  sources:
+${slots}
+proxy-groups:
+  - name: test
+    type: select
+    proxies:
+${proxies}
+rules:
+  - MATCH,test
+`
+
+  const originalYaml = templateBase(
+    `    - key: ${slotA}\n      name: 主力\n    - key: ${slotB}\n      name: 备用`,
+    `      - ${slotA}\n      - ${slotB}`,
+  )
+
+  it('仅重命名槽位时视为相同结构', () => {
+    const renamedYaml = templateBase(
+      `    - key: ${slotA}\n      name: 主力新名称\n    - key: ${slotB}\n      name: 备用新名称`,
+      `      - ${slotA}\n      - ${slotB}`,
+    )
+    expect(sameSourceSlotStructure(originalYaml, renamedYaml)).toBe(true)
+  })
+
+  it('仅重排序槽位时视为相同结构', () => {
+    const reorderedYaml = templateBase(
+      `    - key: ${slotB}\n      name: 备用\n    - key: ${slotA}\n      name: 主力`,
+      `      - ${slotA}\n      - ${slotB}`,
+    )
+    expect(sameSourceSlotStructure(originalYaml, reorderedYaml)).toBe(true)
+  })
+
+  it('新增槽位时视为结构改变', () => {
+    const addedYaml = templateBase(
+      `    - key: ${slotA}\n      name: 主力\n    - key: ${slotB}\n      name: 备用\n    - key: ${slotC}\n      name: 额外`,
+      `      - ${slotA}\n      - ${slotB}\n      - ${slotC}`,
+    )
+    expect(sameSourceSlotStructure(originalYaml, addedYaml)).toBe(false)
+  })
+
+  it('删除槽位时视为结构改变', () => {
+    const deletedYaml = templateBase(`    - key: ${slotA}\n      name: 主力`, `      - ${slotA}`)
+    expect(sameSourceSlotStructure(originalYaml, deletedYaml)).toBe(false)
+  })
+
+  it('更换槽位 key 时视为结构改变', () => {
+    const keyChangedYaml = templateBase(
+      `    - key: ${slotA}\n      name: 主力\n    - key: ${slotC}\n      name: 备用`,
+      `      - ${slotA}\n      - ${slotC}`,
+    )
+    expect(sameSourceSlotStructure(originalYaml, keyChangedYaml)).toBe(false)
+  })
+})

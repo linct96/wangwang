@@ -10,7 +10,7 @@ import { builtinTemplates } from '../templates/builtin'
 import { renderMihomoConfig, type SelectedSlotNode } from '../templates/renderer'
 import { resolveTemplate, templateView } from '../templates/resolver'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml } from '../templates/validator'
-import { parseTemplateSourceSlots } from '../templates/source-slots'
+import { parseTemplateSourceSlots, sameSourceSlotStructure } from '../templates/source-slots'
 import { profileBindingState } from '../profile-source-bindings'
 
 const yamlSchema = z
@@ -182,27 +182,45 @@ templatesRouter.patch('/:id', async (c) => {
   const input = await body(c, updateSchema)
   const current = await db(c.env).select().from(templates).where(eq(templates.id, id)).get()
   if (!current) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+
+  const [{ value: profileCount }] = await db(c.env)
+    .select({ value: count() })
+    .from(profiles)
+    .where(eq(profiles.templateId, id as TemplateId))
+
   if (input.yaml) {
     try {
       parseTemplateYaml(input.yaml)
     } catch (error) {
       return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
     }
+
+    if (Number(profileCount) > 0 && current.migrationStatus === 'ready') {
+      if (!sameSourceSlotStructure(current.yaml, input.yaml)) {
+        return fail(c, 409, 'TEMPLATE_SOURCE_SLOTS_LOCKED', '模板正在被配置使用，不能新增、删除或修改节点源槽位')
+      }
+    }
   }
+
+  const repairResolved = Boolean(input.yaml && current.migrationStatus === 'needs_repair')
+
   await db(c.env)
     .update(templates)
     .set({
       ...input,
       description: input.description === undefined ? undefined : input.description,
+      migrationStatus: repairResolved ? ('ready' as const) : undefined,
+      migrationError: repairResolved ? null : undefined,
       updatedAt: new Date(),
     })
     .where(eq(templates.id, id))
+
   const [updated, jobs] = await Promise.all([
     db(c.env).select().from(templates).where(eq(templates.id, id)).get(),
     enqueueProfilesForTemplate(c.env, id),
   ])
   return c.json(
-    { data: { template: templateView(updated!, jobs.length, true), jobIds: jobs.map((job) => job.id) } },
+    { data: { template: templateView(updated!, Number(profileCount), true), jobIds: jobs.map((job) => job.id) } },
     202,
   )
 })

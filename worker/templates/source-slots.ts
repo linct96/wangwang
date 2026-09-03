@@ -90,3 +90,21 @@ export function generateSourceSlotKey(existingKeys?: Iterable<string>): string {
     }
   }
 }
+
+import { parse } from 'yaml'
+
+export function sameSourceSlotStructure(oldYaml: string, nextYaml: string): boolean {
+  try {
+    const oldConfig = parse(oldYaml, { maxAliasCount: 20 }) as Record<string, unknown>
+    const nextConfig = parse(nextYaml, { maxAliasCount: 20 }) as Record<string, unknown>
+    const oldKeys = sourceSlotKeySet(oldConfig)
+    const nextKeys = sourceSlotKeySet(nextConfig)
+    if (oldKeys.size !== nextKeys.size) return false
+    for (const key of oldKeys) {
+      if (!nextKeys.has(key)) return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}

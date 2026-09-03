@@ -333,12 +333,27 @@ export async function enqueueProfilesForEntries(env: Env, entryIds: string[]) {
 }
 
 export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
+  const template = await resolveTemplate(env, templateId)
+  if (!template) return []
+  if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') return []
+  let slots: ReturnType<typeof parseTemplateSourceSlots>
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch {
+    return []
+  }
+
   const affected = await db(env)
     .select({ id: profiles.id })
     .from(profiles)
     .where(eq(profiles.templateId, templateId as TemplateId))
   const jobs = []
-  for (const profile of affected) jobs.push(await createJob(env, 'compile_profile', profile.id))
+  for (const profile of affected) {
+    const { complete } = await profileBindingState(env, profile.id, slots)
+    if (complete) {
+      jobs.push(await createJob(env, 'compile_profile', profile.id))
+    }
+  }
   return jobs
 }
 
