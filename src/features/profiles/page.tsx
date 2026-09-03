@@ -62,7 +62,6 @@ export function ProfilesPage() {
   const items = profiles || []
   const enabledCount = items.filter((p) => p.enabled).length
   const templateMap = new Map(templates.map((t) => [t.id, t.name]))
-  const sourceMap = new Map(sources.map((s) => [s.id, s.name]))
 
   async function triggerCompile(id: string) {
     setCompileStatus((prev) => ({ ...prev, [id]: 'loading' }))
@@ -175,7 +174,11 @@ export function ProfilesPage() {
                               </IconButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem disabled={isCompiling} onClick={() => void triggerCompile(profile.id)}>
+                              <DropdownMenuItem
+                                disabled={isCompiling || !profile.bindingComplete}
+                                title={!profile.bindingComplete ? '槽位绑定未完成，无法重新生成' : undefined}
+                                onClick={() => void triggerCompile(profile.id)}
+                              >
                                 <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
                                 {isCompiling ? '正在生成...' : '重新生成'}
                               </DropdownMenuItem>
@@ -204,13 +207,21 @@ export function ProfilesPage() {
                         </div>
 
                         <div className="profile-info-item">
-                          <span className="profile-info-label">节点来源</span>
-                          <div className="profile-tags-wrap">
-                            {[...new Set(profile.sourceBindings?.flatMap((b) => b.sourceIds) ?? [])].map((sid) => (
-                              <span key={sid} className="profile-pill">
-                                {sourceMap.get(sid) || '未知源'}
+                          <span className="profile-info-label">槽位与源</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="profile-pill text-[11px] font-mono">
+                              {profile.sourceBindings?.length || 0} 个槽位 ·{' '}
+                              {new Set(profile.sourceBindings?.flatMap((b) => b.sourceIds) ?? []).size} 个节点源
+                            </span>
+                            {profile.bindingComplete ? (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                已就绪
                               </span>
-                            ))}
+                            ) : (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded font-medium bg-destructive/10 text-destructive">
+                                未完成
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>

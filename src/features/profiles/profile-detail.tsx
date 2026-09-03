@@ -21,6 +21,7 @@ import { AppConfirmDialog, IconButton, PageState } from '@/components/app-primit
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
 import { ProfileDialog } from './profile-dialog'
 import '@/styles/profiles.css'
@@ -39,6 +40,8 @@ export function ProfileDetailPage() {
 
   const templateMap = new Map(templates.map((t) => [t.id, t.name]))
   const sourceMap = new Map(sources.map((s) => [s.id, s.name]))
+  const currentTemplate = templates.find((t) => t.id === profile?.templateId)
+  const slotMap = new Map(currentTemplate?.sourceSlots.map((s) => [s.key, s.name]) || [])
 
   async function runCompile() {
     setCompileStatus('loading')
@@ -105,7 +108,12 @@ export function ProfileDetailPage() {
         </div>
 
         <div className="heading-actions">
-          <Button variant="outline" disabled={compileStatus === 'loading' || busy} onClick={() => void runCompile()}>
+          <Button
+            variant="outline"
+            disabled={profile?.bindingComplete === false || compileStatus === 'loading' || busy}
+            title={profile?.bindingComplete === false ? '配置存在未完成的节点源槽位绑定，无法重新生成' : undefined}
+            onClick={() => void runCompile()}
+          >
             {compileStatus === 'loading' ? (
               <RefreshCw data-icon="inline-start" className="spin" />
             ) : compileStatus === 'success' ? (
@@ -125,148 +133,192 @@ export function ProfileDetailPage() {
       <PageState loading={loading} error={error} />
 
       {profile && (
-        <div className="profile-detail-grid">
-          {/* 左侧：分发与属性看板 */}
-          <div className="profile-detail-sidebar">
-            {/* 订阅中心 */}
-            <div className="section profile-hub-card">
-              <div className="section-title flex items-center justify-between">
-                <h2>订阅分发中心</h2>
-                <span className="text-xs text-muted-foreground font-mono">Clash / Mihomo</span>
-              </div>
-              <div className="profile-hub-content">
-                <div className="copy-field">
-                  <Input readOnly value={profile.subscriptionUrl} className="font-mono text-xs" />
-                  <Button type="button" variant="outline" onClick={() => copyText(profile.subscriptionUrl, '订阅地址')}>
-                    <Clipboard className="size-3.5 mr-1" />
-                    复制
-                  </Button>
+        <>
+          {profile.bindingComplete === false && (
+            <Alert variant="destructive" className="mb-4">
+              <ShieldAlert className="size-4" />
+              <AlertDescription>
+                配置存在未完成的节点源槽位绑定，订阅编译已被暂停。请点击右上角「编辑配置」完成槽位绑定。
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="profile-detail-grid">
+            {/* 左侧：分发与属性看板 */}
+            <div className="profile-detail-sidebar">
+              {/* 订阅中心 */}
+              <div className="section profile-hub-card">
+                <div className="section-title flex items-center justify-between">
+                  <h2>订阅分发中心</h2>
+                  <span className="text-xs text-muted-foreground font-mono">Clash / Mihomo</span>
                 </div>
+                <div className="profile-hub-content">
+                  <div className="copy-field">
+                    <Input readOnly value={profile.subscriptionUrl} className="font-mono text-xs" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => copyText(profile.subscriptionUrl, '订阅地址')}
+                    >
+                      <Clipboard className="size-3.5 mr-1" />
+                      复制
+                    </Button>
+                  </div>
 
-                <div className="client-import-group">
-                  <span className="client-import-label">一键导入客户端</span>
-                  <div className="client-import-grid">
-                    <a
-                      href={`clash://install-config?url=${encodeURIComponent(profile.subscriptionUrl)}&name=${encodeURIComponent(profile.name)}`}
-                      className="client-btn"
+                  <div className="client-import-group">
+                    <span className="client-import-label">一键导入客户端</span>
+                    <div className="client-import-grid">
+                      <a
+                        href={`clash://install-config?url=${encodeURIComponent(profile.subscriptionUrl)}&name=${encodeURIComponent(profile.name)}`}
+                        className="client-btn"
+                      >
+                        <Sparkles className="size-3.5" />
+                        Clash / Verge
+                      </a>
+                      <a
+                        href={`surge:///install-config?url=${encodeURIComponent(profile.subscriptionUrl)}&name=${encodeURIComponent(profile.name)}`}
+                        className="client-btn"
+                      >
+                        Surge
+                      </a>
+                      <a
+                        href={`shadowrocket://add/sub://${btoa(profile.subscriptionUrl)}?title=${encodeURIComponent(profile.name)}`}
+                        className="client-btn"
+                      >
+                        Shadowrocket
+                      </a>
+                    </div>
+                  </div>
+
+                  {profile.error && (
+                    <Alert variant="destructive">
+                      <ShieldAlert className="size-4" />
+                      <AlertDescription>{profile.error}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="hub-footer">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10"
+                      disabled={busy}
+                      onClick={() => setRotatingToken(true)}
                     >
-                      <Sparkles className="size-3.5" />
-                      Clash / Verge
-                    </a>
-                    <a
-                      href={`surge:///install-config?url=${encodeURIComponent(profile.subscriptionUrl)}&name=${encodeURIComponent(profile.name)}`}
-                      className="client-btn"
-                    >
-                      Surge
-                    </a>
-                    <a
-                      href={`shadowrocket://add/sub://${btoa(profile.subscriptionUrl)}?title=${encodeURIComponent(profile.name)}`}
-                      className="client-btn"
-                    >
-                      Shadowrocket
-                    </a>
+                      <RotateCcwKey className="size-3.5 mr-1.5" />
+                      轮换订阅令牌
+                    </Button>
                   </div>
                 </div>
+              </div>
 
-                {profile.error && (
-                  <Alert variant="destructive">
-                    <ShieldAlert className="size-4" />
-                    <AlertDescription>{profile.error}</AlertDescription>
-                  </Alert>
-                )}
+              {/* 规则与过滤元数据 */}
+              <div className="section profile-meta-card">
+                <div className="section-title">
+                  <h2>配置结构</h2>
+                </div>
+                <div className="profile-meta-content">
+                  <div className="meta-row">
+                    <span className="meta-label">关联模板</span>
+                    <span className="meta-value font-semibold flex items-center gap-1.5">
+                      <Zap className="size-3.5 text-amber-500" />
+                      {templateMap.get(profile.templateId) || profile.templateId}
+                    </span>
+                  </div>
 
-                <div className="hub-footer">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:bg-destructive/10"
-                    disabled={busy}
-                    onClick={() => setRotatingToken(true)}
-                  >
-                    <RotateCcwKey className="size-3.5 mr-1.5" />
-                    轮换订阅令牌
-                  </Button>
+                  <div className="meta-row flex-col items-start gap-2">
+                    <span className="meta-label">节点源槽位绑定</span>
+                    <div className="flex flex-col gap-2 w-full">
+                      {profile.sourceBindings?.map((binding) => (
+                        <div
+                          key={binding.slotKey}
+                          className="flex flex-col gap-1 p-2 rounded-md bg-muted/40 border border-border/50 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-foreground">
+                              {slotMap.get(binding.slotKey) || binding.slotKey}
+                            </span>
+                            <code className="text-[10px] text-muted-foreground font-mono">{binding.slotKey}</code>
+                          </div>
+                          <div className="meta-tags mt-1">
+                            {binding.sourceIds.length > 0 ? (
+                              binding.sourceIds.map((sid) => {
+                                const s = sourceMap.get(sid)
+                                const sourceObj = sources.find((src) => src.id === sid)
+                                return (
+                                  <span
+                                    key={sid}
+                                    className={cn(
+                                      'profile-pill',
+                                      sourceObj && !sourceObj.enabled && 'opacity-60 line-through',
+                                    )}
+                                  >
+                                    {s || sid}
+                                    {sourceObj && !sourceObj.enabled && ' (已停用)'}
+                                  </span>
+                                )
+                              })
+                            ) : (
+                              <span className="text-destructive text-xs">未绑定任何节点源</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="meta-row">
+                    <span className="meta-label">标签筛选</span>
+                    <div className="meta-tags">
+                      {profile.tags.length > 0 ? (
+                        profile.tags.map((tag) => (
+                          <span key={tag} className="profile-pill text-[11px]">
+                            {tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-muted-foreground">不过滤</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* 规则与过滤元数据 */}
-            <div className="section profile-meta-card">
-              <div className="section-title">
-                <h2>配置结构</h2>
-              </div>
-              <div className="profile-meta-content">
-                <div className="meta-row">
-                  <span className="meta-label">关联模板</span>
-                  <span className="meta-value font-semibold flex items-center gap-1.5">
-                    <Zap className="size-3.5 text-amber-500" />
-                    {templateMap.get(profile.templateId) || profile.templateId}
-                  </span>
-                </div>
-
-                <div className="meta-row">
-                  <span className="meta-label">包含节点源</span>
-                  <div className="meta-tags">
-                    {[...new Set(profile.sourceBindings?.flatMap((b) => b.sourceIds) ?? [])].map((sid) => (
-                      <span key={sid} className="profile-pill">
-                        {sourceMap.get(sid) || sid}
-                      </span>
-                    ))}
+            {/* 右侧：YAML 视图 */}
+            <div className="profile-detail-main">
+              <div className="section yaml-view-section">
+                <div className="yaml-view-toolbar">
+                  <div className="flex items-center gap-2">
+                    <FileCode2 className="size-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">Compiled YAML</span>
+                    <span className="yaml-stat-pill">{yamlLines} 行</span>
+                    <span className="yaml-stat-pill">{yamlSizeKb} KB</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!profile.compiledYaml}
+                      onClick={() => copyText(profile.compiledYaml || '', 'YAML 内容')}
+                    >
+                      <Clipboard className="size-3.5 mr-1" />
+                      复制全文
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={!profile.compiledYaml} onClick={downloadYaml}>
+                      <Download className="size-3.5 mr-1" />
+                      下载
+                    </Button>
                   </div>
                 </div>
-
-                <div className="meta-row">
-                  <span className="meta-label">标签筛选</span>
-                  <div className="meta-tags">
-                    {profile.tags.length > 0 ? (
-                      profile.tags.map((tag) => (
-                        <span key={tag} className="profile-pill text-[11px]">
-                          {tag}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted-foreground">不过滤</span>
-                    )}
-                  </div>
+                <div className="yaml-code-scroll">
+                  <pre>
+                    <code>{profile.compiledYaml || '# 尚未生成配置内容，点击右上角「重新生成」'}</code>
+                  </pre>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* 右侧：YAML 视图 */}
-          <div className="profile-detail-main">
-            <div className="section yaml-view-section">
-              <div className="yaml-view-toolbar">
-                <div className="flex items-center gap-2">
-                  <FileCode2 className="size-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Compiled YAML</span>
-                  <span className="yaml-stat-pill">{yamlLines} 行</span>
-                  <span className="yaml-stat-pill">{yamlSizeKb} KB</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!profile.compiledYaml}
-                    onClick={() => copyText(profile.compiledYaml || '', 'YAML 内容')}
-                  >
-                    <Clipboard className="size-3.5 mr-1" />
-                    复制全文
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={!profile.compiledYaml} onClick={downloadYaml}>
-                    <Download className="size-3.5 mr-1" />
-                    下载
-                  </Button>
-                </div>
-              </div>
-              <div className="yaml-code-scroll">
-                <pre>
-                  <code>{profile.compiledYaml || '# 尚未生成配置内容，点击右上角「重新生成」'}</code>
-                </pre>
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {editing && profile && (
