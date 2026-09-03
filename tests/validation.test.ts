@@ -7,6 +7,8 @@ import type {
   VisualTemplateDraft,
 } from '../src/features/templates/visual/model'
 import { validateVisualDraft } from '../src/features/templates/visual/validation'
+import { createBlankTemplate } from '../src/features/templates/blank'
+import { parseVisualTemplate } from '../src/features/templates/visual/yaml-adapter'
 
 const geo: GeoSettingsDraft = { geoxUrl: {} }
 
@@ -277,5 +279,19 @@ describe('节点源槽位可视化校验', () => {
     const issues = issuesFor([], undefined, slots, groups)
     const errors = issues.filter((i) => i.level === 'error')
     expect(errors).toHaveLength(0)
+  })
+})
+
+describe('createBlankTemplate', () => {
+  it('generates unique nanoid(6) slot keys on each invocation and parses cleanly', () => {
+    const tpl1 = createBlankTemplate()
+    const tpl2 = createBlankTemplate()
+    expect(tpl1).not.toEqual(tpl2)
+    const result1 = parseVisualTemplate(tpl1)
+    const result2 = parseVisualTemplate(tpl2)
+    expect(result1.draft.sourceSlots).toHaveLength(1)
+    expect(result2.draft.sourceSlots).toHaveLength(1)
+    expect(result1.draft.sourceSlots[0].key).not.toEqual(result2.draft.sourceSlots[0].key)
+    expect(result1.draft.sourceSlots[0].key).toMatch(/^__WANGWANG_SOURCE_SLOT_[A-Za-z0-9_-]{6}__$/)
   })
 })

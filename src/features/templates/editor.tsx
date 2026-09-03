@@ -17,6 +17,7 @@ import { TemplatePreview } from './template-preview'
 import { Segmented } from '@/components/ui/segmented'
 import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
 import { validateVisualDraft } from './visual/validation'
+import { createBlankTemplate } from './blank'
 import { VisualTemplateEditor } from './visual/visual-editor'
 import type { VisualChangeMeta, VisualTemplateDraft } from './visual/model'
 import { inferGeoSource } from './visual/rules/geo-catalog'
@@ -25,19 +26,6 @@ import '@/styles/templates.css'
 const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
-const blankTemplate = `x-wangwang:
-  sources:
-    - key: __WANGWANG_SOURCE_SLOT_main01__
-      name: 默认节点源
-proxy-groups:
-  - name: 节点选择
-    type: select
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_main01__
-      - DIRECT
-rules:
-  - MATCH,节点选择
-`
 
 export function NewTemplatePage() {
   const { source } = useSearch({ from: '/app/templates/new' })
@@ -56,16 +44,17 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail | null>(null)
-  const [yaml, setYaml] = useState(source === 'blank' ? blankTemplate : '')
+  const [initialBlankYaml] = useState(() => (source === 'blank' ? createBlankTemplate() : ''))
+  const [yaml, setYaml] = useState(initialBlankYaml)
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const initialMode = source === 'import' ? 'yaml' : 'visual'
   const [mode, setMode] = useState<'visual' | 'yaml'>(initialMode)
   const [visualDraft, setVisualDraft] = useState<VisualTemplateDraft | null>(() => {
-    if (source === 'blank') {
+    if (source === 'blank' && initialBlankYaml) {
       try {
-        return parseVisualTemplate(blankTemplate).draft
+        return parseVisualTemplate(initialBlankYaml).draft
       } catch {
         return null
       }
@@ -73,9 +62,9 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     return null
   })
   const [visualIssues, setVisualIssues] = useState<ReturnType<typeof validateVisualDraft>>(() => {
-    if (source === 'blank') {
+    if (source === 'blank' && initialBlankYaml) {
       try {
-        const result = parseVisualTemplate(blankTemplate)
+        const result = parseVisualTemplate(initialBlankYaml)
         return validateVisualDraft(result.draft, result.warnings)
       } catch {
         return []
