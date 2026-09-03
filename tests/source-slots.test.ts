@@ -196,3 +196,205 @@ describe('内置模板验证', () => {
     }
   })
 })
+
+import { renderMihomoConfig, type SelectedSlotNode } from '../worker/templates/renderer'
+import { parse } from 'yaml'
+
+describe('slot-aware renderer', () => {
+  const slot1 = '__WANGWANG_SOURCE_SLOT_slot01__'
+  const slot2 = '__WANGWANG_SOURCE_SLOT_slot02__'
+
+  const baseTemplateYaml = `x-wangwang:
+  sources:
+    - key: ${slot1}
+      name: 主力源
+    - key: ${slot2}
+      name: 备用源
+proxy-groups:
+  - name: 🚀 主力组
+    type: select
+    proxies:
+      - ${slot1}
+  - name: 🛡️ 备用组
+    type: select
+    proxies:
+      - ${slot2}
+  - name: 🔀 联合组
+    type: select
+    proxies:
+      - DIRECT
+      - ${slot1}
+      - ${slot2}
+rules:
+  - MATCH,DIRECT
+`
+
+  const dummyProxy = {
+    type: 'ss',
+    server: '1.1.1.1',
+    port: 8388,
+  }
+
+  it('单槽位仅展开自身绑定的节点', () => {
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'Node-A', config: { ...dummyProxy, name: 'Node-A' } },
+      { slotKey: slot2, entryId: 'e2', sourceId: 's2', name: 'Node-B', config: { ...dummyProxy, name: 'Node-B' } },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    const parsed = parse(rendered) as any
+
+    const group1 = parsed['proxy-groups'].find((g: any) => g.name === '🚀 主力组')
+    expect(group1.proxies).toEqual(['Node-A'])
+
+    const group2 = parsed['proxy-groups'].find((g: any) => g.name === '🛡️ 备用组')
+    expect(group2.proxies).toEqual(['Node-B'])
+  })
+
+  it('同代理组包含两个槽位时按成员声明顺序展开', () => {
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'Node-A', config: { ...dummyProxy, name: 'Node-A' } },
+      { slotKey: slot2, entryId: 'e2', sourceId: 's2', name: 'Node-B', config: { ...dummyProxy, name: 'Node-B' } },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    const parsed = parse(rendered) as any
+
+    const groupUnion = parsed['proxy-groups'].find((g: any) => g.name === '🔀 联合组')
+    expect(groupUnion.proxies).toEqual(['DIRECT', 'Node-A', 'Node-B'])
+  })
+
+  it('相同 entryId 在多个槽位中仅生成一个根节点并可在各组引用', () => {
+    const nodes: SelectedSlotNode[] = [
+      {
+        slotKey: slot1,
+        entryId: 'e1',
+        sourceId: 's1',
+        name: 'Shared-Node',
+        config: { ...dummyProxy, name: 'Shared-Node' },
+      },
+      {
+        slotKey: slot2,
+        entryId: 'e1',
+        sourceId: 's1',
+        name: 'Shared-Node',
+        config: { ...dummyProxy, name: 'Shared-Node' },
+      },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    const parsed = parse(rendered) as any
+
+    expect(parsed.proxies).toHaveLength(1)
+    expect(parsed.proxies[0].name).toBe('Shared-Node')
+
+    const g1 = parsed['proxy-groups'].find((g: any) => g.name === '🚀 主力组')
+    const g2 = parsed['proxy-groups'].find((g: any) => g.name === '🛡️ 备用组')
+    expect(g1.proxies).toEqual(['Shared-Node'])
+    expect(g2.proxies).toEqual(['Shared-Node'])
+  })
+
+  it('同组引用重叠槽位时稳定去重', () => {
+    const nodes: SelectedSlotNode[] = [
+      {
+        slotKey: slot1,
+        entryId: 'e1',
+        sourceId: 's1',
+        name: 'Shared-Node',
+        config: { ...dummyProxy, name: 'Shared-Node' },
+      },
+      {
+        slotKey: slot2,
+        entryId: 'e1',
+        sourceId: 's1',
+        name: 'Shared-Node',
+        config: { ...dummyProxy, name: 'Shared-Node' },
+      },
+      {
+        slotKey: slot2,
+        entryId: 'e2',
+        sourceId: 's2',
+        name: 'Unique-Node',
+        config: { ...dummyProxy, name: 'Unique-Node' },
+      },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    const parsed = parse(rendered) as any
+
+    const g = parsed['proxy-groups'].find((g: any) => g.name === '🔀 联合组')
+    expect(g.proxies).toEqual(['DIRECT', 'Shared-Node', 'Unique-Node'])
+  })
+
+  it('不同 entryId 但同名时生成 name, name-2 且在所有槽位中一致', () => {
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'HongKong', config: { ...dummyProxy, server: '1.1.1.1' } },
+      { slotKey: slot2, entryId: 'e2', sourceId: 's2', name: 'HongKong', config: { ...dummyProxy, server: '2.2.2.2' } },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    const parsed = parse(rendered) as any
+
+    expect(parsed.proxies.map((p: any) => p.name)).toEqual(['HongKong', 'HongKong-2'])
+    const g1 = parsed['proxy-groups'].find((g: any) => g.name === '🚀 主力组')
+    const g2 = parsed['proxy-groups'].find((g: any) => g.name === '🛡️ 备用组')
+    expect(g1.proxies).toEqual(['HongKong'])
+    expect(g2.proxies).toEqual(['HongKong-2'])
+  })
+
+  it('filter 和 exclude-filter 仅作用于槽位展开节点', () => {
+    const yamlWithFilter = `x-wangwang:
+  sources:
+    - key: ${slot1}
+      name: 主力源
+proxy-groups:
+  - name: 过滤组
+    type: select
+    filter: '(?i)HK'
+    exclude-filter: 'BGP'
+    proxies:
+      - DIRECT
+      - ${slot1}
+rules:
+  - MATCH,DIRECT
+`
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'HK 01', config: dummyProxy },
+      { slotKey: slot1, entryId: 'e2', sourceId: 's1', name: 'HK BGP 02', config: dummyProxy },
+      { slotKey: slot1, entryId: 'e3', sourceId: 's1', name: 'US 01', config: dummyProxy },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: yamlWithFilter }, nodes })
+    const parsed = parse(rendered) as any
+
+    const g = parsed['proxy-groups'].find((g: any) => g.name === '过滤组')
+    expect(g.proxies).toEqual(['DIRECT', 'HK 01'])
+  })
+
+  it('过滤后组为空不会导致渲染失败', () => {
+    const yamlFilterAll = `x-wangwang:
+  sources:
+    - key: ${slot1}
+      name: 主力源
+proxy-groups:
+  - name: 空组
+    type: select
+    filter: 'NoneMatch'
+    proxies:
+      - ${slot1}
+rules:
+  - MATCH,DIRECT
+`
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'HK 01', config: dummyProxy },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: yamlFilterAll }, nodes })
+    const parsed = parse(rendered) as any
+    const g = parsed['proxy-groups'].find((g: any) => g.name === '空组')
+    expect(g.proxies).toEqual([])
+  })
+
+  it('输出 YAML 既不包含 x-wangwang 也不包含任何 __WANGWANG_ 占位符', () => {
+    const nodes: SelectedSlotNode[] = [
+      { slotKey: slot1, entryId: 'e1', sourceId: 's1', name: 'Node-1', config: dummyProxy },
+      { slotKey: slot2, entryId: 'e2', sourceId: 's2', name: 'Node-2', config: dummyProxy },
+    ]
+    const rendered = renderMihomoConfig({ template: { yaml: baseTemplateYaml }, nodes })
+    expect(rendered).not.toContain('x-wangwang')
+    expect(rendered).not.toContain('__WANGWANG_')
+  })
+})
