@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { profiles, templates } from '../db'
-import type { ProxyConfig, TemplateId } from '../db'
+import type { TemplateId } from '../db'
 import { body, fail, ok } from '../http'
 import { db, enqueueProfilesForTemplate, selectProfileSlotNodes } from '../tasks'
 import { builtinTemplates } from '../templates/builtin'
@@ -151,6 +151,15 @@ templatesRouter.post('/:id/duplicate', async (c) => {
   if (!(await assertTemplateCapacity(c.env))) return fail(c, 409, 'TEMPLATE_LIMIT', '自定义模板数量已达到 20 个')
   const source = await resolveTemplate(c.env, c.req.param('id'))
   if (!source) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  if ('migrationStatus' in source && source.migrationStatus === 'needs_repair') {
+    return fail(c, 409, 'TEMPLATE_MIGRATION_REQUIRED', '待修复模板无法复制，请先修复节点源槽位')
+  }
+  try {
+    parseTemplateYaml(source.yaml)
+  } catch {
+    return fail(c, 409, 'TEMPLATE_MIGRATION_REQUIRED', '待修复模板无法复制，请先修复节点源槽位')
+  }
+
   const now = new Date()
   const template = {
     id: nanoid(12),

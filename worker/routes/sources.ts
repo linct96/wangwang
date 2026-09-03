@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import { asc, count, countDistinct, eq } from 'drizzle-orm'
+import { asc, count, countDistinct, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileSourceBindings, sources } from '../db'
-import { cleanupOrphanNodes, createJob, db, enqueueAffectedProfiles } from '../tasks'
+import { cleanupOrphanNodes, createJob, db, enqueueAffectedProfiles, enqueueProfileCompileIfReady } from '../tasks'
 import { assertRemoteUrl } from '../security'
 import { normalizeTagInputs, normalizeTagName } from '../tag-model'
 import { replaceSourceTags, sourceTagViews } from '../tag-store'
@@ -147,23 +147,62 @@ sourcesRouter.patch('/:id', async (c) => {
     current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
       ? new Date(Date.now() + interval * 3_600_000)
       : null
-  await db(c.env)
-    .update(sources)
-    .set({
-      name: input.name,
-      enabled: input.enabled,
-      refreshIntervalHours: input.refreshIntervalHours,
-      nodeNameFilter,
-      userAgent,
-      pendingUrl: input.url,
-      status: input.url ? 'idle' : undefined,
-      error: input.url ? null : undefined,
-      etag: userAgentChanged ? null : undefined,
-      lastModified: userAgentChanged ? null : undefined,
-      nextRefreshAt,
-      updatedAt: new Date(),
-    })
-    .where(eq(sources.id, current.id))
+
+  if (input.enabled === false && current.enabled === true) {
+    const updateResult = await db(c.env).run(sql`
+      UPDATE sources
+      SET
+        name = ${input.name ?? current.name},
+        enabled = 0,
+        refresh_interval_hours = ${interval},
+        node_name_filter = ${nodeNameFilter ?? null},
+        user_agent = ${userAgent ?? 'mihomo'},
+        pending_url = ${input.url ?? current.pendingUrl ?? null},
+        status = ${input.url ? 'idle' : current.status},
+        error = ${input.url ? null : current.error},
+        etag = ${userAgentChanged ? null : current.etag},
+        last_modified = ${userAgentChanged ? null : current.lastModified},
+        next_refresh_at = ${nextRefreshAt ? nextRefreshAt.getTime() : null},
+        updated_at = ${Date.now()}
+      WHERE id = ${current.id}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM profile_source_bindings psb1
+          WHERE psb1.source_id = sources.id
+            AND NOT EXISTS (
+              SELECT 1
+              FROM profile_source_bindings psb2
+              JOIN sources other_s ON other_s.id = psb2.source_id
+              WHERE psb2.profile_id = psb1.profile_id
+                AND psb2.slot_key = psb1.slot_key
+                AND psb2.source_id != sources.id
+                AND other_s.enabled = 1
+            )
+        )
+    `)
+    if (updateResult.meta.changes === 0) {
+      return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源是所在订阅模板槽位的唯一可用源，无法禁用')
+    }
+  } else {
+    await db(c.env)
+      .update(sources)
+      .set({
+        name: input.name,
+        enabled: input.enabled,
+        refreshIntervalHours: input.refreshIntervalHours,
+        nodeNameFilter,
+        userAgent,
+        pendingUrl: input.url,
+        status: input.url ? 'idle' : undefined,
+        error: input.url ? null : undefined,
+        etag: userAgentChanged ? null : undefined,
+        lastModified: userAgentChanged ? null : undefined,
+        nextRefreshAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(sources.id, current.id))
+  }
+
   if (nodeTagsChanged) await replaceSourceTags(c.env, current.id, nodeTags)
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagsChanged)
@@ -189,9 +228,32 @@ sourcesRouter.delete('/:id', async (c) => {
     .where(eq(profileSourceBindings.sourceId, id))
   const affectedProfileIds = [...new Set(affectedRows.map((r) => r.id))]
 
-  await db(c.env).delete(sources).where(eq(sources.id, id))
+  const deleteResult = await db(c.env).run(sql`
+    DELETE FROM sources
+    WHERE id = ${id}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM profile_source_bindings psb1
+        WHERE psb1.source_id = sources.id
+          AND NOT EXISTS (
+            SELECT 1
+            FROM profile_source_bindings psb2
+            WHERE psb2.profile_id = psb1.profile_id
+              AND psb2.slot_key = psb1.slot_key
+              AND psb2.source_id != sources.id
+          )
+      )
+  `)
+
+  if (deleteResult.meta.changes === 0) {
+    const exists = await db(c.env).select({ id: sources.id }).from(sources).where(eq(sources.id, id)).get()
+    if (exists) {
+      return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源已被订阅模板槽位独占绑定，无法删除')
+    }
+  }
+
   await cleanupOrphanNodes(c.env)
-  for (const profileId of affectedProfileIds) await createJob(c.env, 'compile_profile', profileId)
+  for (const profileId of affectedProfileIds) await enqueueProfileCompileIfReady(c.env, profileId)
   return ok(c, { id, detachedProfileCount: affectedProfileIds.length, removedNodeCount: current.nodeCount })
 })
 

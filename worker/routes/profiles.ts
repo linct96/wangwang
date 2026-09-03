@@ -30,11 +30,19 @@ const sourceBindingSchema = z.object({
   sourceIds: z.array(z.string().trim().min(1)).min(1),
 })
 
+const sourceBindingsSchema = z
+  .array(sourceBindingSchema)
+  .min(1)
+  .max(20)
+  .refine((bindings) => new Set(bindings.flatMap((b) => b.sourceIds)).size <= 20, {
+    message: '配置引用的不同节点源总数不能超过 20 个',
+  })
+
 export const profileSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
-    sourceBindings: z.array(sourceBindingSchema).min(1).max(20),
+    sourceBindings: sourceBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
   })
@@ -44,7 +52,7 @@ export const profileUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean(),
-    sourceBindings: z.array(sourceBindingSchema).min(1).max(20),
+    sourceBindings: sourceBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20),
     templateId: templateIdSchema,
   })
@@ -242,11 +250,30 @@ profilesRouter.delete('/:id', async (c) => {
 
 profilesRouter.post('/:id/compile', async (c) => {
   const current = await db(c.env)
-    .select({ id: profiles.id })
+    .select()
     .from(profiles)
     .where(eq(profiles.id, c.req.param('id')))
     .get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
+
+  const template = await resolveTemplate(c.env, current.templateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') {
+    return fail(c, 409, 'TEMPLATE_MIGRATION_REQUIRED', '模板需要先修复槽位才能编译')
+  }
+
+  let slots: ReturnType<typeof parseTemplateSourceSlots>
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch (error) {
+    return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
+  }
+
+  const { complete } = await profileBindingState(c.env, current.id, slots)
+  if (!complete) {
+    return fail(c, 400, 'PROFILE_SOURCE_BINDINGS_INVALID', '配置的节点源槽位未绑定完成或缺少启用的节点源')
+  }
+
   const job = await createJob(c.env, 'compile_profile', current.id)
   return c.json({ data: { jobId: job.id } }, 202)
 })

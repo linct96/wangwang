@@ -306,13 +306,31 @@ async function replaceSourceEntries(
   await cleanupOrphanNodes(env)
 }
 
+export async function enqueueProfileCompileIfReady(env: Env, profileId: string) {
+  const database = db(env)
+  const profile = await database.select().from(profiles).where(eq(profiles.id, profileId)).get()
+  if (!profile) return null
+  const template = await resolveTemplate(env, profile.templateId)
+  if (!template) return null
+  if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') return null
+  let slots: ReturnType<typeof parseTemplateSourceSlots>
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch {
+    return null
+  }
+  const { complete } = await profileBindingState(env, profile.id, slots)
+  if (!complete) return null
+  return createJob(env, 'compile_profile', profileId)
+}
+
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
   const affected = await db(env)
     .select({ id: profileSourceBindings.profileId })
     .from(profileSourceBindings)
     .where(eq(profileSourceBindings.sourceId, sourceId))
   for (const profileId of new Set(affected.map((profile) => profile.id))) {
-    await createJob(env, 'compile_profile', profileId)
+    await enqueueProfileCompileIfReady(env, profileId)
   }
 }
 
@@ -328,7 +346,7 @@ export async function enqueueProfilesForEntries(env: Env, entryIds: string[]) {
     .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSourceBindings.sourceId))
     .where(inArray(sourceEntries.entryId, entryIds))
   for (const profileId of new Set(affected.map((profile) => profile.id))) {
-    await createJob(env, 'compile_profile', profileId)
+    await enqueueProfileCompileIfReady(env, profileId)
   }
 }
 
@@ -349,10 +367,8 @@ export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
     .where(eq(profiles.templateId, templateId as TemplateId))
   const jobs = []
   for (const profile of affected) {
-    const { complete } = await profileBindingState(env, profile.id, slots)
-    if (complete) {
-      jobs.push(await createJob(env, 'compile_profile', profile.id))
-    }
+    const job = await enqueueProfileCompileIfReady(env, profile.id)
+    if (job) jobs.push(job)
   }
   return jobs
 }

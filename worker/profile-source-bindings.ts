@@ -98,6 +98,9 @@ export async function validateProfileSourceBindings(
   existingBindings?: ProfileSourceBindingInput[],
 ): Promise<ProfileSourceBindingInput[]> {
   const allSourceIds = [...new Set(bindings.flatMap((b) => b.sourceIds))]
+  if (allSourceIds.length > 20) {
+    throw new Error('配置引用的不同节点源总数不能超过 20 个')
+  }
   const sourceRows = allSourceIds.length
     ? await db(env)
         .select({ id: sources.id, enabled: sources.enabled })
