@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { parsePreferredEndpoint } from '../shared/preferred-node'
 import { db } from './tasks'
@@ -305,7 +305,7 @@ export async function nodeKinds(env: Env, entryIds: string[]) {
     .select({ entryId: sourceEntries.entryId, kind: sources.kind })
     .from(sourceEntries)
     .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
-    .where(and(inArray(sourceEntries.entryId, entryIds), eq(sources.enabled, true)))
+    .where(and(inArray(sourceEntries.entryId, entryIds), sql`${sources.enabled} = 1`))
   for (const row of rows) result.set(row.entryId, [...(result.get(row.entryId) || []), row.kind])
   return result
 }
