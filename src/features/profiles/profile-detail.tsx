@@ -207,7 +207,7 @@ export function ProfileDetailPage() {
                 <div className="meta-row">
                   <span className="meta-label">包含节点源</span>
                   <div className="meta-tags">
-                    {profile.sourceIds.map((sid) => (
+                    {[...new Set(profile.sourceBindings?.flatMap((b) => b.sourceIds) ?? [])].map((sid) => (
                       <span key={sid} className="profile-pill">
                         {sourceMap.get(sid) || sid}
                       </span>

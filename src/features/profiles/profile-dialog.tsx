@@ -46,7 +46,7 @@ export function ProfileDialog({
     defaultValues: {
       name: profile?.name || '',
       tags: profile?.tags || ([] as string[]),
-      sourceIds: profile?.sourceIds || [],
+      sourceIds: profile?.sourceBindings?.flatMap((b) => b.sourceIds) || [],
       templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {

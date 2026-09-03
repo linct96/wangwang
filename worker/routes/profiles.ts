@@ -2,11 +2,20 @@ import { Hono } from 'hono'
 import { count, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
-import { profiles, profileSources, sources } from '../db'
+import { profiles } from '../db'
 import type { TemplateId } from '../db'
 import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
+import { parseTemplateYaml } from '../templates/validator'
+import { parseTemplateSourceSlots, type TemplateSourceSlot } from '../templates/source-slots'
+import {
+  profileBindingState,
+  readProfileSourceBindings,
+  replaceProfileSourceBindings,
+  validateProfileSourceBindings,
+  type ProfileSourceBindingInput,
+} from '../profile-source-bindings'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
@@ -16,38 +25,31 @@ const templateIdSchema = z
     message: '订阅模板 ID 无效',
   })
 
+const sourceBindingSchema = z.object({
+  slotKey: z.string().trim().min(1),
+  sourceIds: z.array(z.string().trim().min(1)).min(1),
+})
+
 export const profileSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
-    sourceIds: z.array(z.string()).min(1).max(20),
+    sourceBindings: z.array(sourceBindingSchema).min(1).max(20),
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
   })
   .strict()
 
-export const profileUpdateSchema = profileSchema.partial()
-
-export async function assertSourceIds(env: Env, ids: string[]) {
-  const unique = [...new Set(ids)]
-  const rows = await Promise.all(
-    unique.map((id) => db(env).select({ id: sources.id }).from(sources).where(eq(sources.id, id)).get()),
-  )
-  if (rows.some((row) => !row)) throw new Error('包含不存在的节点源')
-  return unique
-}
-
-export async function saveProfileSources(env: Env, profileId: string, sourceIds: string[]) {
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM profile_sources WHERE profile_id = ?').bind(profileId),
-  ]
-  sourceIds.forEach((sourceId) =>
-    statements.push(
-      env.DB.prepare('INSERT INTO profile_sources (profile_id, source_id) VALUES (?, ?)').bind(profileId, sourceId),
-    ),
-  )
-  await env.DB.batch(statements)
-}
+export const profileUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    enabled: z.boolean(),
+    sourceBindings: z.array(sourceBindingSchema).min(1).max(20),
+    tags: z.array(z.string().trim().min(1).max(24)).max(20),
+    templateId: templateIdSchema,
+  })
+  .partial()
+  .strict()
 
 export async function profileView(
   env: Env,
@@ -55,19 +57,28 @@ export async function profileView(
   origin: string,
   includeYaml = false,
 ) {
-  const [sourceRows, tagRows] = await Promise.all([
-    db(env)
-      .select({ id: profileSources.sourceId })
-      .from(profileSources)
-      .where(eq(profileSources.profileId, profile.id)),
+  const template = await resolveTemplate(env, profile.templateId)
+  let slots: TemplateSourceSlot[] = []
+  if (template) {
+    try {
+      slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+    } catch {
+      slots = []
+    }
+  }
+
+  const [{ complete, bindings }, tagRows] = await Promise.all([
+    profileBindingState(env, profile.id, slots),
     profileTagViews(env, profile.id),
   ])
+
   const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
     tags: tagRows.map((tag) => tag.name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
-    sourceIds: sourceRows.map((item) => item.id),
+    sourceBindings: bindings,
+    bindingComplete: complete,
     subscriptionUrl: `${origin}/s/${token}/config.yaml`,
   }
 }
@@ -85,8 +96,32 @@ profilesRouter.post('/', async (c) => {
   const database = db(c.env)
   const [{ value }] = await database.select({ value: count() }).from(profiles)
   if (Number(value) >= 20) return fail(c, 409, 'PROFILE_LIMIT', '配置数量已达到 20 个')
-  const sourceIds = await assertSourceIds(c.env, input.sourceIds)
-  if (!(await resolveTemplate(c.env, input.templateId))) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+
+  const template = await resolveTemplate(c.env, input.templateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') {
+    return fail(c, 409, 'TEMPLATE_MIGRATION_REQUIRED', '模板需要先修复槽位才能使用')
+  }
+
+  let slots: TemplateSourceSlot[]
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch (error) {
+    return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
+  }
+
+  let validBindings: ProfileSourceBindingInput[]
+  try {
+    validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings)
+  } catch (error) {
+    return fail(
+      c,
+      400,
+      'PROFILE_SOURCE_BINDINGS_INVALID',
+      error instanceof Error ? error.message : '节点源槽位绑定无效',
+    )
+  }
+
   const filterNames = normalizeTagInputs(input.tags, 20)
   const now = new Date()
   const profile = {
@@ -97,11 +132,13 @@ profilesRouter.post('/', async (c) => {
     createdAt: now,
     updatedAt: now,
   }
+
   await database.insert(profiles).values(profile)
   await Promise.all([
-    saveProfileSources(c.env, profile.id, sourceIds),
+    replaceProfileSourceBindings(c.env, profile.id, validBindings),
     replaceProfileTagFilters(c.env, profile.id, filterNames),
   ])
+
   const job = await createJob(c.env, 'compile_profile', profile.id)
   const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
   return c.json(
@@ -126,9 +163,48 @@ profilesRouter.patch('/:id', async (c) => {
   const database = db(c.env)
   const current = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
-  if (input.templateId && !(await resolveTemplate(c.env, input.templateId)))
-    return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
-  const sourceIds = input.sourceIds ? await assertSourceIds(c.env, input.sourceIds) : null
+
+  const targetTemplateId = input.templateId ?? current.templateId
+  const template = await resolveTemplate(c.env, targetTemplateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  if ('migrationStatus' in template && template.migrationStatus === 'needs_repair') {
+    return fail(c, 409, 'TEMPLATE_MIGRATION_REQUIRED', '模板需要先修复槽位才能使用')
+  }
+
+  let slots: TemplateSourceSlot[]
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch (error) {
+    return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
+  }
+
+  const existingBindings = await readProfileSourceBindings(c.env, id)
+  let validBindings: ProfileSourceBindingInput[] | null = null
+
+  if (input.sourceBindings !== undefined) {
+    try {
+      validBindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings, existingBindings)
+    } catch (error) {
+      return fail(
+        c,
+        400,
+        'PROFILE_SOURCE_BINDINGS_INVALID',
+        error instanceof Error ? error.message : '节点源槽位绑定无效',
+      )
+    }
+  } else if (input.templateId !== undefined && input.templateId !== current.templateId) {
+    try {
+      validBindings = await validateProfileSourceBindings(c.env, slots, existingBindings, existingBindings)
+    } catch (error) {
+      return fail(
+        c,
+        400,
+        'PROFILE_SOURCE_BINDINGS_INVALID',
+        error instanceof Error ? error.message : '节点源槽位绑定无效',
+      )
+    }
+  }
+
   const filterNames = input.tags === undefined ? undefined : normalizeTagInputs(input.tags, 20)
   await database
     .update(profiles)
@@ -139,10 +215,16 @@ profilesRouter.patch('/:id', async (c) => {
       updatedAt: new Date(),
     })
     .where(eq(profiles.id, id))
+
   const syncs: Promise<unknown>[] = []
-  if (sourceIds) syncs.push(saveProfileSources(c.env, id, sourceIds))
-  if (filterNames !== undefined) syncs.push(replaceProfileTagFilters(c.env, id, filterNames))
+  if (validBindings) {
+    syncs.push(replaceProfileSourceBindings(c.env, id, validBindings))
+  }
+  if (filterNames !== undefined) {
+    syncs.push(replaceProfileTagFilters(c.env, id, filterNames))
+  }
   await Promise.all(syncs)
+
   const job = await createJob(c.env, 'compile_profile', id)
   const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   return c.json(
