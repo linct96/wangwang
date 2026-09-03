@@ -23,6 +23,9 @@ export async function cleanupOrphanNodes(env: Env) {
     env.DB.prepare(
       'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = nodes.id)',
     ),
+    env.DB.prepare(
+      'DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM node_entry_tags WHERE node_entry_tags.tag_id = tags.id) AND NOT EXISTS (SELECT 1 FROM source_tags WHERE source_tags.tag_id = tags.id)',
+    ),
   ])
 }
 
