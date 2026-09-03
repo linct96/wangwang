@@ -176,12 +176,31 @@ export function planTemplateMigration(
   })
 }
 
+const MIGRATION_NAME = 'source_slots_v1'
+
 export async function migrateLegacySourceSlots(env: Env): Promise<{
   migratedTemplates: number
   failedTemplates: number
   migratedProfiles: number
 }> {
   const database = db(env)
+
+  // Ensure persistent migrations table exists across isolates
+  await database.run(
+    sql`CREATE TABLE IF NOT EXISTS _app_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
+  )
+
+  const record = await database.get<{ name: string }>(
+    sql`SELECT name FROM _app_migrations WHERE name = ${MIGRATION_NAME}`,
+  )
+  if (record) {
+    return {
+      migratedTemplates: 0,
+      failedTemplates: 0,
+      migratedProfiles: 0,
+    }
+  }
+
   let migratedTemplates = 0
   let failedTemplates = 0
   let migratedProfiles = 0
@@ -238,13 +257,18 @@ export async function migrateLegacySourceSlots(env: Env): Promise<{
     })),
   })
 
-  // 3. Batch insert planned operations (using INSERT OR IGNORE)
+  // 3. Batch insert planned operations into profile_source_bindings (WITHOUT nonexistent created_at)
   for (const op of operations) {
     await database.run(
-      sql`INSERT OR IGNORE INTO profile_source_bindings (profile_id, slot_key, source_id, created_at) VALUES (${op.profileId}, ${op.slotKey}, ${op.sourceId}, ${Date.now()})`,
+      sql`INSERT OR IGNORE INTO profile_source_bindings (profile_id, slot_key, source_id) VALUES (${op.profileId}, ${op.slotKey}, ${op.sourceId})`,
     )
     migratedProfiles++
   }
+
+  // 4. Mark migration as permanently completed in persistent database
+  await database.run(
+    sql`INSERT OR IGNORE INTO _app_migrations (name, applied_at) VALUES (${MIGRATION_NAME}, ${Date.now()})`,
+  )
 
   return {
     migratedTemplates,
@@ -253,19 +277,10 @@ export async function migrateLegacySourceSlots(env: Env): Promise<{
   }
 }
 
-let migrationPromise: Promise<{
-  migratedTemplates: number
-  failedTemplates: number
-  migratedProfiles: number
-}> | null = null
+let migrationDone = false
 
 export async function ensureLegacySourceSlotsMigrated(env: Env) {
-  if (!migrationPromise) {
-    migrationPromise = migrateLegacySourceSlots(env).catch((err) => {
-      migrationPromise = null
-      console.error('Legacy source slots migration failed:', err)
-      throw err
-    })
-  }
-  return migrationPromise
+  if (migrationDone) return
+  await migrateLegacySourceSlots(env)
+  migrationDone = true
 }

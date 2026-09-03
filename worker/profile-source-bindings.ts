@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { profileSourceBindings, sources } from './db'
 import { db } from './tasks'
 import type { TemplateSourceSlot } from './templates/source-slots'
@@ -215,8 +215,6 @@ export async function profileBindingState(
   return { complete, bindings }
 }
 
-import { and } from 'drizzle-orm'
-
 export type SlotBindingCheck = {
   profileId: string
   slotKey: string
@@ -243,38 +241,31 @@ export function canDisableSource(usages: SlotBindingCheck[]): { allowed: boolean
 }
 
 export async function sourceSlotUsage(env: Env, sourceId: string): Promise<SlotBindingCheck[]> {
-  const affectedSlots = await db(env)
-    .select({
-      profileId: profileSourceBindings.profileId,
-      slotKey: profileSourceBindings.slotKey,
-    })
-    .from(profileSourceBindings)
-    .where(eq(profileSourceBindings.sourceId, sourceId))
+  const rows = await db(env).all<{
+    profileId: string
+    slotKey: string
+    boundCount: number
+    enabledCount: number
+  }>(sql`
+    SELECT 
+      psb.profile_id AS profileId,
+      psb.slot_key AS slotKey,
+      COUNT(psb.source_id) AS boundCount,
+      TOTAL(CASE WHEN s.enabled = 1 THEN 1 ELSE 0 END) AS enabledCount
+    FROM profile_source_bindings psb
+    INNER JOIN sources s ON s.id = psb.source_id
+    INNER JOIN (
+      SELECT DISTINCT profile_id, slot_key
+      FROM profile_source_bindings
+      WHERE source_id = ${sourceId}
+    ) affected ON affected.profile_id = psb.profile_id AND affected.slot_key = psb.slot_key
+    GROUP BY psb.profile_id, psb.slot_key
+  `)
 
-  if (affectedSlots.length === 0) return []
-
-  const result: SlotBindingCheck[] = []
-
-  for (const slot of affectedSlots) {
-    const bindings = await db(env)
-      .select({
-        sourceId: profileSourceBindings.sourceId,
-        enabled: sources.enabled,
-      })
-      .from(profileSourceBindings)
-      .innerJoin(sources, eq(sources.id, profileSourceBindings.sourceId))
-      .where(and(eq(profileSourceBindings.profileId, slot.profileId), eq(profileSourceBindings.slotKey, slot.slotKey)))
-
-    const boundCount = bindings.length
-    const enabledCount = bindings.filter((b) => b.enabled).length
-
-    result.push({
-      profileId: slot.profileId,
-      slotKey: slot.slotKey,
-      boundCount,
-      enabledCount,
-    })
-  }
-
-  return result
+  return rows.map((r) => ({
+    profileId: r.profileId,
+    slotKey: r.slotKey,
+    boundCount: Number(r.boundCount),
+    enabledCount: Number(r.enabledCount),
+  }))
 }
