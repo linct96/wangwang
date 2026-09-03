@@ -13,10 +13,12 @@ import { templatesRouter } from './routes/templates'
 import { geoRouter } from './routes/geo'
 import { ruleSetPresetsRouter } from './routes/rule-set-presets'
 import { validOrigin, verifySubscriptionToken } from './security'
+import { ensureLegacySourceSlotsMigrated } from './migrations/source-slots-migration'
 
 export const app = new Hono<{ Bindings: Env }>()
 
 app.use('/api/*', async (c, next) => {
+  await ensureLegacySourceSlotsMigrated(c.env)
   if (c.req.path === '/api/auth/login' || c.req.path === '/api/auth/init' || c.req.path === '/api/auth/status')
     return next()
   if (!(await authenticated(c))) return fail(c, 401, 'AUTH_REQUIRED', '请先登录')

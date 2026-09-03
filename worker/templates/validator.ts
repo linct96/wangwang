@@ -1,5 +1,5 @@
 import { parse } from 'yaml'
-import { parseTemplateSourceSlots, SOURCE_SLOT_KEY_PATTERN, type TemplateSourceSlot } from './source-slots'
+import { parseTemplateSourceSlots, SOURCE_SLOT_KEY_PATTERN } from './source-slots'
 
 export const MAX_TEMPLATE_BYTES = 1024 * 1024
 
