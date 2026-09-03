@@ -4,18 +4,20 @@ import { ChevronDown, Edit2, Eye, GripVertical, Network, Radio, Server, Trash2, 
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { memberLabel, type ProxyGroupDraft } from '../model'
+import { memberLabel, type ProxyGroupDraft, type SourceSlotDraft } from '../model'
 import { GroupDialog } from './group-dialog'
 
 export function GroupCard({
   group,
   groups,
+  sourceSlots = [],
   index,
   onSave,
   onDelete,
 }: {
   group: ProxyGroupDraft
   groups: ProxyGroupDraft[]
+  sourceSlots?: SourceSlotDraft[]
   index: number
   onSave: (group: ProxyGroupDraft) => void
   onDelete: () => void
@@ -72,7 +74,7 @@ export function GroupCard({
               <Eye />
             </IconButton>
           ) : (
-            <GroupDialog groups={groups} value={group} onSave={onSave}>
+            <GroupDialog groups={groups} sourceSlots={sourceSlots} value={group} onSave={onSave}>
               <IconButton label="编辑代理组">
                 <Edit2 />
               </IconButton>
@@ -99,10 +101,10 @@ export function GroupCard({
                 <div className="template-node-ref-section">
                   <div className="template-node-ref-title">引用的节点 ({group.raw.proxies.length})</div>
                   <div className="template-node-ref-tags">
-                    {group.raw.proxies.map((proxyName: unknown, idx: number) => (
-                      <div key={idx} className="template-node-tag">
+                    {group.raw.proxies.map((name: unknown, index: number) => (
+                      <div key={index} className="template-node-tag">
                         <Server className="template-node-ref-icon text-muted-foreground" />
-                        <span className="template-node-tag-name">{String(proxyName)}</span>
+                        <span className="template-node-tag-name">{String(name)}</span>
                       </div>
                     ))}
                   </div>
@@ -110,12 +112,27 @@ export function GroupCard({
               )}
             </div>
           ) : (
-            <div className="template-group-nodes-section">
-              {(group.type !== 'select' || group.url || group.interval || group.tolerance || group.strategy) && (
+            <div className="template-group-detail">
+              {(group.filter ||
+                group.excludeFilter ||
+                group.url ||
+                group.interval !== undefined ||
+                group.tolerance !== undefined ||
+                group.strategy) && (
                 <div className="template-group-params">
-                  {group.url && (
+                  {group.filter && (
                     <span className="template-group-param-item">
-                      URL: <code>{group.url}</code>
+                      包含: <code>{group.filter}</code>
+                    </span>
+                  )}
+                  {group.excludeFilter && (
+                    <span className="template-group-param-item">
+                      排除: <code>{group.excludeFilter}</code>
+                    </span>
+                  )}
+                  {group.url && (
+                    <span className="template-group-param-item" title={group.url}>
+                      测速: <code>{group.url}</code>
                     </span>
                   )}
                   {group.interval !== undefined && (
@@ -141,10 +158,10 @@ export function GroupCard({
               ) : (
                 <div className="template-node-ref-tags">
                   {group.members.map((member, index) => {
-                    const label = memberLabel(member, groups)
+                    const label = memberLabel(member, groups, sourceSlots)
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'all-proxies' && <Zap className="template-node-ref-icon text-amber-500" />}
+                        {member.kind === 'source-slot' && <Zap className="template-node-ref-icon text-amber-500" />}
                         {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
                         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
                         {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}

@@ -7,6 +7,7 @@ import type {
   RuleProviderDraft,
   RuleProviderProxyDraft,
   RuleTargetDraft,
+  SourceSlotDraft,
   StructuredProxyGroupDraft,
   StructuredRuleProviderDraft,
   StructuredRuleDraft,
@@ -18,7 +19,6 @@ import type {
   GeoSettingsDraft,
 } from './model'
 
-const CUSTOM_SOURCE_NODES = '__WANGWANG_CUSTOM_SOURCE_NODES__'
 const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback', 'load-balance'])
 const VALUE_RULE_TYPES = new Set<SupportedRuleType>([
   'DOMAIN',
@@ -116,8 +116,8 @@ function parseTarget(value: string, groupIds: Map<string, string>): RuleTargetDr
   return { kind: 'raw', value }
 }
 
-function parseMember(value: string, groupIds: Map<string, string>): ProxyGroupMemberDraft {
-  if (value === CUSTOM_SOURCE_NODES) return { kind: 'all-proxies' }
+function parseMember(value: string, groupIds: Map<string, string>, slotKeySet: Set<string>): ProxyGroupMemberDraft {
+  if (slotKeySet.has(value)) return { kind: 'source-slot', slotKey: value }
   if (value === 'DIRECT' || value === 'REJECT') return { kind: 'builtin', value }
   const groupId = groupIds.get(value)
   return groupId ? { kind: 'group', groupId } : { kind: 'raw', value }
@@ -264,6 +264,17 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
 
   const rows = root['proxy-groups']
   const geo = parseGeoSettings(root)
+
+  const sourceSlots: SourceSlotDraft[] = []
+  if (object(root['x-wangwang']) && Array.isArray((root['x-wangwang'] as Record<string, unknown>).sources)) {
+    for (const item of (root['x-wangwang'] as Record<string, unknown>).sources as unknown[]) {
+      if (object(item) && typeof item.key === 'string' && typeof item.name === 'string') {
+        sourceSlots.push({ key: item.key, name: item.name })
+      }
+    }
+  }
+  const slotKeySet = new Set(sourceSlots.map((s) => s.key))
+
   const groupIds = new Map<string, string>()
   rows.forEach((row, index) => {
     if (!object(row) || typeof row.name !== 'string' || typeof row.type !== 'string')
@@ -290,7 +301,9 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
       id,
       name,
       type: type as SupportedProxyGroupType,
-      members: ((value.proxies as string[] | undefined) || []).map((member) => parseMember(member, groupIds)),
+      members: ((value.proxies as string[] | undefined) || []).map((member) =>
+        parseMember(member, groupIds, slotKeySet),
+      ),
       defaultSelected: typeof value['default-selected'] === 'string' ? value['default-selected'] : undefined,
       filter: typeof value.filter === 'string' ? value.filter : undefined,
       excludeFilter: typeof value['exclude-filter'] === 'string' ? value['exclude-filter'] : undefined,
@@ -337,7 +350,7 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
         providerId: provider.id,
       })),
   ]
-  return { draft: { geo: geo.draft, groups, ruleProviders, rules }, warnings }
+  return { draft: { geo: geo.draft, sourceSlots, groups, ruleProviders, rules }, warnings }
 }
 
 function applyOptionalRootField(doc: Document, key: string, value: unknown) {
@@ -373,7 +386,7 @@ function targetValue(target: RuleTargetDraft, names: Map<string, string>) {
 }
 
 function memberValue(member: ProxyGroupMemberDraft, names: Map<string, string>) {
-  if (member.kind === 'all-proxies') return CUSTOM_SOURCE_NODES
+  if (member.kind === 'source-slot') return member.slotKey
   return member.kind === 'group' ? names.get(member.groupId) || '' : member.value
 }
 
@@ -509,6 +522,13 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
+  if (draft.sourceSlots.length > 0) {
+    doc.set('x-wangwang', {
+      sources: draft.sourceSlots.map((slot) => ({ key: slot.key, name: slot.name })),
+    })
+  } else {
+    doc.delete('x-wangwang')
+  }
   applyGeoSettings(doc, draft.geo)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
   const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
@@ -559,7 +579,11 @@ export function uniqueName(base: string, groups: ProxyGroupDraft[]) {
   return `${base} ${suffix}`
 }
 
-export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[]): StructuredProxyGroupDraft {
+export function newGroup(
+  type: SupportedProxyGroupType,
+  groups: ProxyGroupDraft[],
+  initialMember?: ProxyGroupMemberDraft,
+): StructuredProxyGroupDraft {
   const base =
     type === 'select' ? '代理组' : type === 'url-test' ? '自动选择' : type === 'fallback' ? '故障转移' : '负载均衡'
   return {
@@ -567,7 +591,7 @@ export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[
     id: runtimeId('group', groups.length),
     name: uniqueName(base, groups),
     type,
-    members: [{ kind: 'all-proxies' }],
+    members: initialMember ? [initialMember] : [],
     extras: {},
     ...(type === 'select' ? {} : { url: 'https://www.gstatic.com/generate_204', interval: 300 }),
     ...(type === 'url-test' ? { tolerance: 50 } : {}),

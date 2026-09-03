@@ -25,11 +25,15 @@ import '@/styles/templates.css'
 const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
-const blankTemplate = `proxy-groups:
+const blankTemplate = `x-wangwang:
+  sources:
+    - key: __WANGWANG_SOURCE_SLOT_main01__
+      name: 默认节点源
+proxy-groups:
   - name: 节点选择
     type: select
     proxies:
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
+      - __WANGWANG_SOURCE_SLOT_main01__
       - DIRECT
 rules:
   - MATCH,节点选择
@@ -51,6 +55,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const { data: profiles = [] } = useApi<Profile[]>('/profiles')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [templateDetail, setTemplateDetail] = useState<TemplateDetail | null>(null)
   const [yaml, setYaml] = useState(source === 'blank' ? blankTemplate : '')
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
   const [busy, setBusy] = useState('')
@@ -83,6 +88,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const materializedDraftRef = useRef(visualDraft)
   const pendingValidationRef = useRef<{ type: 'idle' | 'timeout'; id: number } | null>(null)
   const validationVersionRef = useRef(0)
+
+  const sourceSlotsLocked = Boolean(
+    id && templateDetail && templateDetail.profileCount > 0 && templateDetail.migrationStatus === 'ready',
+  )
+  const needsRepair = Boolean(templateDetail && templateDetail.migrationStatus === 'needs_repair')
 
   function cancelScheduledValidation() {
     validationVersionRef.current += 1
@@ -139,6 +149,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     void api<TemplateDetail>(`/templates/${templateId}`, { signal: controller.signal })
       .then((template) => {
         if (controller.signal.aborted) return
+        setTemplateDetail(template)
         setName(id ? template.name : `${template.name} 副本`)
         setDescription(template.description || '')
         yamlRef.current = template.yaml
@@ -327,6 +338,15 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
               </div>
             </div>
 
+            {needsRepair && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>
+                  该模板槽位结构需要修复（{templateDetail?.migrationError || '包含不兼容的旧占位符或结构'}
+                  ）。在修复并保存前，已使用该模板的订阅将无法重新编译。
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="template-yaml-heading">
               <div className="template-content-heading">
                 <FieldLabel id="template-yaml-label">模板内容</FieldLabel>
@@ -390,6 +410,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   draft={visualDraft}
                   issues={visualIssues}
                   onChange={updateVisualDraft}
+                  sourceSlotsLocked={sourceSlotsLocked}
                   geoProvider={(type) => inferGeoSource(visualDraft.geo, type).provider}
                   customGeo={
                     inferGeoSource(visualDraft.geo, 'GEOSITE').provider === 'custom' ||

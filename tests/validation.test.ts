@@ -46,12 +46,35 @@ function ruleWithTarget(id: string, providerId: string, ruleTarget: RuleTargetDr
   }
 }
 
-function draft(ruleList: RuleDraft[], providers: RuleProviderDraft[] = [provider('provider-a')]): VisualTemplateDraft {
-  return { geo, groups: [], ruleProviders: providers, rules: ruleList }
+const defaultSlotKey = '__WANGWANG_SOURCE_SLOT_main01__'
+const defaultSlots = [{ key: defaultSlotKey, name: '主力节点' }]
+const defaultGroups: VisualTemplateDraft['groups'] = [
+  {
+    kind: 'structured',
+    id: 'g1',
+    name: '默认组',
+    type: 'select',
+    members: [{ kind: 'source-slot', slotKey: defaultSlotKey }],
+    extras: {},
+  },
+]
+
+function draft(
+  ruleList: RuleDraft[],
+  providers: RuleProviderDraft[] = [provider('provider-a')],
+  sourceSlots = defaultSlots,
+  groups = defaultGroups,
+): VisualTemplateDraft {
+  return { geo, sourceSlots, groups, ruleProviders: providers, rules: ruleList }
 }
 
-function issuesFor(ruleList: RuleDraft[], providers?: RuleProviderDraft[]) {
-  return validateVisualDraft(draft(ruleList, providers))
+function issuesFor(
+  ruleList: RuleDraft[],
+  providers?: RuleProviderDraft[],
+  sourceSlots?: VisualTemplateDraft['sourceSlots'],
+  groups?: VisualTemplateDraft['groups'],
+) {
+  return validateVisualDraft(draft(ruleList, providers, sourceSlots, groups))
 }
 
 function codesFor(issues: ReturnType<typeof validateVisualDraft>, ruleId: string) {
@@ -150,5 +173,109 @@ describe('RULE-SET 引用校验', () => {
     expect(codesFor(issues, 'rule-3')).toContain('RULE_SET_RULE_DUPLICATE')
     expect(codesFor(issues, 'rule-4')).toContain('RULE_SET_RULE_SHADOWED')
     expect(issues.every((issue) => issue.code !== 'RULE_SET_PROVIDER_DUPLICATE')).toBe(true)
+  })
+})
+
+describe('节点源槽位可视化校验', () => {
+  it('槽位数量为 0 时报错', () => {
+    const issues = issuesFor([], undefined, [])
+    expect(issues.some((i) => i.code === 'SLOT_COUNT_EMPTY')).toBe(true)
+  })
+
+  it('槽位名称重复时报错', () => {
+    const slotA = '__WANGWANG_SOURCE_SLOT_slot01__'
+    const slotB = '__WANGWANG_SOURCE_SLOT_slot02__'
+    const slots = [
+      { key: slotA, name: '重复名称' },
+      { key: slotB, name: '  重复名称  ' },
+    ]
+    const groups: VisualTemplateDraft['groups'] = [
+      {
+        kind: 'structured',
+        id: 'g1',
+        name: '组1',
+        type: 'select',
+        members: [
+          { kind: 'source-slot', slotKey: slotA },
+          { kind: 'source-slot', slotKey: slotB },
+        ],
+        extras: {},
+      },
+    ]
+    const issues = issuesFor([], undefined, slots, groups)
+    expect(issues.some((i) => i.code === 'SLOT_NAME_DUPLICATE')).toBe(true)
+  })
+
+  it('槽位 key 格式非法时报错', () => {
+    const badSlot = { key: 'invalid-key', name: '有效名称' }
+    const groups: VisualTemplateDraft['groups'] = [
+      {
+        kind: 'structured',
+        id: 'g1',
+        name: '组1',
+        type: 'select',
+        members: [{ kind: 'source-slot', slotKey: 'invalid-key' }],
+        extras: {},
+      },
+    ]
+    const issues = issuesFor([], undefined, [badSlot], groups)
+    expect(issues.some((i) => i.code === 'SLOT_KEY_INVALID')).toBe(true)
+  })
+
+  it('未被任何代理组引用的槽位报错', () => {
+    const slotA = '__WANGWANG_SOURCE_SLOT_slot01__'
+    const slotB = '__WANGWANG_SOURCE_SLOT_slot02__'
+    const slots = [
+      { key: slotA, name: '已引用' },
+      { key: slotB, name: '未引用' },
+    ]
+    const groups: VisualTemplateDraft['groups'] = [
+      {
+        kind: 'structured',
+        id: 'g1',
+        name: '组1',
+        type: 'select',
+        members: [{ kind: 'source-slot', slotKey: slotA }],
+        extras: {},
+      },
+    ]
+    const issues = issuesFor([], undefined, slots, groups)
+    expect(issues.some((i) => i.code === 'SLOT_UNUSED' && i.slotKey === slotB)).toBe(true)
+  })
+
+  it('代理组成员引用未声明的槽位时报错', () => {
+    const slotA = '__WANGWANG_SOURCE_SLOT_slot01__'
+    const missingSlot = '__WANGWANG_SOURCE_SLOT_miss01__'
+    const slots = [{ key: slotA, name: '已声明' }]
+    const groups: VisualTemplateDraft['groups'] = [
+      {
+        kind: 'structured',
+        id: 'g1',
+        name: '组1',
+        type: 'select',
+        members: [{ kind: 'source-slot', slotKey: missingSlot }],
+        extras: {},
+      },
+    ]
+    const issues = issuesFor([], undefined, slots, groups)
+    expect(issues.some((i) => i.code === 'GROUP_SLOT_MISSING')).toBe(true)
+  })
+
+  it('有效节点源槽位和成员引用时校验通过', () => {
+    const slotA = '__WANGWANG_SOURCE_SLOT_slot01__'
+    const slots = [{ key: slotA, name: '主节点源' }]
+    const groups: VisualTemplateDraft['groups'] = [
+      {
+        kind: 'structured',
+        id: 'g1',
+        name: '组1',
+        type: 'select',
+        members: [{ kind: 'source-slot', slotKey: slotA }],
+        extras: {},
+      },
+    ]
+    const issues = issuesFor([], undefined, slots, groups)
+    const errors = issues.filter((i) => i.level === 'error')
+    expect(errors).toHaveLength(0)
   })
 })

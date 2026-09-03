@@ -12,6 +12,7 @@ import { newGroup } from '../yaml-adapter'
 import {
   memberLabel,
   type ProxyGroupDraft,
+  type SourceSlotDraft,
   type StructuredProxyGroupDraft,
   type SupportedLoadBalanceStrategy,
   type SupportedProxyGroupType,
@@ -154,20 +155,23 @@ export function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) =>
 
 export function GroupDialog({
   groups,
+  sourceSlots = [],
   value,
   onSave,
   children,
 }: {
   groups: ProxyGroupDraft[]
+  sourceSlots?: SourceSlotDraft[]
   value?: StructuredProxyGroupDraft
   onSave: (group: StructuredProxyGroupDraft) => void
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups))
+  const initialMember = sourceSlots[0] ? { kind: 'source-slot' as const, slotKey: sourceSlots[0].key } : undefined
+  const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups, initialMember))
 
   function show() {
-    setForm(value || newGroup('select', groups))
+    setForm(value || newGroup('select', groups, initialMember))
     setOpen(true)
   }
 
@@ -276,8 +280,8 @@ export function GroupDialog({
                     <SelectItem value="__first__">第一个节点（默认）</SelectItem>
                     <SelectGroup>
                       {form.members.map((member, index) => {
-                        if (member.kind === 'all-proxies') return null
-                        const label = memberLabel(member, groups)
+                        if (member.kind === 'source-slot') return null
+                        const label = memberLabel(member, groups, sourceSlots)
                         return (
                           <SelectItem key={`${label}-${index}`} value={label}>
                             {label}
@@ -360,7 +364,7 @@ export function GroupDialog({
                 )}
               </div>
             )}
-            <MemberEditor form={form} groups={groups} onChange={setForm} />
+            <MemberEditor form={form} groups={groups} sourceSlots={sourceSlots} onChange={setForm} />
           </FieldGroup>
           <div className="dialog-actions">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

@@ -21,6 +21,7 @@ import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
 import { ProviderDialog, ProviderList } from './rule-providers'
 import { applyRuleSetPresets, insertRulesBeforeMatch, RuleSetPresetDialog } from './rule-set-presets'
+import { SourceSlotPanel } from './source-slots'
 
 export function VisualTemplateEditor({
   draft,
@@ -28,12 +29,14 @@ export function VisualTemplateEditor({
   onChange,
   geoProvider = 'metacubex',
   customGeo = false,
+  sourceSlotsLocked = false,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
   onChange: (draft: VisualTemplateDraft, meta?: VisualChangeMeta) => void
   geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
   customGeo?: boolean
+  sourceSlotsLocked?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
   const update = (next: VisualTemplateDraft, meta?: VisualChangeMeta) => onChange(next, meta)
@@ -140,20 +143,35 @@ export function VisualTemplateEditor({
         </Alert>
       )}
       <GeoSettingsPanel value={draft.geo} issues={issues} onChange={(geo) => update({ ...draft, geo })} />
+      <SourceSlotPanel
+        slots={draft.sourceSlots || []}
+        groups={draft.groups}
+        locked={sourceSlotsLocked}
+        onChange={(sourceSlots, meta) => update({ ...draft, sourceSlots }, meta)}
+      />
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
             <h2>代理组</h2>
             <span className="template-section-count">{draft.groups.length}</span>
           </div>
-          <GroupDialog groups={draft.groups} onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}>
+          <GroupDialog
+            groups={draft.groups}
+            sourceSlots={draft.sourceSlots}
+            onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}
+          >
             <Button type="button" size="default">
               <Plus data-icon="inline-start" />
               添加代理组
             </Button>
           </GroupDialog>
         </header>
-        <GroupList groups={draft.groups} onChange={updateGroups} onDelete={removeGroup} />
+        <GroupList
+          groups={draft.groups}
+          sourceSlots={draft.sourceSlots}
+          onChange={updateGroups}
+          onDelete={removeGroup}
+        />
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">

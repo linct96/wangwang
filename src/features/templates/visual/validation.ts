@@ -3,12 +3,14 @@ import type {
   RuleProviderDraft,
   RuleSetRuleDraft,
   RuleTargetDraft,
+  SourceSlotDraft,
   VisualIssue,
   VisualTemplateDraft,
 } from './model'
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
+const SOURCE_SLOT_KEY_PATTERN = /^__WANGWANG_SOURCE_SLOT_[A-Za-z0-9_-]{6}__$/
 
 export function resolvePresetNoResolve(provider: RuleProviderDraft | undefined, requested: boolean) {
   return Boolean(requested && provider?.kind === 'structured' && provider.behavior === 'ipcidr')
@@ -120,12 +122,21 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   const issues = [...initial]
   const issueKeys = new Set(
     initial.map((issue) =>
-      JSON.stringify([issue.code, issue.groupId, issue.providerId, issue.ruleId, issue.geoField, issue.message]),
+      JSON.stringify([
+        issue.code,
+        issue.slotKey,
+        issue.groupId,
+        issue.providerId,
+        issue.ruleId,
+        issue.geoField,
+        issue.message,
+      ]),
     ),
   )
   const add = (issue: VisualIssue) => {
     const key = JSON.stringify([
       issue.code,
+      issue.slotKey,
       issue.groupId,
       issue.providerId,
       issue.ruleId,
@@ -135,6 +146,52 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     if (issueKeys.has(key)) return
     issueKeys.add(key)
     issues.push(issue)
+  }
+
+  if (!draft.sourceSlots || draft.sourceSlots.length === 0) {
+    add({ level: 'error', code: 'SLOT_COUNT_EMPTY', message: '模板必须包含 1 到 20 个节点源槽位' })
+  } else if (draft.sourceSlots.length > 20) {
+    add({ level: 'error', code: 'SLOT_COUNT_LIMIT', message: '模板节点源槽位数量不能超过 20 个' })
+  }
+
+  const slotByKey = new Map<string, SourceSlotDraft>()
+  const slotKeyCounts = new Map<string, number>()
+  const slotNameCounts = new Map<string, number>()
+  const slotRefCount = new Map<string, number>()
+
+  for (const slot of draft.sourceSlots || []) {
+    slotKeyCounts.set(slot.key, (slotKeyCounts.get(slot.key) || 0) + 1)
+    const trimmedName = slot.name.trim()
+    slotNameCounts.set(trimmedName, (slotNameCounts.get(trimmedName) || 0) + 1)
+    if (!slotByKey.has(slot.key)) slotByKey.set(slot.key, slot)
+    slotRefCount.set(slot.key, 0)
+  }
+
+  for (const slot of draft.sourceSlots || []) {
+    const trimmedName = slot.name.trim()
+    if (!trimmedName) {
+      add({ level: 'error', code: 'SLOT_NAME_EMPTY', message: '节点源槽位名称不能为空', slotKey: slot.key })
+    } else if (trimmedName.length > 40) {
+      add({ level: 'error', code: 'SLOT_NAME_LENGTH', message: '节点源槽位名称不能超过 40 个字符', slotKey: slot.key })
+    } else if ((slotNameCounts.get(trimmedName) || 0) > 1) {
+      add({
+        level: 'error',
+        code: 'SLOT_NAME_DUPLICATE',
+        message: `节点源槽位名称重复：${trimmedName}`,
+        slotKey: slot.key,
+      })
+    }
+
+    if (!SOURCE_SLOT_KEY_PATTERN.test(slot.key)) {
+      add({ level: 'error', code: 'SLOT_KEY_INVALID', message: '节点源槽位 key 格式无效', slotKey: slot.key })
+    } else if ((slotKeyCounts.get(slot.key) || 0) > 1) {
+      add({
+        level: 'error',
+        code: 'SLOT_KEY_DUPLICATE',
+        message: `节点源槽位 key 重复：${slot.key}`,
+        slotKey: slot.key,
+      })
+    }
   }
   const groupById = new Map(draft.groups.map((group) => [group.id, group]))
   const providerById = new Map(draft.ruleProviders.map((provider) => [provider.id, provider]))
@@ -238,14 +295,38 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
 
   for (const group of draft.groups) {
     if (group.kind !== 'structured') continue
-    for (const member of group.members)
-      if (member.kind === 'group' && !groupById.has(member.groupId))
+    for (const member of group.members) {
+      if (member.kind === 'group' && !groupById.has(member.groupId)) {
         add({
           level: 'error',
           code: 'GROUP_MEMBER_MISSING',
           message: `代理组“${group.name}”引用了不存在的代理组`,
           groupId: group.id,
         })
+      } else if (member.kind === 'source-slot') {
+        if (!slotByKey.has(member.slotKey)) {
+          add({
+            level: 'error',
+            code: 'GROUP_SLOT_MISSING',
+            message: `代理组“${group.name}”引用了未声明的节点源槽位`,
+            groupId: group.id,
+          })
+        } else {
+          slotRefCount.set(member.slotKey, (slotRefCount.get(member.slotKey) || 0) + 1)
+        }
+      }
+    }
+  }
+
+  for (const slot of draft.sourceSlots || []) {
+    if ((slotRefCount.get(slot.key) || 0) === 0) {
+      add({
+        level: 'error',
+        code: 'SLOT_UNUSED',
+        message: `节点源槽位未被任何代理组引用：${slot.name}`,
+        slotKey: slot.key,
+      })
+    }
   }
   const providerNames = new Map<string, number>()
   const providerPaths = new Map<string, number>()
