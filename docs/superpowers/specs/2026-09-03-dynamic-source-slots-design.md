@@ -72,7 +72,10 @@ type SourceSlotDraft = {
 `ProxyGroupMemberDraft` replaces `{ kind: 'all-proxies' }` with:
 
 ```ts
-{ kind: 'source-slot'; slotKey: string }
+{
+  kind: 'source-slot'
+  slotKey: string
+}
 ```
 
 The visual editor adds a “节点源槽位” section before proxy groups. Users can create a slot by entering only its display name; the application generates the immutable key. The proxy-group member picker lists all slots by display name alongside groups, DIRECT, and REJECT. A group may contain multiple source slots and may mix them with other members.

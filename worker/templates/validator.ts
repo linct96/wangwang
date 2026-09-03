@@ -1,6 +1,6 @@
 import { parse } from 'yaml'
+import { parseTemplateSourceSlots, SOURCE_SLOT_KEY_PATTERN, type TemplateSourceSlot } from './source-slots'
 
-export const CUSTOM_SOURCE_NODES_PLACEHOLDER = '__WANGWANG_CUSTOM_SOURCE_NODES__'
 export const MAX_TEMPLATE_BYTES = 1024 * 1024
 
 export type MihomoTemplateConfig = Record<string, unknown>
@@ -15,7 +15,12 @@ function assertNoPlaceholder(value: unknown) {
   else if (object(value)) Object.values(value).forEach(assertNoPlaceholder)
 }
 
-function validateGroups(value: unknown, rendered: boolean) {
+function validateGroups(
+  value: unknown,
+  rendered: boolean,
+  allowedSlotKeys?: Set<string>,
+  slotRefCounts?: Map<string, number>,
+) {
   if (!Array.isArray(value) || !value.length) throw new Error('proxy-groups 必须是非空数组')
   const names = new Set<string>()
   for (const group of value) {
@@ -32,15 +37,29 @@ function validateGroups(value: unknown, rendered: boolean) {
       throw new Error(`代理组“${group.name}”的 proxies 必须是字符串数组`)
     for (const item of group.proxies) {
       if (!item.includes('__WANGWANG_')) continue
-      if (rendered || item !== CUSTOM_SOURCE_NODES_PLACEHOLDER) throw new Error(`占位符位置或名称无效：${item}`)
+      if (rendered) throw new Error(`占位符位置或名称无效：${item}`)
+      if (allowedSlotKeys?.has(item)) {
+        slotRefCounts?.set(item, (slotRefCounts.get(item) ?? 0) + 1)
+      } else if (SOURCE_SLOT_KEY_PATTERN.test(item)) {
+        throw new Error(`代理组“${group.name}”引用了未声明的节点源槽位：${item}`)
+      } else {
+        throw new Error(`占位符位置或名称无效：${item}`)
+      }
     }
   }
 }
 
-function validateShape(config: MihomoTemplateConfig, rendered: boolean) {
-  validateGroups(config['proxy-groups'], rendered)
+function validateShape(
+  config: MihomoTemplateConfig,
+  rendered: boolean,
+  allowedSlotKeys?: Set<string>,
+  slotRefCounts?: Map<string, number>,
+) {
+  validateGroups(config['proxy-groups'], rendered, allowedSlotKeys, slotRefCounts)
   for (const [key, value] of Object.entries(config)) {
-    if (key !== 'proxy-groups' && key !== 'proxies') assertNoPlaceholder(value)
+    if (key !== 'proxy-groups' && key !== 'proxies' && (rendered ? true : key !== 'x-wangwang')) {
+      assertNoPlaceholder(value)
+    }
   }
   if (
     config.rules !== undefined &&
@@ -60,11 +79,24 @@ export function parseTemplateYaml(yaml: string) {
   }
   if (!object(config)) throw new Error('模板根节点必须是对象')
   if (Object.hasOwn(config, 'proxies')) throw new Error('模板不能直接定义根级 proxies')
-  validateShape(config, false)
+
+  const slots = parseTemplateSourceSlots(config)
+  const allowedSlotKeys = new Set(slots.map((s) => s.key))
+  const slotRefCounts = new Map<string, number>()
+
+  validateShape(config, false, allowedSlotKeys, slotRefCounts)
+
+  for (const slot of slots) {
+    if (!slotRefCounts.get(slot.key)) {
+      throw new Error(`节点源槽位未被任何代理组引用：${slot.key}（${slot.name}）`)
+    }
+  }
+
   return config
 }
 
 export function validateRenderedConfig(config: MihomoTemplateConfig) {
+  if (Object.hasOwn(config, 'x-wangwang')) throw new Error('渲染配置不能包含 x-wangwang')
   if (!Array.isArray(config.proxies) || !config.proxies.length) throw new Error('配置没有可用节点')
   const names = new Set<string>()
   for (const proxy of config.proxies) {

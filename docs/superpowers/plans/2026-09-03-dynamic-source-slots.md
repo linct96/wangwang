@@ -72,12 +72,14 @@
 ### Task 1: Introduce Source Slot domain model and template validation
 
 **Files:**
+
 - Create: `worker/templates/source-slots.ts`
 - Modify: `worker/templates/validator.ts`
 - Modify: `worker/templates/builtin.ts`
 - Test: `tests/source-slots.test.ts`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   export const SOURCE_SLOT_KEY_PATTERN: RegExp
@@ -191,17 +193,20 @@ git commit -m "feat(templates): add dynamic source slot validation"
 ### Task 2: Add database schema for slot bindings and template migration state
 
 **Files:**
+
 - Modify: `worker/db.ts`
 - Create/generated: `drizzle/0002_*.sql`
 - Modify/generated: `drizzle/meta/_journal.json`
 - Create/generated: next Drizzle snapshot under `drizzle/meta/`
 
 **Interfaces:**
+
 - Produces Drizzle tables:
   ```ts
   export const profileSourceBindings
   ```
 - Adds template fields:
+
   ```ts
   migrationStatus: 'ready' | 'needs_repair'
   migrationError: string | null
@@ -225,9 +230,13 @@ Add:
 export const profileSourceBindings = sqliteTable(
   'profile_source_bindings',
   {
-    profileId: text('profile_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
     slotKey: text('slot_key').notNull(),
-    sourceId: text('source_id').notNull().references(() => sources.id, { onDelete: 'cascade' }),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.slotKey, table.sourceId] }),
@@ -278,20 +287,35 @@ git commit -m "feat(db): add profile source slot bindings"
 ### Task 3: Add Profile binding validation and persistence helpers
 
 **Files:**
+
 - Create: `worker/profile-source-bindings.ts`
 - Test: `tests/profile-source-bindings.test.ts`
 - Modify: `worker/routes/profiles.ts`
 - Modify: `src/api/types.ts`
 
 **Interfaces:**
+
 - Consumes: `TemplateSourceSlot`, `profileSourceBindings`, `sources`.
 - Produces:
+
   ```ts
   export type ProfileSourceBindingInput = { slotKey: string; sourceIds: string[] }
-  export async function validateProfileSourceBindings(env: Env, slots: TemplateSourceSlot[], bindings: ProfileSourceBindingInput[]): Promise<ProfileSourceBindingInput[]>
+  export async function validateProfileSourceBindings(
+    env: Env,
+    slots: TemplateSourceSlot[],
+    bindings: ProfileSourceBindingInput[],
+  ): Promise<ProfileSourceBindingInput[]>
   export async function readProfileSourceBindings(env: Env, profileId: string): Promise<ProfileSourceBindingInput[]>
-  export async function replaceProfileSourceBindings(env: Env, profileId: string, bindings: ProfileSourceBindingInput[]): Promise<void>
-  export async function profileBindingState(env: Env, profileId: string, slots: TemplateSourceSlot[]): Promise<{ complete: boolean; bindings: ProfileSourceBindingInput[] }>
+  export async function replaceProfileSourceBindings(
+    env: Env,
+    profileId: string,
+    bindings: ProfileSourceBindingInput[],
+  ): Promise<void>
+  export async function profileBindingState(
+    env: Env,
+    profileId: string,
+    slots: TemplateSourceSlot[],
+  ): Promise<{ complete: boolean; bindings: ProfileSourceBindingInput[] }>
   ```
 
 - [ ] **Step 1: Write failing pure validation tests**
@@ -396,12 +420,14 @@ git commit -m "feat(profiles): bind sources by template slot"
 ### Task 4: Refactor node selection and renderer to be slot-aware
 
 **Files:**
+
 - Modify: `worker/tasks.ts`
 - Modify: `worker/templates/renderer.ts`
 - Modify: `worker/routes/templates.ts`
 - Test: `tests/source-slots.test.ts`
 
 **Interfaces:**
+
 - Replace global selection with:
   ```ts
   export type SelectedSlotNode = {
@@ -412,9 +438,13 @@ git commit -m "feat(profiles): bind sources by template slot"
     config: ProxyConfig
   }
 
-  export async function selectProfileSlotNodes(env: Env, profile: typeof profiles.$inferSelect): Promise<SelectedSlotNode[]>
+  export async function selectProfileSlotNodes(
+    env: Env,
+    profile: typeof profiles.$inferSelect,
+  ): Promise<SelectedSlotNode[]>
   ```
 - Renderer contract:
+
   ```ts
   renderMihomoConfig({
     template,
@@ -519,11 +549,13 @@ git commit -m "feat(renderer): expand nodes by source slot"
 ### Task 5: Expose template slots, migration status, and structural locking
 
 **Files:**
+
 - Modify: `worker/templates/resolver.ts`
 - Modify: `worker/routes/templates.ts`
 - Test: `tests/source-slots.test.ts`
 
 **Interfaces:**
+
 - `templateView()` always returns `sourceSlots`, `migrationStatus`, `migrationError`.
 - Template PATCH enforces slot-key structural lock.
 
@@ -589,14 +621,19 @@ git commit -m "feat(templates): lock source slot structure in use"
 ### Task 6: Protect Source delete/disable operations with slot invariants
 
 **Files:**
+
 - Modify: `worker/routes/sources.ts`
 - Modify: `worker/tasks.ts`
 - Test: `tests/profile-source-bindings.test.ts`
 
 **Interfaces:**
+
 - Produces helper:
   ```ts
-  export async function sourceSlotUsage(env: Env, sourceId: string): Promise<Array<{ profileId: string; slotKey: string; boundCount: number; enabledCount: number }>>
+  export async function sourceSlotUsage(
+    env: Env,
+    sourceId: string,
+  ): Promise<Array<{ profileId: string; slotKey: string; boundCount: number; enabledCount: number }>>
   ```
 - `enqueueAffectedProfiles()` reads `profile_source_bindings`, never `profile_sources`.
 
@@ -668,6 +705,7 @@ git commit -m "feat(sources): protect required slot bindings"
 ### Task 7: Implement visual-editor source slots and YAML round-trip
 
 **Files:**
+
 - Modify: `src/features/templates/visual/model.ts`
 - Modify: `src/features/templates/visual/yaml-adapter.ts`
 - Modify: `src/features/templates/visual/validation.ts`
@@ -683,6 +721,7 @@ git commit -m "feat(sources): protect required slot bindings"
 - Add tests to: `tests/source-slots.test.ts` or a frontend-focused YAML adapter test file if clearer
 
 **Interfaces:**
+
 - `VisualTemplateDraft.sourceSlots: SourceSlotDraft[]`
 - `ProxyGroupMemberDraft` includes `{ kind: 'source-slot'; slotKey: string }` and no longer includes `all-proxies`.
 - `memberLabel(member, groups, sourceSlots)` resolves slot display names.
@@ -804,11 +843,13 @@ git commit -m "feat(templates): edit source slots visually"
 ### Task 8: Render dynamic Profile binding controls and template switching
 
 **Files:**
+
 - Modify: `src/features/profiles/profile-dialog.tsx`
 - Modify: `src/styles/profile-dialog.css`
 - Modify: `src/features/templates/template-preview.tsx` if filtering selectable Profiles is needed
 
 **Interfaces:**
+
 - Form field becomes:
   ```ts
   sourceBindings: Array<{ slotKey: string; sourceIds: string[] }>
@@ -866,9 +907,7 @@ Send:
 {
   "name": "...",
   "templateId": "...",
-  "sourceBindings": [
-    { "slotKey": "__WANGWANG_SOURCE_SLOT_a8f3k2__", "sourceIds": ["..."] }
-  ],
+  "sourceBindings": [{ "slotKey": "__WANGWANG_SOURCE_SLOT_a8f3k2__", "sourceIds": ["..."] }],
   "tags": [],
   "enabled": true
 }
@@ -910,6 +949,7 @@ git commit -m "feat(profiles): configure sources per template slot"
 ### Task 9: Implement one-time legacy migration and continuity behavior
 
 **Files:**
+
 - Create: `worker/migrations/source-slot-migration.ts`
 - Modify: application startup/migration invocation location identified in current Worker bootstrap
 - Modify: `worker/templates/builtin.ts` if fixed keys need exported lookup
@@ -918,11 +958,13 @@ git commit -m "feat(profiles): configure sources per template slot"
 - Test: `tests/source-slot-migration.test.ts`
 
 **Interfaces:**
+
 - Produces pure transformer:
   ```ts
   export function migrateLegacyTemplateYaml(yaml: string, slotKey: string): { yaml: string; slot: TemplateSourceSlot }
   ```
 - Produces idempotent runtime data migration entry:
+
   ```ts
   export async function migrateLegacySourceSlots(env: Env): Promise<void>
   ```
@@ -1001,10 +1043,12 @@ git commit -m "feat(migration): convert legacy source bindings"
 ### Task 10: Final cleanup, regression verification, and rollout readiness
 
 **Files:**
+
 - Modify only files revealed by verification failures.
 - Do not remove `profile_sources` table in this release.
 
 **Interfaces:**
+
 - Final runtime has no legacy source relation or placeholder dependency.
 
 - [ ] **Step 1: Search for forbidden legacy runtime usage**
