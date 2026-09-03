@@ -170,3 +170,60 @@ describe('Profile source bindings validation', () => {
     ).toThrow('配置引用的不同节点源总数不能超过 20 个')
   })
 })
+
+import { canDeleteSource, canDisableSource, type SlotBindingCheck } from '../worker/profile-source-bindings'
+
+describe('Source delete and disable slot guards', () => {
+  it('删除作为槽位唯一绑定的节点源时被阻止', () => {
+    const usages: SlotBindingCheck[] = [
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_main01__', boundCount: 1, enabledCount: 1 },
+    ]
+    expect(canDeleteSource(usages)).toEqual({
+      allowed: false,
+      violation: usages[0],
+    })
+  })
+
+  it('删除存在多个绑定的槽位中的一个节点源时允许', () => {
+    const usages: SlotBindingCheck[] = [
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_main01__', boundCount: 2, enabledCount: 2 },
+    ]
+    expect(canDeleteSource(usages)).toEqual({
+      allowed: true,
+    })
+  })
+
+  it('禁用作为槽位唯一启用的节点源时被阻止', () => {
+    const usages: SlotBindingCheck[] = [
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_main01__', boundCount: 2, enabledCount: 1 },
+    ]
+    expect(canDisableSource(usages)).toEqual({
+      allowed: false,
+      violation: usages[0],
+    })
+  })
+
+  it('禁用存在多个启用源的槽位中的一个节点源时允许', () => {
+    const usages: SlotBindingCheck[] = [
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_main01__', boundCount: 2, enabledCount: 2 },
+    ]
+    expect(canDisableSource(usages)).toEqual({
+      allowed: true,
+    })
+  })
+
+  it('相同节点源绑定于多个槽位时所有涉及槽位均需满足约束', () => {
+    const usages: SlotBindingCheck[] = [
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_slot01__', boundCount: 2, enabledCount: 2 },
+      { profileId: 'p1', slotKey: '__WANGWANG_SOURCE_SLOT_slot02__', boundCount: 1, enabledCount: 1 },
+    ]
+    expect(canDeleteSource(usages)).toEqual({
+      allowed: false,
+      violation: usages[1],
+    })
+    expect(canDisableSource(usages)).toEqual({
+      allowed: false,
+      violation: usages[1],
+    })
+  })
+})

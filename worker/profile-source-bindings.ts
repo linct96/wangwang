@@ -214,3 +214,67 @@ export async function profileBindingState(
 
   return { complete, bindings }
 }
+
+import { and } from 'drizzle-orm'
+
+export type SlotBindingCheck = {
+  profileId: string
+  slotKey: string
+  boundCount: number
+  enabledCount: number
+}
+
+export function canDeleteSource(usages: SlotBindingCheck[]): { allowed: boolean; violation?: SlotBindingCheck } {
+  for (const usage of usages) {
+    if (usage.boundCount <= 1) {
+      return { allowed: false, violation: usage }
+    }
+  }
+  return { allowed: true }
+}
+
+export function canDisableSource(usages: SlotBindingCheck[]): { allowed: boolean; violation?: SlotBindingCheck } {
+  for (const usage of usages) {
+    if (usage.enabledCount <= 1) {
+      return { allowed: false, violation: usage }
+    }
+  }
+  return { allowed: true }
+}
+
+export async function sourceSlotUsage(env: Env, sourceId: string): Promise<SlotBindingCheck[]> {
+  const affectedSlots = await db(env)
+    .select({
+      profileId: profileSourceBindings.profileId,
+      slotKey: profileSourceBindings.slotKey,
+    })
+    .from(profileSourceBindings)
+    .where(eq(profileSourceBindings.sourceId, sourceId))
+
+  if (affectedSlots.length === 0) return []
+
+  const result: SlotBindingCheck[] = []
+
+  for (const slot of affectedSlots) {
+    const bindings = await db(env)
+      .select({
+        sourceId: profileSourceBindings.sourceId,
+        enabled: sources.enabled,
+      })
+      .from(profileSourceBindings)
+      .innerJoin(sources, eq(sources.id, profileSourceBindings.sourceId))
+      .where(and(eq(profileSourceBindings.profileId, slot.profileId), eq(profileSourceBindings.slotKey, slot.slotKey)))
+
+    const boundCount = bindings.length
+    const enabledCount = bindings.filter((b) => b.enabled).length
+
+    result.push({
+      profileId: slot.profileId,
+      slotKey: slot.slotKey,
+      boundCount,
+      enabledCount,
+    })
+  }
+
+  return result
+}
