@@ -1,11 +1,8 @@
 import { stringify } from 'yaml'
 import type { ProxyConfig } from '../db'
-import {
-  CUSTOM_SOURCE_NODES_PLACEHOLDER,
-  MAX_TEMPLATE_BYTES,
-  parseTemplateYaml,
-  validateRenderedConfig,
-} from './validator'
+import { MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
+
+const CUSTOM_SOURCE_NODES_PLACEHOLDER = '__WANGWANG_CUSTOM_SOURCE_NODES__'
 
 export function renderMihomoConfig({
   nodes,

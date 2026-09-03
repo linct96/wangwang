@@ -168,6 +168,11 @@ export const templates = sqliteTable('templates', {
   name: text('name').notNull(),
   description: text('description'),
   yaml: text('yaml').notNull(),
+  migrationStatus: text('migration_status', { enum: ['ready', 'needs_repair'] })
+    .$type<'ready' | 'needs_repair'>()
+    .notNull()
+    .default('ready'),
+  migrationError: text('migration_error'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
@@ -201,6 +206,24 @@ export const profileSources = sqliteTable(
       .references(() => sources.id, { onDelete: 'cascade' }),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.sourceId] })],
+)
+
+export const profileSourceBindings = sqliteTable(
+  'profile_source_bindings',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    slotKey: text('slot_key').notNull(),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.slotKey, table.sourceId] }),
+    index('profile_source_bindings_source_profile_idx').on(table.sourceId, table.profileId),
+    index('profile_source_bindings_profile_slot_idx').on(table.profileId, table.slotKey),
+  ],
 )
 
 export const profileTagFilters = sqliteTable(
@@ -245,6 +268,7 @@ export const jobs = sqliteTable(
 export const sourcesRelations = relations(sources, ({ many }) => ({
   entries: many(sourceEntries),
   tags: many(sourceTags),
+  sourceBindings: many(profileSourceBindings),
 }))
 export const nodesRelations = relations(nodes, ({ many }) => ({
   entries: many(nodeEntries),
@@ -261,7 +285,12 @@ export const tagsRelations = relations(tags, ({ many }) => ({
 }))
 export const profilesRelations = relations(profiles, ({ many }) => ({
   sources: many(profileSources),
+  sourceBindings: many(profileSourceBindings),
   tagFilters: many(profileTagFilters),
+}))
+export const profileSourceBindingsRelations = relations(profileSourceBindings, ({ one }) => ({
+  profile: one(profiles, { fields: [profileSourceBindings.profileId], references: [profiles.id] }),
+  source: one(sources, { fields: [profileSourceBindings.sourceId], references: [sources.id] }),
 }))
 
 export type QueueMessage = {

@@ -15,6 +15,13 @@
       "when": 1788399190000,
       "tag": "0001_seed_manual_source",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788426879581,
+      "tag": "0002_windy_nightshade",
+      "breakpoints": true
     }
   ]
 }

@@ -90,6 +90,8 @@ templatesRouter.post('/', async (c) => {
     name: input.name,
     description: input.description || null,
     yaml: input.yaml,
+    migrationStatus: 'ready' as const,
+    migrationError: null,
     createdAt: now,
     updatedAt: now,
   }
@@ -134,6 +136,8 @@ templatesRouter.post('/:id/duplicate', async (c) => {
     name: `${source.name} 副本`,
     description: source.description || null,
     yaml: source.yaml,
+    migrationStatus: 'ready' as const,
+    migrationError: null,
     createdAt: now,
     updatedAt: now,
   }
