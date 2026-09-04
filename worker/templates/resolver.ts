@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { templates } from '../db'
 import { builtinTemplate, builtinTemplates } from './builtin'
+import { parseTemplateSourceSlots } from './source-slots'
+import { parseTemplateYaml } from './validator'
 
 export async function resolveTemplate(env: Env, id: string) {
   const builtin = builtinTemplate(id)
@@ -22,6 +24,7 @@ export function templateView(
     kind: builtin ? ('builtin' as const) : ('custom' as const),
     readOnly: builtin,
     profileCount,
+    sourceSlots: parseTemplateSourceSlots(parseTemplateYaml(template.yaml)),
     createdAt: 'createdAt' in template ? template.createdAt : null,
     updatedAt: 'updatedAt' in template ? template.updatedAt : null,
     yaml: includeYaml ? template.yaml : undefined,

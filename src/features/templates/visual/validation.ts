@@ -9,6 +9,7 @@ import type {
 
 const URL_TYPES = new Set(['url-test', 'fallback', 'load-balance'])
 const NO_RESOLVE_TYPES = new Set(['GEOIP', 'IP-CIDR', 'IP-CIDR6'])
+const SOURCE_SLOT_KEY_PATTERN = /^__WANGWANG_SOURCE_SLOT_[A-Za-z0-9_-]{6}__$/
 
 export function resolvePresetNoResolve(provider: RuleProviderDraft | undefined, requested: boolean) {
   return Boolean(requested && provider?.kind === 'structured' && provider.behavior === 'ipcidr')
@@ -136,6 +137,24 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     issueKeys.add(key)
     issues.push(issue)
   }
+  if (!draft.sourceSlots.length || draft.sourceSlots.length > 20)
+    add({ level: 'error', code: 'SLOT_COUNT', message: '模板必须包含 1 到 20 个节点源槽位' })
+  const slotKeys = new Set<string>()
+  const slotNames = new Set<string>()
+  for (const slot of draft.sourceSlots) {
+    if (!SOURCE_SLOT_KEY_PATTERN.test(slot.key) || slotKeys.has(slot.key))
+      add({ level: 'error', code: 'SLOT_KEY', message: '节点源槽位 key 无效或重复', slotKey: slot.key })
+    if (!slot.name.trim() || slot.name.trim().length > 40 || slotNames.has(slot.name.trim()))
+      add({
+        level: 'error',
+        code: 'SLOT_NAME',
+        message: '节点源槽位名称不能为空、重复或超过 40 个字符',
+        slotKey: slot.key,
+      })
+    slotKeys.add(slot.key)
+    slotNames.add(slot.name.trim())
+  }
+  const usedSlots = new Set<string>()
   const groupById = new Map(draft.groups.map((group) => [group.id, group]))
   const providerById = new Map(draft.ruleProviders.map((provider) => [provider.id, provider]))
   const groupNameCounts = new Map<string, number>()
@@ -238,7 +257,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
 
   for (const group of draft.groups) {
     if (group.kind !== 'structured') continue
-    for (const member of group.members)
+    for (const member of group.members) {
       if (member.kind === 'group' && !groupById.has(member.groupId))
         add({
           level: 'error',
@@ -246,7 +265,26 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
           message: `代理组“${group.name}”引用了不存在的代理组`,
           groupId: group.id,
         })
+      if (member.kind === 'source-slot') {
+        if (slotKeys.has(member.slotKey)) usedSlots.add(member.slotKey)
+        else
+          add({
+            level: 'error',
+            code: 'GROUP_SLOT_MISSING',
+            message: `代理组“${group.name}”引用了不存在的节点源槽位`,
+            groupId: group.id,
+          })
+      }
+    }
   }
+  for (const slot of draft.sourceSlots)
+    if (!usedSlots.has(slot.key))
+      add({
+        level: 'error',
+        code: 'SLOT_UNUSED',
+        message: `节点源槽位“${slot.name}”未被任何代理组引用`,
+        slotKey: slot.key,
+      })
   const providerNames = new Map<string, number>()
   const providerPaths = new Map<string, number>()
   draft.ruleProviders.forEach((provider) => {

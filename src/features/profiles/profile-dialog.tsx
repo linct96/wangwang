@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { RefreshCw } from 'lucide-react'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { Profile, Source, TagOption, TemplateId, TemplateSummary } from '@/api/types'
+import type { Profile, ProfileSourceBinding, Source, TagOption, TemplateId, TemplateSummary } from '@/api/types'
 import { AppDialog } from '@/components/app-primitives'
 import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -46,7 +46,7 @@ export function ProfileDialog({
     defaultValues: {
       name: profile?.name || '',
       tags: profile?.tags || ([] as string[]),
-      sourceIds: profile?.sourceIds || [],
+      sourceBindings: profile?.sourceBindings || ([] as ProfileSourceBinding[]),
       templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {
@@ -55,7 +55,9 @@ export function ProfileDialog({
         tags: z
           .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
           .max(20, '标签不能超过 20 个'),
-        sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源').max(20, '节点源不能超过 20 个'),
+        sourceBindings: z
+          .array(z.object({ slotKey: z.string(), sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源') }))
+          .min(1, '模板必须包含节点源槽位'),
         templateId: z.custom<TemplateId>((val) => typeof val === 'string' && val.length > 0, '请选择订阅模板'),
       }),
     },
@@ -68,7 +70,7 @@ export function ProfileDialog({
             method: profile ? 'PATCH' : 'POST',
             body: JSON.stringify({
               name: value.name,
-              sourceIds: value.sourceIds,
+              sourceBindings: value.sourceBindings,
               tags: value.tags,
               templateId: value.templateId,
               enabled: profile?.enabled ?? true,
@@ -84,19 +86,24 @@ export function ProfileDialog({
   const builtin = templates.filter((template) => template.kind === 'builtin')
   const custom = templates.filter((template) => template.kind === 'custom')
 
-  function toggle<T>(items: T[], item: T) {
-    return items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
-  }
+  useEffect(() => {
+    if (form.state.values.sourceBindings.length) return
+    const template = templates.find(({ id }) => id === form.state.values.templateId)
+    if (template)
+      form.setFieldValue(
+        'sourceBindings',
+        template.sourceSlots.map(({ key }) => ({ slotKey: key, sourceIds: [] })),
+      )
+  }, [form, templates])
 
-  function selectAllSources() {
+  function selectTemplate(templateId: TemplateId) {
+    const previous = new Map(form.state.values.sourceBindings.map((binding) => [binding.slotKey, binding.sourceIds]))
+    const template = templates.find(({ id }) => id === templateId)
+    form.setFieldValue('templateId', templateId)
     form.setFieldValue(
-      'sourceIds',
-      sources.map((s) => s.id),
+      'sourceBindings',
+      template?.sourceSlots.map(({ key }) => ({ slotKey: key, sourceIds: previous.get(key) || [] })) || [],
     )
-  }
-
-  function clearAllSources() {
-    form.setFieldValue('sourceIds', [])
   }
 
   async function submit(event: FormEvent) {
@@ -132,7 +139,7 @@ export function ProfileDialog({
             {(field) => (
               <Field data-invalid={Boolean(templateError)}>
                 <FieldLabel htmlFor="profile-template">订阅模板</FieldLabel>
-                <Select value={field.state.value} onValueChange={(value) => field.handleChange(value as TemplateId)}>
+                <Select value={field.state.value} onValueChange={(value) => selectTemplate(value as TemplateId)}>
                   <SelectTrigger id="profile-template" className="w-full" aria-invalid={Boolean(templateError)}>
                     <SelectValue placeholder="选择订阅规则模板" />
                   </SelectTrigger>
@@ -162,83 +169,72 @@ export function ProfileDialog({
             )}
           </form.Field>
 
-          <form.Field name="sourceIds">
+          <form.Field name="sourceBindings">
             {(field) => {
-              const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+              const currentTemplate = templates.find(({ id }) => id === form.state.values.templateId)
+              const enabledSources = sources.filter(({ enabled }) => enabled)
               return (
-                <Field data-invalid={invalid} className="gap-2.5">
+                <Field data-invalid={!field.state.meta.isValid} className="gap-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FieldLabel>包含节点源</FieldLabel>
-                      <Badge variant="secondary" className="text-xs font-normal">
-                        已选 {field.state.value.length} / {sources.length}
-                      </Badge>
-                    </div>
-                    {sources.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          className="text-xs text-muted-foreground hover:text-foreground h-6 px-1.5"
-                          onClick={selectAllSources}
-                        >
-                          全选
-                        </Button>
-                        <span className="text-muted-foreground text-xs">/</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          className="text-xs text-muted-foreground hover:text-foreground h-6 px-1.5"
-                          onClick={clearAllSources}
-                        >
-                          清空
-                        </Button>
-                      </div>
-                    )}
+                    <FieldLabel>节点源槽位</FieldLabel>
+                    <Badge variant="secondary">{currentTemplate?.sourceSlots.length || 0} 个槽位</Badge>
                   </div>
-
-                  {sources.length === 0 ? (
-                    <div className="text-xs text-muted-foreground py-6 text-center border border-dashed rounded-lg">
-                      暂无可用节点源，请先添加节点源
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-0.5">
-                      {sources.map((source) => {
-                        const checked = field.state.value.includes(source.id)
-                        return (
-                          <label
-                            key={source.id}
-                            htmlFor={`source-${source.id}`}
-                            className={cn(
-                              'flex items-center justify-between gap-2.5 p-2.5 rounded-lg border text-sm cursor-pointer transition-all select-none',
-                              checked
-                                ? 'border-primary/40 bg-primary/5 shadow-xs dark:bg-primary/10'
-                                : 'border-border/70 hover:border-border hover:bg-muted/40',
-                            )}
+                  {currentTemplate?.sourceSlots.map((slot) => {
+                    const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
+                    const selected = binding?.sourceIds || []
+                    const setSelected = (sourceIds: string[]) =>
+                      field.handleChange(
+                        field.state.value.map((item) => (item.slotKey === slot.key ? { ...item, sourceIds } : item)),
+                      )
+                    return (
+                      <Field key={slot.key} data-invalid={!selected.length} className="gap-2 rounded-lg border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <FieldLabel>{slot.name}</FieldLabel>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => setSelected(enabledSources.map(({ id }) => id))}
                           >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <Checkbox
-                                id={`source-${source.id}`}
-                                checked={checked}
-                                onCheckedChange={() => field.handleChange(toggle(field.state.value, source.id))}
-                                aria-invalid={invalid}
-                              />
-                              <span className="truncate font-medium text-xs sm:text-sm">{source.name}</span>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className="text-[11px] font-mono shrink-0 px-1.5 py-0 h-4.5 text-muted-foreground font-normal"
-                            >
-                              {source.nodeCount} 节点
-                            </Badge>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {invalid && <FieldError errors={field.state.meta.errors} />}
+                            全选
+                          </Button>
+                        </div>
+                        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                          {enabledSources.map((source) => {
+                            const checked = selected.includes(source.id)
+                            return (
+                              <label
+                                key={source.id}
+                                htmlFor={`source-${slot.key}-${source.id}`}
+                                className={cn(
+                                  'flex cursor-pointer items-center justify-between gap-2 rounded-lg border p-2 text-sm',
+                                  checked && 'border-primary/40 bg-primary/5',
+                                )}
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <Checkbox
+                                    id={`source-${slot.key}-${source.id}`}
+                                    checked={checked}
+                                    onCheckedChange={() =>
+                                      setSelected(
+                                        checked ? selected.filter((id) => id !== source.id) : [...selected, source.id],
+                                      )
+                                    }
+                                    aria-invalid={!selected.length}
+                                  />
+                                  <span className="truncate">{source.name}</span>
+                                </span>
+                                <Badge variant="outline">{source.nodeCount}</Badge>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {!enabledSources.length && <p className="text-sm text-muted-foreground">暂无可用节点源</p>}
+                        {!selected.length && <FieldError>请至少选择一个节点源</FieldError>}
+                      </Field>
+                    )
+                  })}
+                  {!field.state.meta.isValid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               )
             }}

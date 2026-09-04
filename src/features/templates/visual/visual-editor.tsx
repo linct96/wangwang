@@ -1,7 +1,10 @@
-import { LibraryBig, ListPlus, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { nanoid } from 'nanoid'
+import { LibraryBig, ListPlus, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { groupReferences, resolvePresetNoResolve, ruleProviderReferences } from './validation'
 import { findPotentialRawProviderReferences, findPotentialRawReferences, newRule } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
@@ -36,7 +39,30 @@ export function VisualTemplateEditor({
   customGeo?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
+  const [slotName, setSlotName] = useState('')
   const update = (next: VisualTemplateDraft, meta?: VisualChangeMeta) => onChange(next, meta)
+
+  function addSlot() {
+    const name = slotName.trim()
+    if (!name) return
+    if (draft.sourceSlots.some((slot) => slot.name === name)) return void toast.error('槽位名称不能重复')
+    update({
+      ...draft,
+      sourceSlots: [...draft.sourceSlots, { key: `__WANGWANG_SOURCE_SLOT_${nanoid(6)}__`, name }],
+    })
+    setSlotName('')
+  }
+
+  function removeSlot(key: string) {
+    const used = draft.groups.some(
+      (group) =>
+        group.kind === 'structured' &&
+        group.members.some((member) => member.kind === 'source-slot' && member.slotKey === key),
+    )
+    if (used) return void toast.error('该槽位正在被代理组引用，请先移除引用')
+    if (draft.sourceSlots.length === 1) return void toast.error('模板至少需要一个节点源槽位')
+    update({ ...draft, sourceSlots: draft.sourceSlots.filter((slot) => slot.key !== key) })
+  }
 
   function addRule(rule: StructuredRuleDraft) {
     update({
@@ -143,17 +169,81 @@ export function VisualTemplateEditor({
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">
+            <h2>节点源槽位</h2>
+            <span className="template-section-count">{draft.sourceSlots.length}</span>
+          </div>
+          <div className="template-rule-header-right">
+            <Input
+              value={slotName}
+              maxLength={40}
+              placeholder="槽位名称"
+              aria-label="新槽位名称"
+              onChange={(event) => setSlotName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  addSlot()
+                }
+              }}
+            />
+            <Button type="button" variant="outline" disabled={!slotName.trim()} onClick={addSlot}>
+              <Plus data-icon="inline-start" />
+              添加槽位
+            </Button>
+          </div>
+        </header>
+        <div className="template-visual-list">
+          {draft.sourceSlots.map((slot) => (
+            <div key={slot.key} className="template-visual-card flex items-center gap-2 p-3">
+              <Input
+                value={slot.name}
+                maxLength={40}
+                aria-label="槽位名称"
+                onChange={(event) =>
+                  update({
+                    ...draft,
+                    sourceSlots: draft.sourceSlots.map((item) =>
+                      item.key === slot.key ? { ...item, name: event.target.value } : item,
+                    ),
+                  })
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={`删除槽位 ${slot.name}`}
+                onClick={() => removeSlot(slot.key)}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="template-visual-section">
+        <header className="template-visual-toolbar">
+          <div className="template-rule-header-left">
             <h2>代理组</h2>
             <span className="template-section-count">{draft.groups.length}</span>
           </div>
-          <GroupDialog groups={draft.groups} onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}>
+          <GroupDialog
+            groups={draft.groups}
+            sourceSlots={draft.sourceSlots}
+            onSave={(group) => update({ ...draft, groups: [...draft.groups, group] })}
+          >
             <Button type="button" size="default">
               <Plus data-icon="inline-start" />
               添加代理组
             </Button>
           </GroupDialog>
         </header>
-        <GroupList groups={draft.groups} onChange={updateGroups} onDelete={removeGroup} />
+        <GroupList
+          groups={draft.groups}
+          sourceSlots={draft.sourceSlots}
+          onChange={updateGroups}
+          onDelete={removeGroup}
+        />
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">

@@ -98,6 +98,9 @@ export type NodeImportResult = {
   warnings: string[]
 }
 
+export type TemplateSourceSlot = { key: string; name: string }
+export type ProfileSourceBinding = { slotKey: string; sourceIds: string[] }
+
 export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
 
 export type TemplateSummary = {
@@ -107,6 +110,7 @@ export type TemplateSummary = {
   kind: 'builtin' | 'custom'
   readOnly: boolean
   profileCount: number
+  sourceSlots: TemplateSourceSlot[]
   createdAt: string | null
   updatedAt: string | null
 }
@@ -124,6 +128,6 @@ export type Profile = {
   compiledYaml?: string | null
   compiledAt: string | null
   error: string | null
-  sourceIds: string[]
+  sourceBindings: ProfileSourceBinding[]
   subscriptionUrl: string
 }
