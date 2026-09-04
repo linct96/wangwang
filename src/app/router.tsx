@@ -12,6 +12,8 @@ const DashboardPage = lazyRouteComponent(() => import('@/features/dashboard/page
 const SourcesPage = lazyRouteComponent(() => import('@/features/sources/page'), 'SourcesPage')
 const NodesPage = lazyRouteComponent(() => import('@/features/nodes/page'), 'NodesPage')
 const ProfilesPage = lazyRouteComponent(() => import('@/features/profiles/page'), 'ProfilesPage')
+const NewProfilePage = lazyRouteComponent(() => import('@/features/profiles/profile-editor'), 'NewProfilePage')
+const EditProfilePage = lazyRouteComponent(() => import('@/features/profiles/profile-editor'), 'EditProfilePage')
 const ProfileDetailPage = lazyRouteComponent(() => import('@/features/profiles/profile-detail'), 'ProfileDetailPage')
 const TemplatesPage = lazyRouteComponent(() => import('@/features/templates/page'), 'TemplatesPage')
 const NewTemplatePage = lazyRouteComponent(() => import('@/features/templates/editor'), 'NewTemplatePage')
@@ -28,6 +30,19 @@ const dashboardRoute = createRoute({ getParentRoute: () => appRoute, path: '/das
 const sourcesRoute = createRoute({ getParentRoute: () => appRoute, path: '/sources', component: SourcesPage })
 const nodesRoute = createRoute({ getParentRoute: () => appRoute, path: '/nodes', component: NodesPage })
 const profilesRoute = createRoute({ getParentRoute: () => appRoute, path: '/profiles', component: ProfilesPage })
+const newProfileRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/profiles/new',
+  validateSearch: (search: Record<string, unknown>): { templateId?: string } => ({
+    templateId: typeof search.templateId === 'string' ? search.templateId : undefined,
+  }),
+  component: NewProfilePage,
+})
+const editProfileRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/profiles/$id/edit',
+  component: EditProfilePage,
+})
 const templatesRoute = createRoute({ getParentRoute: () => appRoute, path: '/templates', component: TemplatesPage })
 const newTemplateRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -61,7 +76,9 @@ const routeTree = rootRoute.addChildren([
     sourcesRoute,
     nodesRoute,
     profilesRoute,
+    newProfileRoute,
     profileDetailRoute,
+    editProfileRoute,
     templatesRoute,
     newTemplateRoute,
     editTemplateRoute,
