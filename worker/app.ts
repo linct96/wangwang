@@ -3,7 +3,7 @@ import type { Context } from 'hono'
 import { count, desc, eq, sql } from 'drizzle-orm'
 import { jobs, nodes, profiles, sources } from './db'
 import { db } from './tasks'
-import { fail, ok } from './http'
+import { fail, ok, RequestBodyError } from './http'
 import { authenticated, authRouter } from './routes/auth'
 import { sourcesRouter } from './routes/sources'
 import { nodesRouter } from './routes/nodes'
@@ -102,4 +102,8 @@ app.get('*', (c) => (c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', 
 app.notFound((c) =>
   c.req.path.startsWith('/api/') ? fail(c, 404, 'NOT_FOUND', '接口不存在') : c.text('Not found', 404),
 )
-app.onError((error, c) => fail(c, 500, 'INTERNAL_ERROR', error.message || '服务异常'))
+app.onError((error, c) =>
+  error instanceof RequestBodyError
+    ? fail(c, 400, 'INVALID_REQUEST', error.message)
+    : fail(c, 500, 'INTERNAL_ERROR', error.message || '服务异常'),
+)
