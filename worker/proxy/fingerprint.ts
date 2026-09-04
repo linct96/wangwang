@@ -1,4 +1,4 @@
-import type { ProxyConfig } from '../db'
+import type { PhysicalProxyConfig } from '../db'
 const canonical = (value: unknown): string =>
   Array.isArray(value)
     ? `[${value.map(canonical).join(',')}]`
@@ -9,7 +9,7 @@ const canonical = (value: unknown): string =>
           .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
           .join(',')}}`
       : JSON.stringify(value)
-export async function fingerprint(config: ProxyConfig) {
+export async function fingerprint(config: PhysicalProxyConfig) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(config)))
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }

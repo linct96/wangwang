@@ -54,7 +54,7 @@ export type NodeItem = {
   inheritedTags: TagOption[]
   enabled: boolean
   updatedAt: string
-  management: 'subscription' | 'manual' | 'mixed'
+  management: 'subscription' | 'manual'
   canEditConnection: boolean
   canDelete: boolean
 }

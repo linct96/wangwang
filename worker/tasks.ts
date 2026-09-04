@@ -1,11 +1,11 @@
 import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { jobs, nodeEntries, nodes, profiles, profileSourceBindings, sourceEntries, sources } from './db'
+import { jobs, nodes, physicalNodes, profiles, profileSourceBindings, sources } from './db'
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews } from './tag-model'
-import { entryTagViews, profileFilterTagIds } from './tag-store'
+import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
 
@@ -15,16 +15,13 @@ async function runBatches(env: Env, statements: D1PreparedStatement[]) {
   for (let index = 0; index < statements.length; index += 80) await env.DB.batch(statements.slice(index, index + 80))
 }
 
-export async function cleanupOrphanNodes(env: Env) {
+export async function cleanupOrphanPhysicalNodes(env: Env) {
   await env.DB.batch([
     env.DB.prepare(
-      'DELETE FROM node_entries WHERE NOT EXISTS (SELECT 1 FROM source_entries WHERE source_entries.entry_id = node_entries.id)',
+      'DELETE FROM physical_nodes WHERE NOT EXISTS (SELECT 1 FROM nodes WHERE nodes.physical_node_id = physical_nodes.id)',
     ),
     env.DB.prepare(
-      'DELETE FROM nodes WHERE NOT EXISTS (SELECT 1 FROM node_entries WHERE node_entries.node_id = nodes.id)',
-    ),
-    env.DB.prepare(
-      'DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM node_entry_tags WHERE node_entry_tags.tag_id = tags.id) AND NOT EXISTS (SELECT 1 FROM source_tags WHERE source_tags.tag_id = tags.id)',
+      'DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM node_tags WHERE node_tags.tag_id = tags.id) AND NOT EXISTS (SELECT 1 FROM source_tags WHERE source_tags.tag_id = tags.id)',
     ),
   ])
 }
@@ -152,23 +149,7 @@ export async function fetchSource(
   throw new Error('订阅获取失败')
 }
 
-async function ensureNodeCapacity(env: Env, fingerprints: string[]) {
-  fingerprints = [...new Set(fingerprints)]
-  const database = db(env)
-  const [{ count }] = await database.select({ count: sql<number>`count(*)` }).from(nodes)
-  let existing = 0
-  for (let index = 0; index < fingerprints.length; index += 90) {
-    const chunk = fingerprints.slice(index, index + 90)
-    const [{ count: chunkCount }] = await database
-      .select({ count: sql<number>`count(*)` })
-      .from(nodes)
-      .where(inArray(nodes.fingerprint, chunk))
-    existing += Number(chunkCount)
-  }
-  if (Number(count) + fingerprints.length - existing > 2000) throw new Error('全局节点数量超过 2000')
-}
-
-async function replaceSourceEntries(
+async function replaceSourceNodes(
   env: Env,
   sourceId: string,
   parsed: Awaited<ReturnType<typeof parseProxyText>>,
@@ -179,20 +160,23 @@ async function replaceSourceEntries(
     subscriptionInfo: ReturnType<typeof parseSubscriptionUserinfo>
   },
 ) {
-  const source = await db(env).select().from(sources).where(eq(sources.id, sourceId)).get()
+  const database = db(env)
+  const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
   if (!source) throw new Error('节点源不存在')
   const parsedNodes = parsed.nodes
-  await ensureNodeCapacity(
-    env,
-    parsedNodes.map((node) => node.fingerprint),
-  )
+  const [{ total }] = await database.select({ total: sql<number>`count(*)` }).from(nodes)
+  const [{ current }] = await database
+    .select({ current: sql<number>`count(*)` })
+    .from(nodes)
+    .where(eq(nodes.sourceId, sourceId))
+  if (Number(total) - Number(current) + parsedNodes.length > 2000) throw new Error('全局节点数量超过 2000')
+
   const now = Date.now()
   for (let index = 0; index < parsedNodes.length; index += 40) {
-    const chunk = parsedNodes.slice(index, index + 40)
     await env.DB.batch(
-      chunk.map((node) =>
+      parsedNodes.slice(index, index + 40).map((node) =>
         env.DB.prepare(
-          `INSERT INTO nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+          `INSERT INTO physical_nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
         ).bind(
@@ -211,70 +195,45 @@ async function replaceSourceEntries(
   const fingerprints = parsedNodes.map((node) => node.fingerprint)
   const physicalByFingerprint = new Map<string, string>()
   for (let index = 0; index < fingerprints.length; index += 90) {
-    const rows = await db(env)
-      .select({ id: nodes.id, fingerprint: nodes.fingerprint })
-      .from(nodes)
-      .where(inArray(nodes.fingerprint, fingerprints.slice(index, index + 90)))
+    const rows = await database
+      .select({ id: physicalNodes.id, fingerprint: physicalNodes.fingerprint })
+      .from(physicalNodes)
+      .where(inArray(physicalNodes.fingerprint, fingerprints.slice(index, index + 90)))
     for (const row of rows) physicalByFingerprint.set(row.fingerprint, row.id)
   }
-  const entryByFingerprint = new Map<string, string>()
-  for (let index = 0; index < fingerprints.length; index += 90) {
-    const rows = await db(env)
-      .select({ entryId: sourceEntries.entryId, fingerprint: nodes.fingerprint })
-      .from(sourceEntries)
-      .innerJoin(nodeEntries, eq(nodeEntries.id, sourceEntries.entryId))
-      .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
-      .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
-      .where(
-        and(
-          eq(sources.kind, 'url'),
-          eq(sourceEntries.sourceKey, nodes.fingerprint),
-          inArray(nodes.fingerprint, fingerprints.slice(index, index + 90)),
-        ),
-      )
-    for (const row of rows)
-      if (!entryByFingerprint.has(row.fingerprint)) entryByFingerprint.set(row.fingerprint, row.entryId)
-  }
-  const entryIdsByFingerprint = new Map<string, string>()
-  const entryStatements: D1PreparedStatement[] = []
-  for (const node of parsedNodes) {
-    const nodeId = physicalByFingerprint.get(node.fingerprint)
-    if (!nodeId) continue
-    let entryId = entryByFingerprint.get(node.fingerprint)
-    if (!entryId) {
-      entryId = crypto.randomUUID()
-      entryStatements.push(
-        env.DB.prepare(
-          `INSERT INTO node_entries (id, node_id, name, alias, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, NULL, 1, ?, ?)`,
-        ).bind(entryId, nodeId, node.config.name, now, now),
-      )
-    } else {
-      entryStatements.push(
-        env.DB.prepare('UPDATE node_entries SET node_id = ?, name = ?, updated_at = ? WHERE id = ?').bind(
-          nodeId,
-          node.config.name,
-          now,
-          entryId,
-        ),
-      )
-    }
-    entryIdsByFingerprint.set(node.fingerprint, entryId)
-  }
-  if (entryStatements.length) await runBatches(env, entryStatements)
-  const relationStatements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM source_entries WHERE source_id = ?').bind(sourceId),
-  ]
+  const existing = await database
+    .select({ id: nodes.id, fingerprint: physicalNodes.fingerprint })
+    .from(nodes)
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+    .where(eq(nodes.sourceId, sourceId))
+  const existingByFingerprint = new Map(existing.map((node) => [node.fingerprint, node.id]))
+  const keptIds: string[] = []
+  const statements: D1PreparedStatement[] = []
   parsedNodes.forEach((node, position) => {
-    const entryId = entryIdsByFingerprint.get(node.fingerprint)
-    if (!entryId) return
-    relationStatements.push(
-      env.DB.prepare(
-        `INSERT INTO source_entries (source_id, entry_id, source_key, original_name, position)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).bind(sourceId, entryId, node.fingerprint, node.config.name, position),
-    )
+    const physicalNodeId = physicalByFingerprint.get(node.fingerprint)
+    if (!physicalNodeId) return
+    const id = existingByFingerprint.get(node.fingerprint) || crypto.randomUUID()
+    keptIds.push(id)
+    if (existingByFingerprint.has(node.fingerprint))
+      statements.push(
+        env.DB.prepare(
+          'UPDATE nodes SET physical_node_id = ?, original_name = ?, position = ?, updated_at = ? WHERE id = ?',
+        ).bind(physicalNodeId, node.originalName, position, now, id),
+      )
+    else
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO nodes (id, source_id, physical_node_id, original_name, alias, enabled, position, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?)`,
+        ).bind(id, sourceId, physicalNodeId, node.originalName, position, now, now),
+      )
   })
+  if (statements.length) await runBatches(env, statements)
+  await env.DB.prepare(`DELETE FROM nodes WHERE source_id = ? AND id NOT IN (SELECT value FROM json_each(?))`)
+    .bind(sourceId, JSON.stringify(keptIds))
+    .run()
+
+  const relationStatements: D1PreparedStatement[] = []
   const nextRefresh =
     source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0
       ? now + source.refreshIntervalHours * 3_600_000
@@ -300,7 +259,7 @@ async function replaceSourceEntries(
     ),
   )
   await runBatches(env, relationStatements)
-  await cleanupOrphanNodes(env)
+  await cleanupOrphanPhysicalNodes(env)
 }
 
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
@@ -311,19 +270,18 @@ export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
   for (const id of new Set(affected.map(({ id }) => id))) await createJob(env, 'compile_profile', id)
 }
 
-export async function enqueueProfilesForEntry(env: Env, entryId: string) {
-  return enqueueProfilesForEntries(env, [entryId])
+export async function enqueueProfilesForNode(env: Env, nodeId: string) {
+  const node = await db(env).select({ sourceId: nodes.sourceId }).from(nodes).where(eq(nodes.id, nodeId)).get()
+  if (node) await enqueueAffectedProfiles(env, node.sourceId)
 }
 
-export async function enqueueProfilesForEntries(env: Env, entryIds: string[]) {
-  if (!entryIds.length) return
+export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
+  if (!nodeIds.length) return
   const affected = await db(env)
-    .select({ id: profileSourceBindings.profileId })
-    .from(profileSourceBindings)
-    .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSourceBindings.sourceId))
-    .where(inArray(sourceEntries.entryId, entryIds))
-  for (const profileId of new Set(affected.map((profile) => profile.id)))
-    await createJob(env, 'compile_profile', profileId)
+    .selectDistinct({ sourceId: nodes.sourceId })
+    .from(nodes)
+    .where(inArray(nodes.id, nodeIds))
+  for (const { sourceId } of affected) await enqueueAffectedProfiles(env, sourceId)
 }
 
 export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
@@ -381,7 +339,7 @@ export async function refreshSource(env: Env, sourceId: string) {
   }
 
   const parsed = await parseProxyText(response.text, source.nodeNameFilter)
-  await replaceSourceEntries(env, sourceId, parsed, response)
+  await replaceSourceNodes(env, sourceId, parsed, response)
   await enqueueAffectedProfiles(env, sourceId)
 }
 
@@ -389,34 +347,24 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
   const selected = await db(env)
     .select({
       slotKey: profileSourceBindings.slotKey,
-      id: nodeEntries.id,
-      config: nodes.config,
-      alias: nodeEntries.alias,
-      entryName: nodeEntries.name,
-      sourceId: sourceEntries.sourceId,
-      originalName: sourceEntries.originalName,
-      position: sourceEntries.position,
-      createdAt: nodeEntries.createdAt,
+      id: nodes.id,
+      config: physicalNodes.config,
+      alias: nodes.alias,
+      originalName: nodes.originalName,
     })
-    .from(nodeEntries)
-    .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
-    .innerJoin(sourceEntries, eq(sourceEntries.entryId, nodeEntries.id))
+    .from(nodes)
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
     .innerJoin(
       profileSourceBindings,
-      and(eq(profileSourceBindings.sourceId, sourceEntries.sourceId), eq(profileSourceBindings.profileId, profile.id)),
+      and(eq(profileSourceBindings.sourceId, nodes.sourceId), eq(profileSourceBindings.profileId, profile.id)),
     )
-    .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
-    .where(and(eq(nodeEntries.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(sourceEntries.position), asc(nodeEntries.createdAt))
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
+    .orderBy(asc(nodes.position), asc(nodes.createdAt))
 
   const filterTagIds = await profileFilterTagIds(env, profile.id)
-  const entryIds = [...new Set(selected.map(({ id }) => id))]
-  const sourcePairs = [
-    ...new Map(
-      selected.map((node) => [`${node.id}:${node.sourceId}`, { entryId: node.id, sourceId: node.sourceId }]),
-    ).values(),
-  ]
-  const views = await entryTagViews(env, entryIds, sourcePairs)
+  const nodeIds = [...new Set(selected.map(({ id }) => id))]
+  const views = await nodeTagViews(env, nodeIds)
   const result: SelectedSlotNode[] = []
   const seen = new Set<string>()
   for (const node of selected) {
@@ -427,9 +375,9 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
     seen.add(key)
     result.push({
       slotKey: node.slotKey,
-      entryId: node.id,
+      nodeId: node.id,
       config: node.config,
-      name: node.alias || node.originalName || node.entryName,
+      name: node.alias || node.originalName,
     })
   }
   return result

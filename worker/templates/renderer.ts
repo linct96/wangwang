@@ -1,13 +1,13 @@
 import { stringify } from 'yaml'
-import type { ProxyConfig } from '../db'
+import type { PhysicalProxyConfig } from '../db'
 import { parseTemplateSourceSlots } from './source-slots'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
 
 export type SelectedSlotNode = {
   slotKey: string
-  entryId: string
+  nodeId: string
   name: string
-  config: ProxyConfig
+  config: PhysicalProxyConfig
 }
 
 export function renderMihomoConfig({ nodes, template }: { nodes: SelectedSlotNode[]; template: { yaml: string } }) {
@@ -15,10 +15,7 @@ export function renderMihomoConfig({ nodes, template }: { nodes: SelectedSlotNod
   const slots = parseTemplateSourceSlots(config)
   const uniqueNodes = [
     ...nodes
-      .reduce(
-        (seen, node) => seen.set(node.entryId, seen.get(node.entryId) || node),
-        new Map<string, SelectedSlotNode>(),
-      )
+      .reduce((seen, node) => seen.set(node.nodeId, seen.get(node.nodeId) || node), new Map<string, SelectedSlotNode>())
       .values(),
   ]
   if (!uniqueNodes.length) throw new Error('配置没有可用节点')
@@ -26,18 +23,18 @@ export function renderMihomoConfig({ nodes, template }: { nodes: SelectedSlotNod
 
   const seenNames = new Map<string, number>()
   const names = new Map<string, string>()
-  config.proxies = uniqueNodes.map(({ entryId, config: proxy, name }) => {
+  config.proxies = uniqueNodes.map(({ nodeId, config: proxy, name }) => {
     const base = name.trim() || `${proxy.server}:${proxy.port}`
     const count = (seenNames.get(base) || 0) + 1
     seenNames.set(base, count)
     const finalName = count === 1 ? base : `${base}-${count}`
-    names.set(entryId, finalName)
+    names.set(nodeId, finalName)
     return { ...proxy, name: finalName }
   })
 
   const members = new Map(slots.map(({ key }) => [key, [] as string[]]))
   for (const node of nodes) {
-    const name = names.get(node.entryId)
+    const name = names.get(node.nodeId)
     const slot = members.get(node.slotKey)
     if (name && slot && !slot.includes(name)) slot.push(name)
   }

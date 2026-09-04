@@ -3,7 +3,7 @@ import { asc, count, countDistinct, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileSourceBindings, sources } from '../db'
-import { cleanupOrphanNodes, createJob, db, enqueueAffectedProfiles } from '../tasks'
+import { cleanupOrphanPhysicalNodes, createJob, db, enqueueAffectedProfiles } from '../tasks'
 import { assertRemoteUrl } from '../security'
 import { normalizeTagInputs, normalizeTagName } from '../tag-model'
 import { replaceSourceTags, sourceTagViews } from '../tag-store'
@@ -188,7 +188,7 @@ sourcesRouter.delete('/:id', async (c) => {
     .where(eq(profileSourceBindings.sourceId, id))
   const profileIds = new Set(affected.map(({ id }) => id))
   await db(c.env).delete(sources).where(eq(sources.id, id))
-  await cleanupOrphanNodes(c.env)
+  await cleanupOrphanPhysicalNodes(c.env)
   for (const profileId of profileIds) await createJob(c.env, 'compile_profile', profileId)
   return ok(c, { id, detachedProfileCount: profileIds.size, removedNodeCount: current.nodeCount })
 })
