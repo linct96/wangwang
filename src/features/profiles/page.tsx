@@ -19,7 +19,6 @@ import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format'
 import { useMinimumLoading } from '@/lib/use-minimum-loading'
 import { cn } from '@/lib/utils'
-import { ProfileDialog } from './profile-dialog'
 import '@/styles/profiles.css'
 
 function ProfileCardSkeleton() {
@@ -50,14 +49,10 @@ export function ProfilesPage() {
   const { data: profiles, error, loading, reload } = useApi<Profile[]>('/profiles')
   const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const { data: templates = [] } = useApi<TemplateSummary[]>('/templates')
-  const [adding, setAdding] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [editingProfile, setEditingProfile] = useState<Profile>()
   const [deleting, setDeleting] = useState<Profile>()
   const [compileStatus, setCompileStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [busyId, setBusyId] = useState('')
   const initialLoading = useMinimumLoading(loading && !profiles)
-  const creatingPlaceholder = useMinimumLoading(creating)
 
   const items = profiles || []
   const enabledCount = items.filter((p) => p.enabled).length
@@ -126,9 +121,11 @@ export function ProfilesPage() {
             {items.length}/20 个订阅配置 · {enabledCount} 个启用中
           </p>
         </div>
-        <Button disabled={!sources.length} onClick={() => setAdding(true)}>
-          <Plus data-icon="inline-start" />
-          新建配置
+        <Button disabled={!sources.length} asChild>
+          <Link to="/profiles/new">
+            <Plus data-icon="inline-start" />
+            新建配置
+          </Link>
         </Button>
       </div>
 
@@ -143,7 +140,7 @@ export function ProfilesPage() {
       ) : (
         profiles && (
           <>
-            {items.length > 0 || creatingPlaceholder ? (
+            {items.length > 0 ? (
               <section className="profile-grid">
                 {items.map((profile) => {
                   const status = compileStatus[profile.id]
@@ -179,8 +176,10 @@ export function ProfilesPage() {
                                 <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
                                 {isCompiling ? '正在生成...' : '重新生成'}
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setEditingProfile(profile)}>
-                                <Pencil className="size-4 mr-2" /> 编辑设置
+                              <DropdownMenuItem asChild>
+                                <Link to="/profiles/$id/edit" params={{ id: profile.id }}>
+                                  <Pencil className="size-4 mr-2" /> 编辑设置
+                                </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -257,7 +256,6 @@ export function ProfilesPage() {
                     </article>
                   )
                 })}
-                {creatingPlaceholder && <ProfileCardSkeleton />}
               </section>
             ) : (
               <div className="empty-block">
@@ -270,43 +268,6 @@ export function ProfilesPage() {
         )
       )}
 
-      {adding && (
-        <ProfileDialog
-          sources={sources}
-          onClose={() => setAdding(false)}
-          onSaved={async (jobId) => {
-            setAdding(false)
-            setCreating(true)
-            try {
-              await waitForJob(jobId)
-              toast.success('配置生成成功')
-            } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '生成失败')
-            } finally {
-              await reload()
-              setCreating(false)
-            }
-          }}
-        />
-      )}
-
-      {editingProfile && (
-        <ProfileDialog
-          sources={sources}
-          profile={editingProfile}
-          onClose={() => setEditingProfile(undefined)}
-          onSaved={async (jobId) => {
-            setEditingProfile(undefined)
-            try {
-              await waitForJob(jobId)
-              toast.success('配置已更新')
-            } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '更新失败')
-            }
-            await reload()
-          }}
-        />
-      )}
       {deleting && (
         <AppConfirmDialog
           title="删除配置"

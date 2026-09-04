@@ -3,13 +3,12 @@ import { useNavigate } from '@tanstack/react-router'
 import { Copy, Eye, FileCode2, FilePlus2, Globe, Layers, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
-import { useApi, waitForJob } from '@/api/use-api'
-import type { Profile, Source, TemplateDetail, TemplateId, TemplateSummary } from '@/api/types'
+import { useApi } from '@/api/use-api'
+import type { Profile, TemplateDetail, TemplateSummary } from '@/api/types'
 import { AppConfirmDialog, AppDialog, PageState } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ProfileDialog } from '@/features/profiles/profile-dialog'
 import { formatDate } from '@/lib/format'
 import { useMinimumLoading } from '@/lib/use-minimum-loading'
 import { TemplatePreview } from './template-preview'
@@ -60,10 +59,8 @@ const builtinFallback: TemplateSummary[] = [
 export function TemplatesPage() {
   const navigate = useNavigate()
   const { data: templates, error, loading, reload } = useApi<TemplateSummary[]>('/templates')
-  const { data: profiles = [], reload: reloadProfiles } = useApi<Profile[]>('/profiles')
-  const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
+  const { data: profiles = [] } = useApi<Profile[]>('/profiles')
   const [previewing, setPreviewing] = useState<TemplateSummary>()
-  const [using, setUsing] = useState<TemplateId>()
   const [deleting, setDeleting] = useState<TemplateSummary>()
   const [choosingSource, setChoosingSource] = useState(false)
   const [busy, setBusy] = useState('')
@@ -152,7 +149,12 @@ export function TemplatesPage() {
                     </header>
                   </div>
                   <footer className="template-card-footer">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void navigate({ to: '/profiles/new', search: { templateId: template.id } })}
+                    >
                       <Zap className="size-3.5" />
                       使用
                     </Button>
@@ -229,7 +231,12 @@ export function TemplatesPage() {
                     </div>
                   </div>
                   <footer className="template-card-footer">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setUsing(template.id)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void navigate({ to: '/profiles/new', search: { templateId: template.id } })}
+                    >
                       <Zap className="size-3.5" />
                       使用
                     </Button>
@@ -343,23 +350,6 @@ export function TemplatesPage() {
         >
           <TemplatePreview templateId={previewing.id} profiles={profiles} auto />
         </AppDialog>
-      )}
-      {using && (
-        <ProfileDialog
-          sources={sources}
-          initialTemplateId={using}
-          onClose={() => setUsing(undefined)}
-          onSaved={async (jobId) => {
-            setUsing(undefined)
-            try {
-              await waitForJob(jobId)
-              toast.success('配置生成成功')
-              await Promise.all([reload(), reloadProfiles()])
-            } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '生成失败')
-            }
-          }}
-        />
       )}
       {deleting && (
         <AppConfirmDialog

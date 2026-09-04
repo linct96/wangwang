@@ -6,7 +6,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Checkbox } from '@/components/ui/checkbox'
-import '@/styles/profile-dialog.css'
+import '@/styles/nodes.css'
 
 const protocols = ['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic']
 

@@ -22,7 +22,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/format'
-import { ProfileDialog } from './profile-dialog'
 import '@/styles/profiles.css'
 
 export function ProfileDetailPage() {
@@ -32,7 +31,6 @@ export function ProfileDetailPage() {
   const { data: sources = [] } = useApi<Source[]>('/sources?includeSystem=1')
   const { data: templates = [] } = useApi<TemplateSummary[]>('/templates')
 
-  const [editing, setEditing] = useState(false)
   const [rotatingToken, setRotatingToken] = useState(false)
   const [busy, setBusy] = useState(false)
   const [compileStatus, setCompileStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -115,7 +113,7 @@ export function ProfileDetailPage() {
             )}
             {compileStatus === 'loading' ? '正在生成' : '重新生成'}
           </Button>
-          <Button onClick={() => setEditing(true)}>
+          <Button onClick={() => void navigate({ to: '/profiles/$id/edit', params: { id } })}>
             <Settings2 data-icon="inline-start" />
             编辑配置
           </Button>
@@ -284,26 +282,6 @@ export function ProfileDetailPage() {
         </div>
       )}
 
-      {editing && profile && (
-        <ProfileDialog
-          sources={sources}
-          profile={profile}
-          onClose={() => setEditing(false)}
-          onSaved={async (jobId) => {
-            setEditing(false)
-            setBusy(true)
-            try {
-              await waitForJob(jobId)
-              toast.success('配置保存成功')
-            } catch (reason) {
-              toast.error(reason instanceof Error ? reason.message : '生成失败')
-            } finally {
-              setBusy(false)
-              await reload()
-            }
-          }}
-        />
-      )}
       {rotatingToken && (
         <AppConfirmDialog
           title="轮换订阅令牌"
