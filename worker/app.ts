@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { count, desc, eq, sql } from 'drizzle-orm'
-import { jobs, nodeEntries, profiles, sources } from './db'
+import { jobs, nodes, profiles, sources } from './db'
 import { db } from './tasks'
 import { fail, ok } from './http'
 import { authenticated, authRouter } from './routes/auth'
@@ -42,7 +42,7 @@ app.get('/api/dashboard', async (c) => {
   const database = db(c.env)
   const [[sourceCount], [nodeCount], [profileCount], recentJobs] = await Promise.all([
     database.select({ value: count() }).from(sources).where(eq(sources.kind, 'url')),
-    database.select({ value: count() }).from(nodeEntries),
+    database.select({ value: count() }).from(nodes),
     database.select({ value: count() }).from(profiles),
     database.select().from(jobs).orderBy(desc(jobs.createdAt)).limit(8),
   ])

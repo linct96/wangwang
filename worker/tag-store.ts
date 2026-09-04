@@ -28,8 +28,8 @@ export async function ensureTags(env: Env, names: string[]): Promise<TagRecord[]
 
 async function replaceRelations(
   env: Env,
-  table: 'node_entry_tags' | 'source_tags' | 'profile_tag_filters',
-  ownerColumn: 'entry_id' | 'source_id' | 'profile_id',
+  table: 'node_tags' | 'source_tags' | 'profile_tag_filters',
+  ownerColumn: 'node_id' | 'source_id' | 'profile_id',
   ownerId: string,
   tags: TagRecord[],
 ) {
@@ -41,26 +41,26 @@ async function replaceRelations(
   await env.DB.batch(statements)
 }
 
-export async function replaceEntryDirectTags(env: Env, entryId: string, names: string[]) {
+export async function replaceNodeDirectTags(env: Env, nodeId: string, names: string[]) {
   const tags = await ensureTags(env, names)
-  await replaceRelations(env, 'node_entry_tags', 'entry_id', entryId, tags)
+  await replaceRelations(env, 'node_tags', 'node_id', nodeId, tags)
   return tags
 }
 
-export async function replaceEntryDirectTagsForEntries(env: Env, entryIds: string[], names: string[]) {
-  if (!entryIds.length) return []
+export async function replaceNodeDirectTagsForNodes(env: Env, nodeIds: string[], names: string[]) {
+  if (!nodeIds.length) return []
   const tags = await ensureTags(env, names)
   const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM node_entry_tags WHERE entry_id IN (SELECT value FROM json_each(?))').bind(
-      JSON.stringify(entryIds),
+    env.DB.prepare('DELETE FROM node_tags WHERE node_id IN (SELECT value FROM json_each(?))').bind(
+      JSON.stringify(nodeIds),
     ),
   ]
   if (tags.length)
     statements.push(
       env.DB.prepare(
-        `INSERT INTO node_entry_tags (entry_id, tag_id)
-         SELECT entry_ids.value, tag_ids.value FROM json_each(?) entry_ids CROSS JOIN json_each(?) tag_ids`,
-      ).bind(JSON.stringify(entryIds), JSON.stringify(tags.map((tag) => tag.id))),
+        `INSERT INTO node_tags (node_id, tag_id)
+         SELECT node_ids.value, tag_ids.value FROM json_each(?) node_ids CROSS JOIN json_each(?) tag_ids`,
+      ).bind(JSON.stringify(nodeIds), JSON.stringify(tags.map((tag) => tag.id))),
     )
   await env.DB.batch(statements)
   return tags
@@ -94,61 +94,38 @@ export async function sourceTagViews(env: Env, sourceIds: string[]) {
   return result
 }
 
-export async function entryTagViews(
-  env: Env,
-  entryIds: string[],
-  sourcePairs?: Array<{ entryId: string; sourceId: string }>,
-) {
+export async function nodeTagViews(env: Env, nodeIds: string[]) {
   const result = new Map<string, { direct: TagView[]; inherited: TagView[] }>()
-  for (const entryId of entryIds) result.set(entryId, { direct: [], inherited: [] })
-  for (let index = 0; index < entryIds.length; index += 100) {
-    const chunk = entryIds.slice(index, index + 100)
+  for (const nodeId of nodeIds) result.set(nodeId, { direct: [], inherited: [] })
+  for (let index = 0; index < nodeIds.length; index += 100) {
+    const chunk = nodeIds.slice(index, index + 100)
     const vars = placeholders(chunk.length)
     const direct = await env.DB.prepare(
-      `SELECT net.entry_id AS entryId, t.id, t.name
-       FROM node_entry_tags net JOIN tags t ON t.id = net.tag_id
-       WHERE net.entry_id IN (${vars})
+      `SELECT nt.node_id AS nodeId, t.id, t.name
+       FROM node_tags nt JOIN tags t ON t.id = nt.tag_id
+       WHERE nt.node_id IN (${vars})
        ORDER BY t.normalized_name`,
     )
       .bind(...chunk)
-      .all<{ entryId: string; id: string; name: string }>()
-    for (const row of direct.results) result.get(row.entryId)?.direct.push({ id: row.id, name: row.name })
+      .all<{ nodeId: string; id: string; name: string }>()
+    for (const row of direct.results) result.get(row.nodeId)?.direct.push({ id: row.id, name: row.name })
   }
 
-  const inherited = sourcePairs
+  const inherited = nodeIds.length
     ? await env.DB.prepare(
-        `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
-         FROM source_entries se
-         JOIN sources s ON s.id = se.source_id
-         JOIN source_tags st ON st.source_id = s.id
+        `SELECT n.id AS nodeId, t.id, t.name
+         FROM nodes n
+         JOIN sources s ON s.id = n.source_id
+         JOIN source_tags st ON st.source_id = n.source_id
          JOIN tags t ON t.id = st.tag_id
-         JOIN json_each(?) selected
-           ON se.entry_id = json_extract(json(selected.value), '$.entryId')
-          AND se.source_id = json_extract(json(selected.value), '$.sourceId')
+         JOIN json_each(?) selected ON n.id = selected.value
          WHERE s.enabled = 1
          ORDER BY t.normalized_name`,
       )
-        .bind(JSON.stringify(sourcePairs))
-        .all<{ entryId: string; id: string; name: string }>()
-    : entryIds.length
-      ? await env.DB.prepare(
-          `SELECT DISTINCT se.entry_id AS entryId, t.id, t.name
-           FROM source_entries se
-           JOIN sources s ON s.id = se.source_id
-           JOIN source_tags st ON st.source_id = se.source_id
-           JOIN tags t ON t.id = st.tag_id
-           JOIN json_each(?) selected ON se.entry_id = selected.value
-           WHERE s.enabled = 1
-           ORDER BY t.normalized_name`,
-        )
-          .bind(JSON.stringify(entryIds))
-          .all<{ entryId: string; id: string; name: string }>()
-      : { results: [] }
-  for (const row of inherited.results) {
-    if (!result.has(row.entryId)) continue
-    const tags = result.get(row.entryId)!.inherited
-    if (!tags.some((tag) => tag.id === row.id)) tags.push({ id: row.id, name: row.name })
-  }
+        .bind(JSON.stringify(nodeIds))
+        .all<{ nodeId: string; id: string; name: string }>()
+    : { results: [] }
+  for (const row of inherited.results) result.get(row.nodeId)?.inherited.push({ id: row.id, name: row.name })
   return result
 }
 

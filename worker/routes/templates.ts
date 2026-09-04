@@ -95,9 +95,9 @@ templatesRouter.post('/preview', async (c) => {
   }
   let nodes: SelectedSlotNode[] = slots.map(({ key, name }, index) => ({
     slotKey: key,
-    entryId: `preview-${index}`,
+    nodeId: `preview-${index}`,
     name: `${name}示例`,
-    config: { name: `${name}示例`, type: 'ss', server: `slot${index + 1}.example.com`, port: 8388 },
+    config: { type: 'ss', server: `slot${index + 1}.example.com`, port: 8388 },
   }))
   if (input.profileId) {
     const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
@@ -107,7 +107,7 @@ templatesRouter.post('/preview', async (c) => {
   try {
     return ok(c, {
       yaml: renderMihomoConfig({ nodes, template }),
-      nodeCount: new Set(nodes.map(({ entryId }) => entryId)).size,
+      nodeCount: new Set(nodes.map(({ nodeId }) => nodeId)).size,
     })
   } catch (error) {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')

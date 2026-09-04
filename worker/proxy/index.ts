@@ -1,5 +1,5 @@
 import { parse, stringify } from 'yaml'
-import type { ProxyConfig } from '../db'
+import type { PhysicalProxyConfig, ProxyConfig } from '../db'
 import { parseAnytls } from './parsers/anytls'
 import { parseHysteria2 as parseHysteria2Uri } from './parsers/hysteria2'
 import { parseTuic } from './parsers/tuic'
@@ -11,7 +11,9 @@ import { normalize } from './normalize'
 import { fingerprint as fingerprintNode } from './fingerprint'
 import { validate } from './validate'
 import { detectFormat } from './subscription'
+import { splitProxyConfig } from './config'
 
+export { namedProxyConfig, splitProxyConfig } from './config'
 export { shareUri } from './share-uri'
 
 const MAX_TEXT_BYTES = 1024 * 1024
@@ -19,7 +21,8 @@ const SUPPORTED_SCHEMES = new Set(['ss:', 'vmess:', 'vless:', 'trojan:', 'hyster
 const SECRET_FIELDS = ['password', 'uuid', 'obfs-password'] as const
 
 export type ParsedNode = {
-  config: ProxyConfig
+  originalName: string
+  config: PhysicalProxyConfig
   fingerprint: string
 }
 
@@ -105,7 +108,7 @@ function parseUri(input: string) {
   return parseStandardUrl(input)
 }
 
-export async function fingerprint(config: ProxyConfig) {
+export async function fingerprint(config: PhysicalProxyConfig) {
   return fingerprintNode(config)
 }
 
@@ -193,8 +196,9 @@ export async function parseProxyText(text: string, nodeNameFilter: string | null
       if (warnings.length < 20) warnings.push(`节点 "${config.name || '未命名'}"：${validationError}`)
       continue
     }
-    const value = await fingerprint(config)
-    deduplicated.set(value, { config, fingerprint: value })
+    const split = splitProxyConfig(config)
+    const value = await fingerprint(split.config)
+    deduplicated.set(value, { ...split, fingerprint: value })
   }
   if (!deduplicated.size) throw new Error(warnings[0] || '没有可用节点')
   return { nodes: [...deduplicated.values()], warnings }

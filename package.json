@@ -9,7 +9,6 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
-    "test": "vitest run",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy",
     "package:deploy": "pnpm build && node scripts/package-deploy.mjs",
@@ -59,7 +58,6 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
-    "vitest": "^3.2.7",
     "wrangler": "^4.125.0"
   }
 }

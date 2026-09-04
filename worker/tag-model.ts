@@ -32,8 +32,8 @@ export function mergeTagViews(direct: TagView[], inherited: TagView[]) {
   return [...result.values()]
 }
 
-export function matchesAnyTag(entryTagIds: string[], filterTagIds: string[]) {
+export function matchesAnyTag(nodeTagIds: string[], filterTagIds: string[]) {
   if (!filterTagIds.length) return true
-  const entryTags = new Set(entryTagIds)
-  return filterTagIds.some((id) => entryTags.has(id))
+  const nodeTags = new Set(nodeTagIds)
+  return filterTagIds.some((id) => nodeTags.has(id))
 }

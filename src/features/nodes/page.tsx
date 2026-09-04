@@ -65,7 +65,7 @@ export function NodesPage() {
     if (!deletingBatch?.length) return
     setDeletingBusy(true)
     try {
-      const result = await api<{ deleted: number; detached: number; skipped: number }>('/nodes/batch', {
+      const result = await api<{ deleted: number; skipped: number }>('/nodes/batch', {
         method: 'DELETE',
         body: JSON.stringify({ ids: deletingBatch.map((node) => node.id) }),
       })
@@ -74,7 +74,6 @@ export function NodesPage() {
       await Promise.all([reload(), reloadTags()])
       const details = [
         result.deleted ? `删除 ${result.deleted} 个` : '',
-        result.detached ? `解除手动来源 ${result.detached} 个` : '',
         result.skipped ? `跳过 ${result.skipped} 个订阅节点` : '',
       ].filter(Boolean)
       toast.success(details.join('，') || '没有可删除的节点')
@@ -232,9 +231,7 @@ export function NodesPage() {
                   <TableCell>
                     <div className="node-name">
                       <span className="cell-main">{node.name}</span>
-                      {node.management !== 'subscription' && (
-                        <Badge variant="secondary">{node.management === 'mixed' ? '混合来源' : '手动'}</Badge>
-                      )}
+                      {node.management === 'manual' && <Badge variant="secondary">手动</Badge>}
                     </div>
                   </TableCell>
                   <TableCell>
