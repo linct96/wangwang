@@ -190,17 +190,21 @@ export const profiles = sqliteTable(
   (table) => [index('profiles_template_id_idx').on(table.templateId)],
 )
 
-export const profileSources = sqliteTable(
-  'profile_sources',
+export const profileSourceBindings = sqliteTable(
+  'profile_source_bindings',
   {
     profileId: text('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
+    slotKey: text('slot_key').notNull(),
     sourceId: text('source_id')
       .notNull()
       .references(() => sources.id, { onDelete: 'cascade' }),
   },
-  (table) => [primaryKey({ columns: [table.profileId, table.sourceId] })],
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.slotKey, table.sourceId] }),
+    index('profile_source_bindings_source_idx').on(table.sourceId, table.profileId),
+  ],
 )
 
 export const profileTagFilters = sqliteTable(
@@ -245,6 +249,7 @@ export const jobs = sqliteTable(
 export const sourcesRelations = relations(sources, ({ many }) => ({
   entries: many(sourceEntries),
   tags: many(sourceTags),
+  profiles: many(profileSourceBindings),
 }))
 export const nodesRelations = relations(nodes, ({ many }) => ({
   entries: many(nodeEntries),
@@ -260,7 +265,7 @@ export const tagsRelations = relations(tags, ({ many }) => ({
   profiles: many(profileTagFilters),
 }))
 export const profilesRelations = relations(profiles, ({ many }) => ({
-  sources: many(profileSources),
+  sources: many(profileSourceBindings),
   tagFilters: many(profileTagFilters),
 }))
 

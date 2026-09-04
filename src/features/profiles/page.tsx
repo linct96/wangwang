@@ -206,11 +206,13 @@ export function ProfilesPage() {
                         <div className="profile-info-item">
                           <span className="profile-info-label">节点来源</span>
                           <div className="profile-tags-wrap">
-                            {profile.sourceIds.map((sid) => (
-                              <span key={sid} className="profile-pill">
-                                {sourceMap.get(sid) || '未知源'}
-                              </span>
-                            ))}
+                            {[...new Set(profile.sourceBindings.flatMap(({ sourceIds }) => sourceIds))].map(
+                              (sourceId) => (
+                                <span key={sourceId} className="profile-pill">
+                                  {sourceMap.get(sourceId) || '未知源'}
+                                </span>
+                              ),
+                            )}
                           </div>
                         </div>
                       </div>

@@ -359,11 +359,18 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "profile_sources": {
-      "name": "profile_sources",
+    "profile_source_bindings": {
+      "name": "profile_source_bindings",
       "columns": {
         "profile_id": {
           "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_key": {
+          "name": "slot_key",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -377,20 +384,26 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "profile_source_bindings_source_idx": {
+          "name": "profile_source_bindings_source_idx",
+          "columns": ["source_id", "profile_id"],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
-        "profile_sources_profile_id_profiles_id_fk": {
-          "name": "profile_sources_profile_id_profiles_id_fk",
-          "tableFrom": "profile_sources",
+        "profile_source_bindings_profile_id_profiles_id_fk": {
+          "name": "profile_source_bindings_profile_id_profiles_id_fk",
+          "tableFrom": "profile_source_bindings",
           "tableTo": "profiles",
           "columnsFrom": ["profile_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "profile_sources_source_id_sources_id_fk": {
-          "name": "profile_sources_source_id_sources_id_fk",
-          "tableFrom": "profile_sources",
+        "profile_source_bindings_source_id_sources_id_fk": {
+          "name": "profile_source_bindings_source_id_sources_id_fk",
+          "tableFrom": "profile_source_bindings",
           "tableTo": "sources",
           "columnsFrom": ["source_id"],
           "columnsTo": ["id"],
@@ -399,9 +412,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "profile_sources_profile_id_source_id_pk": {
-          "columns": ["profile_id", "source_id"],
-          "name": "profile_sources_profile_id_source_id_pk"
+        "profile_source_bindings_profile_id_slot_key_source_id_pk": {
+          "columns": ["profile_id", "slot_key", "source_id"],
+          "name": "profile_source_bindings_profile_id_slot_key_source_id_pk"
         }
       },
       "uniqueConstraints": {},

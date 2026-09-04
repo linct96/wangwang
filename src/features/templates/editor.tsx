@@ -25,11 +25,15 @@ import '@/styles/templates.css'
 const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
-const blankTemplate = `proxy-groups:
+const blankTemplate = `x-wangwang:
+  sources:
+    - key: __WANGWANG_SOURCE_SLOT_blank1__
+      name: 默认节点源
+proxy-groups:
   - name: 节点选择
     type: select
     proxies:
-      - __WANGWANG_CUSTOM_SOURCE_NODES__
+      - __WANGWANG_SOURCE_SLOT_blank1__
       - DIRECT
 rules:
   - MATCH,节点选择

@@ -3,13 +3,14 @@ import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { profiles, templates } from '../db'
-import type { ProxyConfig, TemplateId } from '../db'
+import type { TemplateId } from '../db'
 import { body, fail, ok } from '../http'
 import { db, enqueueProfilesForTemplate, selectProfileNodes } from '../tasks'
 import { builtinTemplates } from '../templates/builtin'
-import { renderMihomoConfig } from '../templates/renderer'
+import { renderMihomoConfig, type SelectedSlotNode } from '../templates/renderer'
 import { resolveTemplate, templateView } from '../templates/resolver'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml } from '../templates/validator'
+import { parseTemplateSourceSlots } from '../templates/source-slots'
 
 const yamlSchema = z
   .string()
@@ -24,31 +25,6 @@ const updateSchema = createSchema.partial().refine((value) => Object.keys(value)
 const previewSchema = z
   .object({ templateId: z.string().optional(), yaml: yamlSchema.optional(), profileId: z.string().optional() })
   .refine((value) => Boolean(value.templateId) !== Boolean(value.yaml), 'templateId 和 yaml 必须且只能提供一个')
-
-const previewNodes: Array<{ name: string; config: ProxyConfig }> = [
-  {
-    name: '香港示例',
-    config: {
-      name: '香港示例',
-      type: 'ss',
-      server: 'hk.example.com',
-      port: 8388,
-      cipher: 'aes-128-gcm',
-      password: 'demo',
-    },
-  },
-  {
-    name: '日本示例',
-    config: {
-      name: '日本示例',
-      type: 'ss',
-      server: 'jp.example.com',
-      port: 8388,
-      cipher: 'aes-128-gcm',
-      password: 'demo',
-    },
-  },
-]
 
 async function profileCounts(env: Env) {
   const rows = await db(env)
@@ -111,14 +87,28 @@ templatesRouter.post('/preview', async (c) => {
   const input = await body(c, previewSchema)
   const template = input.yaml ? { yaml: input.yaml } : await resolveTemplate(c.env, input.templateId!)
   if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
-  let nodes = previewNodes
+  let slots
+  try {
+    slots = parseTemplateSourceSlots(parseTemplateYaml(template.yaml))
+  } catch (error) {
+    return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
+  }
+  let nodes: SelectedSlotNode[] = slots.map(({ key, name }, index) => ({
+    slotKey: key,
+    entryId: `preview-${index}`,
+    name: `${name}示例`,
+    config: { name: `${name}示例`, type: 'ss', server: `slot${index + 1}.example.com`, port: 8388 },
+  }))
   if (input.profileId) {
     const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
     if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
     nodes = await selectProfileNodes(c.env, profile)
   }
   try {
-    return ok(c, { yaml: renderMihomoConfig({ nodes, template }), nodeCount: nodes.length })
+    return ok(c, {
+      yaml: renderMihomoConfig({ nodes, template }),
+      nodeCount: new Set(nodes.map(({ entryId }) => entryId)).size,
+    })
   } catch (error) {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
   }
@@ -157,9 +147,20 @@ templatesRouter.patch('/:id', async (c) => {
   const input = await body(c, updateSchema)
   const current = await db(c.env).select().from(templates).where(eq(templates.id, id)).get()
   if (!current) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const [{ value: profileCount }] = await db(c.env)
+    .select({ value: count() })
+    .from(profiles)
+    .where(eq(profiles.templateId, id as TemplateId))
   if (input.yaml) {
     try {
-      parseTemplateYaml(input.yaml)
+      const nextSlots = parseTemplateSourceSlots(parseTemplateYaml(input.yaml))
+      const currentSlots = parseTemplateSourceSlots(parseTemplateYaml(current.yaml))
+      const nextKeys = new Set(nextSlots.map(({ key }) => key))
+      if (
+        Number(profileCount) &&
+        (currentSlots.length !== nextSlots.length || currentSlots.some(({ key }) => !nextKeys.has(key)))
+      )
+        return fail(c, 409, 'TEMPLATE_SOURCE_SLOTS_LOCKED', '模板正在使用，不能删除或替换节点源槽位')
     } catch (error) {
       return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
     }
@@ -177,7 +178,7 @@ templatesRouter.patch('/:id', async (c) => {
     enqueueProfilesForTemplate(c.env, id),
   ])
   return c.json(
-    { data: { template: templateView(updated!, jobs.length, true), jobIds: jobs.map((job) => job.id) } },
+    { data: { template: templateView(updated!, Number(profileCount), true), jobIds: jobs.map((job) => job.id) } },
     202,
   )
 })

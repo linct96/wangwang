@@ -4,18 +4,20 @@ import { ChevronDown, Edit2, Eye, GripVertical, Network, Radio, Server, Trash2, 
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { memberLabel, type ProxyGroupDraft } from '../model'
+import { memberLabel, type ProxyGroupDraft, type SourceSlotDraft } from '../model'
 import { GroupDialog } from './group-dialog'
 
 export function GroupCard({
   group,
   groups,
+  sourceSlots,
   index,
   onSave,
   onDelete,
 }: {
   group: ProxyGroupDraft
   groups: ProxyGroupDraft[]
+  sourceSlots: SourceSlotDraft[]
   index: number
   onSave: (group: ProxyGroupDraft) => void
   onDelete: () => void
@@ -72,7 +74,7 @@ export function GroupCard({
               <Eye />
             </IconButton>
           ) : (
-            <GroupDialog groups={groups} value={group} onSave={onSave}>
+            <GroupDialog groups={groups} sourceSlots={sourceSlots} value={group} onSave={onSave}>
               <IconButton label="编辑代理组">
                 <Edit2 />
               </IconButton>
@@ -141,10 +143,10 @@ export function GroupCard({
               ) : (
                 <div className="template-node-ref-tags">
                   {group.members.map((member, index) => {
-                    const label = memberLabel(member, groups)
+                    const label = memberLabel(member, groups, sourceSlots)
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'all-proxies' && <Zap className="template-node-ref-icon text-amber-500" />}
+                        {member.kind === 'source-slot' && <Zap className="template-node-ref-icon text-amber-500" />}
                         {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
                         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
                         {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}

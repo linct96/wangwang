@@ -1,14 +1,16 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation } from '@dnd-kit/react/sortable'
-import type { ProxyGroupDraft, VisualChangeMeta } from '../model'
+import type { ProxyGroupDraft, SourceSlotDraft, VisualChangeMeta } from '../model'
 import { GroupCard } from './group-card'
 
 export function GroupList({
   groups,
+  sourceSlots,
   onChange,
   onDelete,
 }: {
   groups: ProxyGroupDraft[]
+  sourceSlots: SourceSlotDraft[]
   onChange: (groups: ProxyGroupDraft[], meta?: VisualChangeMeta) => void
   onDelete: (group: ProxyGroupDraft) => void
 }) {
@@ -33,6 +35,7 @@ export function GroupList({
             index={index}
             group={group}
             groups={groups}
+            sourceSlots={sourceSlots}
             onSave={(next) => onChange(groups.map((item) => (item.id === group.id ? next : item)))}
             onDelete={() => onDelete(group)}
           />

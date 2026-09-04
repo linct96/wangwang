@@ -58,13 +58,16 @@ CREATE TABLE `nodes` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `nodes_fingerprint_idx` ON `nodes` (`fingerprint`);--> statement-breakpoint
-CREATE TABLE `profile_sources` (
+CREATE TABLE `profile_source_bindings` (
 	`profile_id` text NOT NULL,
+	`slot_key` text NOT NULL,
 	`source_id` text NOT NULL,
-	PRIMARY KEY(`profile_id`, `source_id`),
+	PRIMARY KEY(`profile_id`, `slot_key`, `source_id`),
 	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade
 );
+--> statement-breakpoint
+CREATE INDEX `profile_source_bindings_source_idx` ON `profile_source_bindings` (`source_id`,`profile_id`);
 --> statement-breakpoint
 CREATE TABLE `profile_tag_filters` (
 	`profile_id` text NOT NULL,

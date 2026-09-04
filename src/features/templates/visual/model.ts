@@ -1,5 +1,8 @@
+export type SourceSlotDraft = { key: string; name: string }
+
 export type VisualTemplateDraft = {
   geo: GeoSettingsDraft
+  sourceSlots: SourceSlotDraft[]
   groups: ProxyGroupDraft[]
   ruleProviders: RuleProviderDraft[]
   rules: RuleDraft[]
@@ -18,7 +21,7 @@ export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback' | 'load
 export type SupportedLoadBalanceStrategy = 'consistent-hashing' | 'round-robin' | 'sticky-sessions'
 
 export type ProxyGroupMemberDraft =
-  | { kind: 'all-proxies' }
+  | { kind: 'source-slot'; slotKey: string }
   | { kind: 'group'; groupId: string }
   | { kind: 'builtin'; value: 'DIRECT' | 'REJECT' }
   | { kind: 'raw'; value: string }
@@ -142,14 +145,20 @@ export type VisualIssue = {
   level: 'error' | 'warning'
   code: string
   message: string
+  slotKey?: string
   groupId?: string
   providerId?: string
   ruleId?: string
   geoField?: 'geodata-mode' | 'geo-auto-update' | 'geo-update-interval' | 'geoip' | 'geosite' | 'mmdb' | 'asn'
 }
 
-export function memberLabel(member: ProxyGroupMemberDraft, groups: ProxyGroupDraft[] = []): string {
-  if (member.kind === 'all-proxies') return '自定义节点源'
+export function memberLabel(
+  member: ProxyGroupMemberDraft,
+  groups: ProxyGroupDraft[] = [],
+  sourceSlots: SourceSlotDraft[] = [],
+): string {
+  if (member.kind === 'source-slot')
+    return sourceSlots.find(({ key }) => key === member.slotKey)?.name || '未知节点源槽位'
   if (member.kind === 'builtin' || member.kind === 'raw') return member.value
   return groups.find((group) => group.id === member.groupId)?.name || '未知代理组'
 }

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { body, fail, ok } from '../http'
-import { nodeEntries, nodes, profileSources, sourceEntries } from '../db'
+import { nodeEntries, nodes, profileSourceBindings, sourceEntries } from '../db'
 import type { ProxyConfig } from '../db'
 import {
   editableProxyYaml,
@@ -599,8 +599,8 @@ nodesRouter.delete('/:id', async (c) => {
   if (!(kinds.get(id) || []).includes('manual')) return fail(c, 409, 'NODE_MANAGED_BY_SOURCE', '订阅管理的节点不能删除')
   const [{ value }] = await db(c.env)
     .select({ value: count() })
-    .from(profileSources)
-    .where(eq(profileSources.sourceId, MANUAL_SOURCE_ID))
+    .from(profileSourceBindings)
+    .where(eq(profileSourceBindings.sourceId, MANUAL_SOURCE_ID))
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM source_entries WHERE source_id = ? AND entry_id = ?').bind(MANUAL_SOURCE_ID, id),
     c.env.DB.prepare(
