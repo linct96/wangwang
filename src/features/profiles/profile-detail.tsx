@@ -37,7 +37,7 @@ export function ProfileDetailPage() {
   const [busy, setBusy] = useState(false)
   const [compileStatus, setCompileStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
 
-  const templateMap = new Map(templates.map((t) => [t.id, t.name]))
+  const templateMap = new Map(templates.map((template) => [template.id, template]))
   const sourceMap = new Map(sources.map((s) => [s.id, s.name]))
 
   async function runCompile() {
@@ -200,17 +200,25 @@ export function ProfileDetailPage() {
                   <span className="meta-label">关联模板</span>
                   <span className="meta-value font-semibold flex items-center gap-1.5">
                     <Zap className="size-3.5 text-amber-500" />
-                    {templateMap.get(profile.templateId) || profile.templateId}
+                    {templateMap.get(profile.templateId)?.name || profile.templateId}
                   </span>
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">包含节点源</span>
-                  <div className="meta-tags">
-                    {profile.sourceIds.map((sid) => (
-                      <span key={sid} className="profile-pill">
-                        {sourceMap.get(sid) || sid}
-                      </span>
+                  <span className="meta-label">节点源槽位</span>
+                  <div className="flex flex-col gap-2">
+                    {profile.sourceBindings.map((binding) => (
+                      <div key={binding.slotKey} className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {templateMap.get(profile.templateId)?.sourceSlots.find(({ key }) => key === binding.slotKey)
+                            ?.name || binding.slotKey}
+                        </span>
+                        {binding.sourceIds.map((sourceId) => (
+                          <span key={sourceId} className="profile-pill">
+                            {sourceMap.get(sourceId) || sourceId}
+                          </span>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </div>

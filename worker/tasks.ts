@@ -1,12 +1,12 @@
 import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { jobs, nodeEntries, nodes, profiles, profileSources, sourceEntries, sources } from './db'
+import { jobs, nodeEntries, nodes, profiles, profileSourceBindings, sourceEntries, sources } from './db'
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews } from './tag-model'
 import { entryTagViews, profileFilterTagIds } from './tag-store'
-import { renderMihomoConfig } from './templates/renderer'
+import { renderMihomoConfig, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
@@ -305,10 +305,10 @@ async function replaceSourceEntries(
 
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
   const affected = await db(env)
-    .select({ id: profileSources.profileId })
-    .from(profileSources)
-    .where(eq(profileSources.sourceId, sourceId))
-  for (const profile of affected) await createJob(env, 'compile_profile', profile.id)
+    .select({ id: profileSourceBindings.profileId })
+    .from(profileSourceBindings)
+    .where(eq(profileSourceBindings.sourceId, sourceId))
+  for (const id of new Set(affected.map(({ id }) => id))) await createJob(env, 'compile_profile', id)
 }
 
 export async function enqueueProfilesForEntry(env: Env, entryId: string) {
@@ -318,9 +318,9 @@ export async function enqueueProfilesForEntry(env: Env, entryId: string) {
 export async function enqueueProfilesForEntries(env: Env, entryIds: string[]) {
   if (!entryIds.length) return
   const affected = await db(env)
-    .select({ id: profileSources.profileId })
-    .from(profileSources)
-    .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSources.sourceId))
+    .select({ id: profileSourceBindings.profileId })
+    .from(profileSourceBindings)
+    .innerJoin(sourceEntries, eq(sourceEntries.sourceId, profileSourceBindings.sourceId))
     .where(inArray(sourceEntries.entryId, entryIds))
   for (const profileId of new Set(affected.map((profile) => profile.id)))
     await createJob(env, 'compile_profile', profileId)
@@ -385,9 +385,10 @@ export async function refreshSource(env: Env, sourceId: string) {
   await enqueueAffectedProfiles(env, sourceId)
 }
 
-export async function selectProfileNodes(env: Env, profile: typeof profiles.$inferSelect) {
+export async function selectProfileNodes(env: Env, profile: typeof profiles.$inferSelect): Promise<SelectedSlotNode[]> {
   const selected = await db(env)
     .select({
+      slotKey: profileSourceBindings.slotKey,
       id: nodeEntries.id,
       config: nodes.config,
       alias: nodeEntries.alias,
@@ -401,32 +402,37 @@ export async function selectProfileNodes(env: Env, profile: typeof profiles.$inf
     .innerJoin(nodes, eq(nodes.id, nodeEntries.nodeId))
     .innerJoin(sourceEntries, eq(sourceEntries.entryId, nodeEntries.id))
     .innerJoin(
-      profileSources,
-      and(eq(profileSources.sourceId, sourceEntries.sourceId), eq(profileSources.profileId, profile.id)),
+      profileSourceBindings,
+      and(eq(profileSourceBindings.sourceId, sourceEntries.sourceId), eq(profileSourceBindings.profileId, profile.id)),
     )
     .innerJoin(sources, eq(sources.id, sourceEntries.sourceId))
     .where(and(eq(nodeEntries.enabled, true), eq(sources.enabled, true)))
     .orderBy(asc(sourceEntries.position), asc(nodeEntries.createdAt))
 
   const filterTagIds = await profileFilterTagIds(env, profile.id)
-  const entryIds = [...new Set(selected.map((node) => node.id))]
+  const entryIds = [...new Set(selected.map(({ id }) => id))]
   const sourcePairs = [
     ...new Map(
       selected.map((node) => [`${node.id}:${node.sourceId}`, { entryId: node.id, sourceId: node.sourceId }]),
     ).values(),
   ]
   const views = await entryTagViews(env, entryIds, sourcePairs)
-  const unique = new Map<string, (typeof selected)[number]>()
+  const result: SelectedSlotNode[] = []
+  const seen = new Set<string>()
   for (const node of selected) {
     const view = views.get(node.id) || { direct: [], inherited: [] }
-    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map((tag) => tag.id)
-    if (!matchesAnyTag(effectiveTagIds, filterTagIds)) continue
-    if (!unique.has(node.id)) unique.set(node.id, node)
+    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map(({ id }) => id)
+    const key = `${node.slotKey}:${node.id}`
+    if (!matchesAnyTag(effectiveTagIds, filterTagIds) || seen.has(key)) continue
+    seen.add(key)
+    result.push({
+      slotKey: node.slotKey,
+      entryId: node.id,
+      config: node.config,
+      name: node.alias || node.originalName || node.entryName,
+    })
   }
-  return [...unique.values()].map((node) => ({
-    config: node.config,
-    name: node.alias || node.originalName || node.entryName,
-  }))
+  return result
 }
 
 export async function compileProfile(env: Env, profileId: string) {

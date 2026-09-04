@@ -4,24 +4,32 @@ import { GripVertical, Plus, X } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
-import { memberLabel, type ProxyGroupDraft, type ProxyGroupMemberDraft, type StructuredProxyGroupDraft } from '../model'
+import {
+  memberLabel,
+  type ProxyGroupDraft,
+  type ProxyGroupMemberDraft,
+  type SourceSlotDraft,
+  type StructuredProxyGroupDraft,
+} from '../model'
 
 export function MemberTag({
   member,
   index,
   groups,
+  sourceSlots,
   onDelete,
 }: {
   member: ProxyGroupMemberDraft
   index: number
   groups: ProxyGroupDraft[]
+  sourceSlots: SourceSlotDraft[]
   onDelete: () => void
 }) {
   const { ref, handleRef, isDragging } = useSortable({
     id: `member-${index}`,
     index,
   })
-  const label = memberLabel(member, groups)
+  const label = memberLabel(member, groups, sourceSlots)
 
   return (
     <div ref={ref} className={cn('template-member-tag', isDragging && 'template-member-dragging')}>
@@ -51,14 +59,16 @@ export function MemberTag({
 export function MemberEditor({
   form,
   groups,
+  sourceSlots,
   onChange,
 }: {
   form: StructuredProxyGroupDraft
   groups: ProxyGroupDraft[]
+  sourceSlots: SourceSlotDraft[]
   onChange: (form: StructuredProxyGroupDraft) => void
 }) {
   const choices = [
-    { value: 'all', label: '自定义节点源' },
+    ...sourceSlots.map(({ key, name }) => ({ value: `slot:${key}`, label: name })),
     { value: 'DIRECT', label: 'DIRECT' },
     { value: 'REJECT', label: 'REJECT' },
     ...groups
@@ -67,18 +77,17 @@ export function MemberEditor({
   ]
 
   function addMember(val: string) {
-    const member: ProxyGroupMemberDraft =
-      val === 'all'
-        ? { kind: 'all-proxies' }
-        : val === 'DIRECT' || val === 'REJECT'
-          ? { kind: 'builtin', value: val }
-          : { kind: 'group', groupId: val.slice(6) }
+    const member: ProxyGroupMemberDraft = val.startsWith('slot:')
+      ? { kind: 'source-slot', slotKey: val.slice(5) }
+      : val === 'DIRECT' || val === 'REJECT'
+        ? { kind: 'builtin', value: val }
+        : { kind: 'group', groupId: val.slice(6) }
     onChange({ ...form, members: [...form.members, member] })
   }
 
   function removeMember(index: number) {
     const removed = form.members[index]
-    const removedName = removed && memberLabel(removed, groups)
+    const removedName = removed && memberLabel(removed, groups, sourceSlots)
     onChange({
       ...form,
       members: form.members.filter((_, idx) => idx !== index),
@@ -105,10 +114,11 @@ export function MemberEditor({
         <div className="template-member-tags-container">
           {form.members.map((member, index) => (
             <MemberTag
-              key={`${member.kind}-${member.kind === 'group' ? member.groupId : member.kind === 'builtin' || member.kind === 'raw' ? member.value : 'all'}-${index}`}
+              key={`${member.kind}-${member.kind === 'group' ? member.groupId : member.kind === 'source-slot' ? member.slotKey : member.value}-${index}`}
               member={member}
               index={index}
               groups={groups}
+              sourceSlots={sourceSlots}
               onDelete={() => removeMember(index)}
             />
           ))}
