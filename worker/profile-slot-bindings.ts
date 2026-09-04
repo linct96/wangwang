@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { nodes, profileSlotBindings, profileSlotNodes, profileSlotSources, sources } from './db'
 import { db } from './tasks'
 import type { TemplateSourceSlot } from './templates/source-slots'
@@ -92,7 +92,11 @@ export async function readProfileSlotBindings(env: Env, profileId: string): Prom
   const [bindings, sourceRows, nodeRows] = await Promise.all([
     db(env).select().from(profileSlotBindings).where(eq(profileSlotBindings.profileId, profileId)),
     db(env).select().from(profileSlotSources).where(eq(profileSlotSources.profileId, profileId)),
-    db(env).select().from(profileSlotNodes).where(eq(profileSlotNodes.profileId, profileId)),
+    db(env)
+      .select()
+      .from(profileSlotNodes)
+      .where(eq(profileSlotNodes.profileId, profileId))
+      .orderBy(asc(profileSlotNodes.slotKey), asc(profileSlotNodes.position)),
   ])
   const sourceIds = new Map<string, string[]>()
   const nodeIds = new Map<string, string[]>()
@@ -148,12 +152,10 @@ export async function replaceProfileSlotBindings(env: Env, profileId: string, bi
               sourceId,
             ),
           )
-        : binding.nodeIds.map((nodeId) =>
-            env.DB.prepare('INSERT INTO profile_slot_nodes (profile_id, slot_key, node_id) VALUES (?, ?, ?)').bind(
-              profileId,
-              binding.slotKey,
-              nodeId,
-            ),
+        : binding.nodeIds.map((nodeId, position) =>
+            env.DB.prepare(
+              'INSERT INTO profile_slot_nodes (profile_id, slot_key, node_id, position) VALUES (?, ?, ?, ?)',
+            ).bind(profileId, binding.slotKey, nodeId, position),
           ),
     ),
   ])

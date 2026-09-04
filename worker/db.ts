@@ -220,6 +220,7 @@ export const profileSlotNodes = sqliteTable(
     profileId: text('profile_id').notNull(),
     slotKey: text('slot_key').notNull(),
     nodeId: text('node_id').notNull(),
+    position: integer('position').notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.slotKey, table.nodeId] }),
@@ -228,6 +229,7 @@ export const profileSlotNodes = sqliteTable(
       foreignColumns: [profileSlotBindings.profileId, profileSlotBindings.slotKey],
     }).onDelete('cascade'),
     index('profile_slot_nodes_node_idx').on(table.nodeId, table.profileId),
+    index('profile_slot_nodes_slot_position_idx').on(table.profileId, table.slotKey, table.position),
   ],
 )
 
