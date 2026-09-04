@@ -206,12 +206,26 @@ export function ProfilesPage() {
                         <div className="profile-info-item">
                           <span className="profile-info-label">节点来源</span>
                           <div className="profile-tags-wrap">
-                            {[...new Set(profile.sourceBindings.flatMap(({ sourceIds }) => sourceIds))].map(
-                              (sourceId) => (
-                                <span key={sourceId} className="profile-pill">
-                                  {sourceMap.get(sourceId) || '未知源'}
-                                </span>
+                            {[
+                              ...new Set(
+                                profile.slotBindings.flatMap((binding) =>
+                                  binding.mode === 'source' ? binding.sourceIds : [],
+                                ),
                               ),
+                            ].map((sourceId) => (
+                              <span key={sourceId} className="profile-pill">
+                                {sourceMap.get(sourceId) || '未知源'}
+                              </span>
+                            ))}
+                            {profile.slotBindings.some((binding) => binding.mode === 'node') && (
+                              <span className="profile-pill">
+                                指定{' '}
+                                {profile.slotBindings.reduce(
+                                  (count, binding) => count + (binding.mode === 'node' ? binding.nodeIds.length : 0),
+                                  0,
+                                )}{' '}
+                                个节点
+                              </span>
                             )}
                           </div>
                         </div>

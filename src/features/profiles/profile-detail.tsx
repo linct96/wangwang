@@ -205,19 +205,26 @@ export function ProfileDetailPage() {
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">节点源槽位</span>
+                  <span className="meta-label">动态节点槽</span>
                   <div className="flex flex-col gap-2">
-                    {profile.sourceBindings.map((binding) => (
+                    {profile.slotBindings.map((binding) => (
                       <div key={binding.slotKey} className="flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-muted-foreground">
                           {templateMap.get(profile.templateId)?.sourceSlots.find(({ key }) => key === binding.slotKey)
                             ?.name || binding.slotKey}
                         </span>
-                        {binding.sourceIds.map((sourceId) => (
-                          <span key={sourceId} className="profile-pill">
-                            {sourceMap.get(sourceId) || sourceId}
+                        {binding.mode === 'source' ? (
+                          binding.sourceIds.map((sourceId) => (
+                            <span key={sourceId} className="profile-pill">
+                              {sourceMap.get(sourceId) || sourceId}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="profile-pill">
+                            指定 {binding.nodeIds.length} 个节点
+                            {binding.missingNodeIds.length ? ` · ${binding.missingNodeIds.length} 个失效` : ''}
                           </span>
-                        ))}
+                        )}
                       </div>
                     ))}
                   </div>

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import type { PhysicalProxyConfig, ProxyConfig } from '../db'
-import { nodes, physicalNodes, profileSourceBindings, sources } from '../db'
+import { nodes, physicalNodes, sources } from '../db'
 import { body, fail, ok } from '../http'
 import {
   editableProxyYaml,
@@ -15,9 +15,11 @@ import {
   splitProxyConfig,
 } from '../proxy/index'
 import {
+  affectedProfileIdsForNodes,
   cleanupOrphanPhysicalNodes,
   db,
   enqueueAffectedProfiles,
+  enqueueProfileIds,
   enqueueProfilesForNode,
   enqueueProfilesForNodes,
 } from '../tasks'
@@ -310,6 +312,23 @@ nodesRouter.post('/preferred', async (c) => {
   })
 })
 
+nodesRouter.get('/options', async (c) => {
+  const items = await db(c.env)
+    .select({
+      id: nodes.id,
+      name: sql<string>`coalesce(${nodes.alias}, ${nodes.originalName})`,
+      sourceId: sources.id,
+      sourceName: sources.name,
+      enabled: nodes.enabled,
+      sourceEnabled: sources.enabled,
+    })
+    .from(nodes)
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .orderBy(asc(sources.name), asc(nodes.position))
+    .limit(2000)
+  return ok(c, items)
+})
+
 nodesRouter.get('/', async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1)
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 50))
@@ -405,10 +424,11 @@ nodesRouter.delete('/batch', async (c) => {
     .where(and(inArray(nodes.id, input.ids), eq(nodes.sourceId, MANUAL_SOURCE_ID)))
   const ids = manual.map(({ id }) => id)
   if (ids.length) {
+    const affectedProfileIds = await affectedProfileIdsForNodes(c.env, ids)
     await db(c.env).delete(nodes).where(inArray(nodes.id, ids))
     await updateManualNodeCount(c.env, Date.now())
     await cleanupOrphanPhysicalNodes(c.env)
-    await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
+    await enqueueProfileIds(c.env, affectedProfileIds)
   }
   return ok(c, { deleted: ids.length, skipped: input.ids.length - ids.length })
 })
@@ -497,13 +517,10 @@ nodesRouter.delete('/:id', async (c) => {
   const current = await db(c.env).select({ sourceId: nodes.sourceId }).from(nodes).where(eq(nodes.id, id)).get()
   if (!current) return fail(c, 404, 'NODE_NOT_FOUND', '节点不存在')
   if (current.sourceId !== MANUAL_SOURCE_ID) return fail(c, 409, 'NODE_MANAGED_BY_SOURCE', '订阅管理的节点不能删除')
-  const [{ value }] = await db(c.env)
-    .select({ value: count() })
-    .from(profileSourceBindings)
-    .where(eq(profileSourceBindings.sourceId, MANUAL_SOURCE_ID))
+  const affectedProfileIds = await affectedProfileIdsForNodes(c.env, [id])
   await db(c.env).delete(nodes).where(eq(nodes.id, id))
   await updateManualNodeCount(c.env, Date.now())
   await cleanupOrphanPhysicalNodes(c.env)
-  await enqueueAffectedProfiles(c.env, MANUAL_SOURCE_ID)
-  return ok(c, { id, affectedProfileCount: Number(value) })
+  await enqueueProfileIds(c.env, affectedProfileIds)
+  return ok(c, { id, affectedProfileCount: affectedProfileIds.length })
 })

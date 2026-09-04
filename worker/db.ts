@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm'
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const adminAccount = sqliteTable(
   'admin_account',
@@ -174,12 +174,31 @@ export const profiles = sqliteTable(
   (table) => [index('profiles_template_id_idx').on(table.templateId)],
 )
 
-export const profileSourceBindings = sqliteTable(
-  'profile_source_bindings',
+export const profileSlotBindings = sqliteTable(
+  'profile_slot_bindings',
   {
     profileId: text('profile_id')
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
+    slotKey: text('slot_key').notNull(),
+    mode: text('mode', { enum: ['source', 'node'] }).notNull(),
+    includeRegex: text('include_regex'),
+    excludeRegex: text('exclude_regex'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.slotKey] }),
+    check('profile_slot_bindings_mode_check', sql`${table.mode} IN ('source', 'node')`),
+    check(
+      'profile_slot_bindings_node_regex_check',
+      sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
+    ),
+  ],
+)
+
+export const profileSlotSources = sqliteTable(
+  'profile_slot_sources',
+  {
+    profileId: text('profile_id').notNull(),
     slotKey: text('slot_key').notNull(),
     sourceId: text('source_id')
       .notNull()
@@ -187,7 +206,28 @@ export const profileSourceBindings = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.slotKey, table.sourceId] }),
-    index('profile_source_bindings_source_idx').on(table.sourceId, table.profileId),
+    foreignKey({
+      columns: [table.profileId, table.slotKey],
+      foreignColumns: [profileSlotBindings.profileId, profileSlotBindings.slotKey],
+    }).onDelete('cascade'),
+    index('profile_slot_sources_source_idx').on(table.sourceId, table.profileId),
+  ],
+)
+
+export const profileSlotNodes = sqliteTable(
+  'profile_slot_nodes',
+  {
+    profileId: text('profile_id').notNull(),
+    slotKey: text('slot_key').notNull(),
+    nodeId: text('node_id').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.slotKey, table.nodeId] }),
+    foreignKey({
+      columns: [table.profileId, table.slotKey],
+      foreignColumns: [profileSlotBindings.profileId, profileSlotBindings.slotKey],
+    }).onDelete('cascade'),
+    index('profile_slot_nodes_node_idx').on(table.nodeId, table.profileId),
   ],
 )
 
@@ -233,7 +273,7 @@ export const jobs = sqliteTable(
 export const sourcesRelations = relations(sources, ({ many }) => ({
   nodes: many(nodes),
   tags: many(sourceTags),
-  profiles: many(profileSourceBindings),
+  profiles: many(profileSlotSources),
 }))
 export const physicalNodesRelations = relations(physicalNodes, ({ many }) => ({ nodes: many(nodes) }))
 export const nodesRelations = relations(nodes, ({ one, many }) => ({
@@ -247,7 +287,7 @@ export const tagsRelations = relations(tags, ({ many }) => ({
   profiles: many(profileTagFilters),
 }))
 export const profilesRelations = relations(profiles, ({ many }) => ({
-  sources: many(profileSourceBindings),
+  slotBindings: many(profileSlotBindings),
   tagFilters: many(profileTagFilters),
 }))
 

@@ -5,13 +5,20 @@ import { RefreshCw } from 'lucide-react'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { Profile, ProfileSourceBinding, Source, TagOption, TemplateId, TemplateSummary } from '@/api/types'
+import type {
+  NodeOption,
+  Profile,
+  ProfileSlotBinding,
+  Source,
+  TagOption,
+  TemplateId,
+  TemplateSummary,
+} from '@/api/types'
 import { AppDialog } from '@/components/app-primitives'
 import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,8 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
+import { SlotBindingEditor } from './slot-binding-editor'
 import '@/styles/profile-dialog.css'
+
+function validRegex(value: string | null) {
+  try {
+    if (value) new RegExp(value)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export function ProfileDialog({
   sources,
@@ -42,11 +58,12 @@ export function ProfileDialog({
   const [error, setError] = useState('')
   const { data: templates = [], error: templateError } = useApi<TemplateSummary[]>('/templates')
   const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
+  const { data: nodes = [], error: nodesError } = useApi<NodeOption[]>('/nodes/options')
   const form = useForm({
     defaultValues: {
       name: profile?.name || '',
       tags: profile?.tags || ([] as string[]),
-      sourceBindings: profile?.sourceBindings || ([] as ProfileSourceBinding[]),
+      slotBindings: profile?.slotBindings || ([] as ProfileSlotBinding[]),
       templateId: profile?.templateId || initialTemplateId || ('builtin:minimal' as TemplateId),
     },
     validators: {
@@ -55,9 +72,25 @@ export function ProfileDialog({
         tags: z
           .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
           .max(20, '标签不能超过 20 个'),
-        sourceBindings: z
-          .array(z.object({ slotKey: z.string(), sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源') }))
-          .min(1, '模板必须包含节点源槽位'),
+        slotBindings: z
+          .array(
+            z.discriminatedUnion('mode', [
+              z.object({
+                slotKey: z.string(),
+                mode: z.literal('source'),
+                sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
+                includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
+                excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
+              }),
+              z.object({
+                slotKey: z.string(),
+                mode: z.literal('node'),
+                nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
+                missingNodeIds: z.array(z.string()),
+              }),
+            ]),
+          )
+          .min(1, '模板必须包含动态节点槽'),
         templateId: z.custom<TemplateId>((val) => typeof val === 'string' && val.length > 0, '请选择订阅模板'),
       }),
     },
@@ -70,7 +103,11 @@ export function ProfileDialog({
             method: profile ? 'PATCH' : 'POST',
             body: JSON.stringify({
               name: value.name,
-              sourceBindings: value.sourceBindings,
+              slotBindings: value.slotBindings.map((binding) =>
+                binding.mode === 'source'
+                  ? binding
+                  : { slotKey: binding.slotKey, mode: binding.mode, nodeIds: binding.nodeIds },
+              ),
               tags: value.tags,
               templateId: value.templateId,
               enabled: profile?.enabled ?? true,
@@ -87,22 +124,37 @@ export function ProfileDialog({
   const custom = templates.filter((template) => template.kind === 'custom')
 
   useEffect(() => {
-    if (form.state.values.sourceBindings.length) return
+    if (form.state.values.slotBindings.length) return
     const template = templates.find(({ id }) => id === form.state.values.templateId)
     if (template)
       form.setFieldValue(
-        'sourceBindings',
-        template.sourceSlots.map(({ key }) => ({ slotKey: key, sourceIds: [] })),
+        'slotBindings',
+        template.sourceSlots.map(({ key }) => ({
+          slotKey: key,
+          mode: 'source' as const,
+          sourceIds: [],
+          includeRegex: null,
+          excludeRegex: null,
+        })),
       )
   }, [form, templates])
 
   function selectTemplate(templateId: TemplateId) {
-    const previous = new Map(form.state.values.sourceBindings.map((binding) => [binding.slotKey, binding.sourceIds]))
+    const previous = new Map(form.state.values.slotBindings.map((binding) => [binding.slotKey, binding]))
     const template = templates.find(({ id }) => id === templateId)
     form.setFieldValue('templateId', templateId)
     form.setFieldValue(
-      'sourceBindings',
-      template?.sourceSlots.map(({ key }) => ({ slotKey: key, sourceIds: previous.get(key) || [] })) || [],
+      'slotBindings',
+      template?.sourceSlots.map(
+        ({ key }) =>
+          previous.get(key) || {
+            slotKey: key,
+            mode: 'source' as const,
+            sourceIds: [],
+            includeRegex: null,
+            excludeRegex: null,
+          },
+      ) || [],
     )
   }
 
@@ -169,71 +221,31 @@ export function ProfileDialog({
             )}
           </form.Field>
 
-          <form.Field name="sourceBindings">
+          <form.Field name="slotBindings">
             {(field) => {
               const currentTemplate = templates.find(({ id }) => id === form.state.values.templateId)
-              const enabledSources = sources.filter(({ enabled }) => enabled)
               return (
                 <Field data-invalid={!field.state.meta.isValid} className="gap-3">
                   <div className="flex items-center justify-between">
-                    <FieldLabel>节点源槽位</FieldLabel>
+                    <FieldLabel>动态节点槽</FieldLabel>
                     <Badge variant="secondary">{currentTemplate?.sourceSlots.length || 0} 个槽位</Badge>
                   </div>
                   {currentTemplate?.sourceSlots.map((slot) => {
                     const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
-                    const selected = binding?.sourceIds || []
-                    const setSelected = (sourceIds: string[]) =>
-                      field.handleChange(
-                        field.state.value.map((item) => (item.slotKey === slot.key ? { ...item, sourceIds } : item)),
-                      )
-                    return (
-                      <Field key={slot.key} data-invalid={!selected.length} className="gap-2 rounded-lg border p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <FieldLabel>{slot.name}</FieldLabel>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => setSelected(enabledSources.map(({ id }) => id))}
-                          >
-                            全选
-                          </Button>
-                        </div>
-                        <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
-                          {enabledSources.map((source) => {
-                            const checked = selected.includes(source.id)
-                            return (
-                              <label
-                                key={source.id}
-                                htmlFor={`source-${slot.key}-${source.id}`}
-                                className={cn(
-                                  'flex cursor-pointer items-center justify-between gap-2 rounded-lg border p-2 text-sm',
-                                  checked && 'border-primary/40 bg-primary/5',
-                                )}
-                              >
-                                <span className="flex min-w-0 items-center gap-2">
-                                  <Checkbox
-                                    id={`source-${slot.key}-${source.id}`}
-                                    checked={checked}
-                                    onCheckedChange={() =>
-                                      setSelected(
-                                        checked ? selected.filter((id) => id !== source.id) : [...selected, source.id],
-                                      )
-                                    }
-                                    aria-invalid={!selected.length}
-                                  />
-                                  <span className="truncate">{source.name}</span>
-                                </span>
-                                <Badge variant="outline">{source.nodeCount}</Badge>
-                              </label>
-                            )
-                          })}
-                        </div>
-                        {!enabledSources.length && <p className="text-sm text-muted-foreground">暂无可用节点源</p>}
-                        {!selected.length && <FieldError>请至少选择一个节点源</FieldError>}
-                      </Field>
-                    )
+                    return binding ? (
+                      <SlotBindingEditor
+                        key={slot.key}
+                        slot={slot}
+                        value={binding}
+                        sources={sources}
+                        nodes={nodes}
+                        onChange={(next) =>
+                          field.handleChange(field.state.value.map((item) => (item.slotKey === slot.key ? next : item)))
+                        }
+                      />
+                    ) : null
                   })}
+                  {nodesError && <FieldError>节点列表加载失败：{nodesError}</FieldError>}
                   {!field.state.meta.isValid && <FieldError errors={field.state.meta.errors} />}
                 </Field>
               )
@@ -274,9 +286,9 @@ export function ProfileDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <form.Subscribe selector={(state) => [state.isSubmitting]}>
-            {([isSubmitting]) => (
-              <Button disabled={Boolean(isSubmitting) || Boolean(templateError)}>
+          <form.Subscribe selector={(state) => [state.isSubmitting, state.canSubmit]}>
+            {([isSubmitting, canSubmit]) => (
+              <Button disabled={Boolean(isSubmitting) || !canSubmit || Boolean(templateError) || Boolean(nodesError)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
                 {profile ? '保存并生成' : '创建并生成'}
               </Button>

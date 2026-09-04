@@ -1,13 +1,16 @@
 import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { jobs, nodes, physicalNodes, profiles, profileSourceBindings, sources } from './db'
+import { jobs, nodes, physicalNodes, profiles, profileSlotNodes, profileSlotSources, sources } from './db'
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews } from './tag-model'
+import { readProfileSlotBindings, type ProfileSlotBinding } from './profile-slot-bindings'
 import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
+import { parseTemplateSourceSlots } from './templates/source-slots'
+import { parseTemplateYaml } from './templates/validator'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
 
@@ -262,26 +265,64 @@ async function replaceSourceNodes(
   await cleanupOrphanPhysicalNodes(env)
 }
 
+async function sourceModeProfileIds(env: Env, sourceIds: string[]) {
+  if (!sourceIds.length) return []
+  const rows = await db(env)
+    .select({ id: profileSlotSources.profileId })
+    .from(profileSlotSources)
+    .where(inArray(profileSlotSources.sourceId, sourceIds))
+  return rows.map(({ id }) => id)
+}
+
+export async function affectedProfileIdsForSource(env: Env, sourceId: string) {
+  const [sourceBound, directBound] = await Promise.all([
+    sourceModeProfileIds(env, [sourceId]),
+    db(env)
+      .select({ id: profileSlotNodes.profileId })
+      .from(profileSlotNodes)
+      .innerJoin(nodes, eq(nodes.id, profileSlotNodes.nodeId))
+      .where(eq(nodes.sourceId, sourceId)),
+  ])
+  return [...new Set([...sourceBound, ...directBound.map(({ id }) => id)])]
+}
+
+export async function enqueueProfileIds(env: Env, profileIds: Iterable<string>) {
+  for (const id of new Set(profileIds)) await createJob(env, 'compile_profile', id)
+}
+
 export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
-  const affected = await db(env)
-    .select({ id: profileSourceBindings.profileId })
-    .from(profileSourceBindings)
-    .where(eq(profileSourceBindings.sourceId, sourceId))
-  for (const id of new Set(affected.map(({ id }) => id))) await createJob(env, 'compile_profile', id)
+  await enqueueProfileIds(env, await affectedProfileIdsForSource(env, sourceId))
+}
+
+export async function affectedProfileIdsForNodes(env: Env, nodeIds: string[]) {
+  if (!nodeIds.length) return []
+  const [directBound, sourceIds] = await Promise.all([
+    db(env)
+      .select({ id: profileSlotNodes.profileId })
+      .from(profileSlotNodes)
+      .where(sql`${profileSlotNodes.nodeId} IN (SELECT value FROM json_each(${JSON.stringify(nodeIds)}))`),
+    db(env)
+      .selectDistinct({ sourceId: nodes.sourceId })
+      .from(nodes)
+      .where(sql`${nodes.id} IN (SELECT value FROM json_each(${JSON.stringify(nodeIds)}))`),
+  ])
+  return [
+    ...new Set([
+      ...directBound.map(({ id }) => id),
+      ...(await sourceModeProfileIds(
+        env,
+        sourceIds.map(({ sourceId }) => sourceId),
+      )),
+    ]),
+  ]
 }
 
 export async function enqueueProfilesForNode(env: Env, nodeId: string) {
-  const node = await db(env).select({ sourceId: nodes.sourceId }).from(nodes).where(eq(nodes.id, nodeId)).get()
-  if (node) await enqueueAffectedProfiles(env, node.sourceId)
+  await enqueueProfileIds(env, await affectedProfileIdsForNodes(env, [nodeId]))
 }
 
 export async function enqueueProfilesForNodes(env: Env, nodeIds: string[]) {
-  if (!nodeIds.length) return
-  const affected = await db(env)
-    .selectDistinct({ sourceId: nodes.sourceId })
-    .from(nodes)
-    .where(inArray(nodes.id, nodeIds))
-  for (const { sourceId } of affected) await enqueueAffectedProfiles(env, sourceId)
+  await enqueueProfileIds(env, await affectedProfileIdsForNodes(env, nodeIds))
 }
 
 export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
@@ -339,48 +380,115 @@ export async function refreshSource(env: Env, sourceId: string) {
   }
 
   const parsed = await parseProxyText(response.text, source.nodeNameFilter)
+  const affectedProfileIds = await affectedProfileIdsForSource(env, sourceId)
   await replaceSourceNodes(env, sourceId, parsed, response)
-  await enqueueAffectedProfiles(env, sourceId)
+  await enqueueProfileIds(env, affectedProfileIds)
 }
 
-export async function selectProfileNodes(env: Env, profile: typeof profiles.$inferSelect): Promise<SelectedSlotNode[]> {
+export async function selectSourceSlotNodes(
+  env: Env,
+  profileId: string,
+  bindings: Extract<ProfileSlotBinding, { mode: 'source' }>[],
+): Promise<SelectedSlotNode[]> {
+  if (!bindings.length) return []
+  const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding]))
   const selected = await db(env)
     .select({
-      slotKey: profileSourceBindings.slotKey,
+      slotKey: profileSlotSources.slotKey,
       id: nodes.id,
       config: physicalNodes.config,
       alias: nodes.alias,
       originalName: nodes.originalName,
     })
+    .from(profileSlotSources)
+    .innerJoin(nodes, eq(nodes.sourceId, profileSlotSources.sourceId))
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .where(and(eq(profileSlotSources.profileId, profileId), eq(nodes.enabled, true), eq(sources.enabled, true)))
+    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+  return selected.flatMap((node) => {
+    const binding = bySlot.get(node.slotKey)
+    const name = node.alias || node.originalName
+    if (!binding) return []
+    if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
+    if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+    return [{ slotKey: node.slotKey, nodeId: node.id, config: node.config, name }]
+  })
+}
+
+export async function selectDirectSlotNodes(
+  env: Env,
+  bindings: Extract<ProfileSlotBinding, { mode: 'node' }>[],
+  slotNames: Map<string, string>,
+): Promise<SelectedSlotNode[]> {
+  const nodeIds = [...new Set(bindings.flatMap((binding) => binding.nodeIds))]
+  if (!nodeIds.length) return []
+  const rows = await db(env)
+    .select({
+      id: nodes.id,
+      config: physicalNodes.config,
+      alias: nodes.alias,
+      originalName: nodes.originalName,
+      nodeEnabled: nodes.enabled,
+      sourceEnabled: sources.enabled,
+    })
     .from(nodes)
     .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
-    .innerJoin(
-      profileSourceBindings,
-      and(eq(profileSourceBindings.sourceId, nodes.sourceId), eq(profileSourceBindings.profileId, profile.id)),
-    )
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
-    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(nodes.position), asc(nodes.createdAt))
-
-  const filterTagIds = await profileFilterTagIds(env, profile.id)
-  const nodeIds = [...new Set(selected.map(({ id }) => id))]
-  const views = await nodeTagViews(env, nodeIds)
+    .where(sql`${nodes.id} IN (SELECT value FROM json_each(${JSON.stringify(nodeIds)}))`)
+  const byId = new Map(rows.map((node) => [node.id, node]))
   const result: SelectedSlotNode[] = []
-  const seen = new Set<string>()
-  for (const node of selected) {
-    const view = views.get(node.id) || { direct: [], inherited: [] }
-    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map(({ id }) => id)
-    const key = `${node.slotKey}:${node.id}`
-    if (!matchesAnyTag(effectiveTagIds, filterTagIds) || seen.has(key)) continue
-    seen.add(key)
-    result.push({
-      slotKey: node.slotKey,
-      nodeId: node.id,
-      config: node.config,
-      name: node.alias || node.originalName,
+  for (const binding of bindings) {
+    const unavailable = binding.nodeIds.filter((id) => {
+      const node = byId.get(id)
+      return !node || !node.nodeEnabled || !node.sourceEnabled
     })
+    if (unavailable.length)
+      throw new Error(
+        `槽位“${slotNames.get(binding.slotKey) || binding.slotKey}”包含 ${unavailable.length} 个不可用的指定节点，请重新选择`,
+      )
+    for (const id of binding.nodeIds) {
+      const node = byId.get(id)!
+      result.push({
+        slotKey: binding.slotKey,
+        nodeId: id,
+        config: node.config,
+        name: node.alias || node.originalName,
+      })
+    }
   }
   return result
+}
+
+export async function selectProfileNodes(
+  env: Env,
+  profile: typeof profiles.$inferSelect,
+  slotNames = new Map<string, string>(),
+): Promise<SelectedSlotNode[]> {
+  const bindings = await readProfileSlotBindings(env, profile.id)
+  const selected = [
+    ...(await selectSourceSlotNodes(
+      env,
+      profile.id,
+      bindings.filter((binding) => binding.mode === 'source'),
+    )),
+    ...(await selectDirectSlotNodes(
+      env,
+      bindings.filter((binding) => binding.mode === 'node'),
+      slotNames,
+    )),
+  ]
+  const filterTagIds = await profileFilterTagIds(env, profile.id)
+  const views = await nodeTagViews(env, [...new Set(selected.map(({ nodeId }) => nodeId))])
+  const seen = new Set<string>()
+  return selected.filter((node) => {
+    const view = views.get(node.nodeId) || { direct: [], inherited: [] }
+    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map(({ id }) => id)
+    const key = `${node.slotKey}:${node.nodeId}`
+    if (!matchesAnyTag(effectiveTagIds, filterTagIds) || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 export async function compileProfile(env: Env, profileId: string) {
@@ -390,7 +498,10 @@ export async function compileProfile(env: Env, profileId: string) {
   const template = await resolveTemplate(env, profile.templateId)
   if (!template) throw new Error('订阅模板不存在')
 
-  const yaml = renderMihomoConfig({ nodes: await selectProfileNodes(env, profile), template })
+  const slotNames = new Map(
+    parseTemplateSourceSlots(parseTemplateYaml(template.yaml)).map(({ key, name }) => [key, name]),
+  )
+  const yaml = renderMihomoConfig({ nodes: await selectProfileNodes(env, profile, slotNames), template })
   const revision = profile.revision + 1
   const now = new Date()
   await database

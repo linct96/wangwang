@@ -10,10 +10,10 @@ import { resolveTemplate } from '../templates/resolver'
 import { parseTemplateSourceSlots } from '../templates/source-slots'
 import { parseTemplateYaml } from '../templates/validator'
 import {
-  readProfileSourceBindings,
-  replaceProfileSourceBindings,
-  validateProfileSourceBindings,
-} from '../profile-source-bindings'
+  readProfileSlotBindings,
+  replaceProfileSlotBindings,
+  validateProfileSlotBindings,
+} from '../profile-slot-bindings'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
@@ -22,8 +22,31 @@ const templateIdSchema = z
   .refine((value) => /^(builtin:(minimal|standard|full)|[A-Za-z0-9_-]{12})$/.test(value), {
     message: '订阅模板 ID 无效',
   })
-const sourceBindingsSchema = z
-  .array(z.object({ slotKey: z.string().min(1), sourceIds: z.array(z.string().min(1)).min(1).max(20) }))
+const regexSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() || null : value),
+  z.string().max(200).nullable(),
+)
+const slotBindingsSchema = z
+  .array(
+    z.discriminatedUnion('mode', [
+      z
+        .object({
+          slotKey: z.string().min(1),
+          mode: z.literal('source'),
+          sourceIds: z.array(z.string().min(1)).min(1).max(20),
+          includeRegex: regexSchema,
+          excludeRegex: regexSchema,
+        })
+        .strict(),
+      z
+        .object({
+          slotKey: z.string().min(1),
+          mode: z.literal('node'),
+          nodeIds: z.array(z.string().min(1)).min(1).max(1000),
+        })
+        .strict(),
+    ]),
+  )
   .min(1)
   .max(20)
 
@@ -31,7 +54,7 @@ export const profileSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
-    sourceBindings: sourceBindingsSchema,
+    slotBindings: slotBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
   })
@@ -52,16 +75,19 @@ export async function profileView(
 ) {
   const slots = (await templateSlots(env, profile.templateId)) || []
   const [bindings, tags] = await Promise.all([
-    readProfileSourceBindings(env, profile.id),
+    readProfileSlotBindings(env, profile.id),
     profileTagViews(env, profile.id),
   ])
-  const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding.sourceIds]))
+  const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding]))
   const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
     tags: tags.map(({ name }) => name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
-    sourceBindings: slots.map(({ key }) => ({ slotKey: key, sourceIds: bySlot.get(key) || [] })),
+    slotBindings: slots.flatMap(({ key }) => {
+      const binding = bySlot.get(key)
+      return binding ? [binding] : []
+    }),
     subscriptionUrl: `${origin}/s/${token}/config.yaml`,
   }
 }
@@ -83,9 +109,9 @@ profilesRouter.post('/', async (c) => {
 
   let bindings
   try {
-    bindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings)
+    bindings = await validateProfileSlotBindings(c.env, slots, input.slotBindings)
   } catch (error) {
-    return fail(c, 400, 'PROFILE_SOURCE_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
+    return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
   }
 
   const now = new Date()
@@ -99,7 +125,7 @@ profilesRouter.post('/', async (c) => {
   }
   await database.insert(profiles).values(profile)
   await Promise.all([
-    replaceProfileSourceBindings(c.env, profile.id, bindings),
+    replaceProfileSlotBindings(c.env, profile.id, bindings),
     replaceProfileTagFilters(c.env, profile.id, normalizeTagInputs(input.tags, 20)),
   ])
   const job = await createJob(c.env, 'compile_profile', profile.id)
@@ -126,17 +152,17 @@ profilesRouter.patch('/:id', async (c) => {
   const database = db(c.env)
   const current = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
-  if (input.templateId && input.templateId !== current.templateId && !input.sourceBindings)
-    return fail(c, 400, 'PROFILE_SOURCE_BINDINGS_INVALID', '切换模板时必须重新绑定节点源槽位')
+  if (input.templateId && input.templateId !== current.templateId && !input.slotBindings)
+    return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', '切换模板时必须重新绑定动态节点槽')
 
   let bindings
-  if (input.sourceBindings) {
+  if (input.slotBindings) {
     const slots = await templateSlots(c.env, input.templateId || current.templateId)
     if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
     try {
-      bindings = await validateProfileSourceBindings(c.env, slots, input.sourceBindings)
+      bindings = await validateProfileSlotBindings(c.env, slots, input.slotBindings)
     } catch (error) {
-      return fail(c, 400, 'PROFILE_SOURCE_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
+      return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
     }
   }
 
@@ -150,7 +176,7 @@ profilesRouter.patch('/:id', async (c) => {
     })
     .where(eq(profiles.id, id))
   await Promise.all([
-    bindings ? replaceProfileSourceBindings(c.env, id, bindings) : Promise.resolve(),
+    bindings ? replaceProfileSlotBindings(c.env, id, bindings) : Promise.resolve(),
     input.tags === undefined
       ? Promise.resolve()
       : replaceProfileTagFilters(c.env, id, normalizeTagInputs(input.tags, 20)),
