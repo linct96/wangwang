@@ -24,6 +24,7 @@ function validateGroups(value: unknown, rendered: boolean, slotKeys = new Set<st
     if (typeof group.type !== 'string' || !group.type.trim()) throw new Error(`代理组“${group.name}”缺少 type`)
     if (names.has(group.name)) throw new Error(`代理组名称重复：${group.name}`)
     names.add(group.name)
+    if (group['include-all-proxies'] === true) slotKeys.forEach((key) => usedSlots.add(key))
     for (const [key, item] of Object.entries(group)) if (key !== 'proxies') assertNoPlaceholder(item)
     if (group.proxies === undefined) continue
     if (!Array.isArray(group.proxies) || group.proxies.some((item) => typeof item !== 'string'))

@@ -61,17 +61,18 @@ dns:
 proxy-groups:
   - name: 🚀 节点选择
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - ⚡ 自动选择
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_mini01__
   - name: ⚡ 自动选择
     type: url-test
+    include-all-proxies: true
+    include-all-providers: true
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_mini01__
 rule-providers:
   private-domain:
     type: http
@@ -162,40 +163,43 @@ dns:
 proxy-groups:
   - name: 🚀 节点选择
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_std001__
   - name: ⚡ 自动选择
     type: url-test
+    include-all-proxies: true
+    include-all-providers: true
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_std001__
   - name: ♻️ 故障转移
     type: fallback
+    include-all-proxies: true
+    include-all-providers: true
     url: https://www.gstatic.com/generate_204
     interval: 300
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_std001__
   - name: 🤖 AI 服务
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_std001__
   - name: 🎬 流媒体
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_std001__
   - name: 🐟 漏网之鱼
     type: select
     proxies:
@@ -347,88 +351,97 @@ dns:
 proxy-groups:
   - name: 🚀 节点选择
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: ⚡ 自动选择
     type: url-test
+    include-all-proxies: true
+    include-all-providers: true
     url: https://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: ♻️ 故障转移
     type: fallback
+    include-all-proxies: true
+    include-all-providers: true
     url: https://www.gstatic.com/generate_204
     interval: 300
-    proxies:
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🤖 AI 服务
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🐱 GitHub
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🔍 Google
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: ✈️ Telegram
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: Ⓜ️ Microsoft
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🍎 Apple
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🎮 游戏平台
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🎬 流媒体
     type: select
+    include-all-proxies: true
+    include-all-providers: true
     proxies:
       - 🚀 节点选择
       - ⚡ 自动选择
       - ♻️ 故障转移
       - DIRECT
-      - __WANGWANG_SOURCE_SLOT_full01__
   - name: 🐟 漏网之鱼
     type: select
     proxies:

@@ -255,6 +255,9 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       })
   })
 
+  if (draft.groups.some((group) => group.kind === 'structured' && group.includeAllProxies))
+    draft.sourceSlots.forEach(({ key }) => usedSlots.add(key))
+
   for (const group of draft.groups) {
     if (group.kind !== 'structured') continue
     for (const member of group.members) {
