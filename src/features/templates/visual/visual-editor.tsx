@@ -65,7 +65,6 @@ export function VisualTemplateEditor({
         group.members.some((member) => member.kind === 'source-slot' && member.slotKey === slot.key),
     )
     if (used) return void toast.error('该槽位正在被代理组引用，请先移除引用')
-    if (draft.sourceSlots.length === 1) return void toast.error('模板至少需要一个节点源槽位')
     update({ ...draft, sourceSlots: draft.sourceSlots.filter((item) => item.key !== slot.key) })
   }
 

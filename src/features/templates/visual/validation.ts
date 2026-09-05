@@ -137,8 +137,8 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     issueKeys.add(key)
     issues.push(issue)
   }
-  if (!draft.sourceSlots.length || draft.sourceSlots.length > 20)
-    add({ level: 'error', code: 'SLOT_COUNT', message: '模板必须包含 1 到 20 个节点源槽位' })
+  if (draft.sourceSlots.length > 20)
+    add({ level: 'error', code: 'SLOT_COUNT', message: '模板最多包含 20 个节点源槽位' })
   const slotKeys = new Set<string>()
   const slotNames = new Set<string>()
   for (const slot of draft.sourceSlots) {
