@@ -1,6 +1,8 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm'
-import { nodes, profileSlotBindings, profileSlotNodes, profileSlotSources, sources } from './db'
+import { nodes, profileSlotBindings, profileSlotNodes, profileSlotSources, profileSlotTags, sources, tags } from './db'
 import { db } from './tasks'
+import { normalizeTagInputs } from './tag-model'
+import { ensureTags } from './tag-store'
 import type { TemplateSourceSlot } from './templates/source-slots'
 
 export type ProfileSlotBindingInput =
@@ -12,17 +14,19 @@ export type ProfileSlotBindingInput =
       excludeRegex: string | null
     }
   | { slotKey: string; mode: 'node'; nodeIds: string[] }
+  | { slotKey: string; mode: 'tag'; tags: string[] }
 
 export type ProfileSlotBinding =
-  | Extract<ProfileSlotBindingInput, { mode: 'source' }>
+  | Extract<ProfileSlotBindingInput, { mode: 'source' | 'tag' }>
   | (Extract<ProfileSlotBindingInput, { mode: 'node' }> & { missingNodeIds: string[] })
 
 export type ProfileNodeBindingInput =
   | { mode: 'source'; sourceIds: string[]; includeRegex: string | null; excludeRegex: string | null }
   | { mode: 'node'; nodeIds: string[] }
+  | { mode: 'tag'; tags: string[] }
 
 export type ProfileNodeBinding =
-  | Extract<ProfileNodeBindingInput, { mode: 'source' }>
+  | Extract<ProfileNodeBindingInput, { mode: 'source' | 'tag' }>
   | (Extract<ProfileNodeBindingInput, { mode: 'node' }> & { missingNodeIds: string[] })
 
 function normalizeRegex(value: string | null, subject: string, label: string) {
@@ -78,10 +82,15 @@ export async function validateProfileNodeBinding(env: Env, binding: ProfileNodeB
     await validateReferences(env, sourceIds, [])
     return normalized
   }
-  const nodeIds = [...new Set(binding.nodeIds)]
-  if (!nodeIds.length) throw new Error('节点选择至少需要一个指定节点')
-  await validateReferences(env, [], nodeIds)
-  return { mode: 'node' as const, nodeIds }
+  if (binding.mode === 'node') {
+    const nodeIds = [...new Set(binding.nodeIds)]
+    if (!nodeIds.length) throw new Error('节点选择至少需要一个指定节点')
+    await validateReferences(env, [], nodeIds)
+    return { mode: 'node' as const, nodeIds }
+  }
+  const tagNames = normalizeTagInputs(binding.tags, 20)
+  if (!tagNames.length) throw new Error('节点选择至少需要一个节点标签')
+  return { mode: 'tag' as const, tags: tagNames }
 }
 
 export async function validateProfileSlotBindings(
@@ -108,9 +117,14 @@ export async function validateProfileSlotBindings(
         excludeRegex: normalizeRegex(binding.excludeRegex, `槽位“${name}”`, '排除'),
       }
     }
-    const nodeIds = [...new Set(binding.nodeIds)]
-    if (!nodeIds.length) throw new Error(`槽位“${name}”至少需要一个指定节点`)
-    return { slotKey: key, mode: 'node', nodeIds }
+    if (binding.mode === 'node') {
+      const nodeIds = [...new Set(binding.nodeIds)]
+      if (!nodeIds.length) throw new Error(`槽位“${name}”至少需要一个指定节点`)
+      return { slotKey: key, mode: 'node', nodeIds }
+    }
+    const tagNames = normalizeTagInputs(binding.tags, 20)
+    if (!tagNames.length) throw new Error(`槽位“${name}”至少需要一个节点标签`)
+    return { slotKey: key, mode: 'tag', tags: tagNames }
   })
 
   const sourceIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])))]
@@ -120,7 +134,7 @@ export async function validateProfileSlotBindings(
 }
 
 export async function readProfileSlotBindings(env: Env, profileId: string): Promise<ProfileSlotBinding[]> {
-  const [bindings, sourceRows, nodeRows] = await Promise.all([
+  const [bindings, sourceRows, nodeRows, tagRows] = await Promise.all([
     db(env).select().from(profileSlotBindings).where(eq(profileSlotBindings.profileId, profileId)),
     db(env).select().from(profileSlotSources).where(eq(profileSlotSources.profileId, profileId)),
     db(env)
@@ -128,11 +142,19 @@ export async function readProfileSlotBindings(env: Env, profileId: string): Prom
       .from(profileSlotNodes)
       .where(eq(profileSlotNodes.profileId, profileId))
       .orderBy(asc(profileSlotNodes.slotKey), asc(profileSlotNodes.position)),
+    db(env)
+      .select({ slotKey: profileSlotTags.slotKey, name: tags.name })
+      .from(profileSlotTags)
+      .innerJoin(tags, eq(tags.id, profileSlotTags.tagId))
+      .where(eq(profileSlotTags.profileId, profileId))
+      .orderBy(asc(tags.normalizedName)),
   ])
   const sourceIds = new Map<string, string[]>()
   const nodeIds = new Map<string, string[]>()
+  const tagNames = new Map<string, string[]>()
   for (const row of sourceRows) sourceIds.set(row.slotKey, [...(sourceIds.get(row.slotKey) || []), row.sourceId])
   for (const row of nodeRows) nodeIds.set(row.slotKey, [...(nodeIds.get(row.slotKey) || []), row.nodeId])
+  for (const row of tagRows) tagNames.set(row.slotKey, [...(tagNames.get(row.slotKey) || []), row.name])
   const allNodeIds = [...new Set(nodeRows.map(({ nodeId }) => nodeId))]
   const existing = new Set<string>()
   for (let index = 0; index < allNodeIds.length; index += 90) {
@@ -142,25 +164,30 @@ export async function readProfileSlotBindings(env: Env, profileId: string): Prom
       .where(inArray(nodes.id, allNodeIds.slice(index, index + 90)))
     for (const { id } of rows) existing.add(id)
   }
-  return bindings.map((binding) =>
-    binding.mode === 'source'
-      ? {
-          slotKey: binding.slotKey,
-          mode: 'source' as const,
-          sourceIds: sourceIds.get(binding.slotKey) || [],
-          includeRegex: binding.includeRegex,
-          excludeRegex: binding.excludeRegex,
-        }
-      : {
-          slotKey: binding.slotKey,
-          mode: 'node' as const,
-          nodeIds: nodeIds.get(binding.slotKey) || [],
-          missingNodeIds: (nodeIds.get(binding.slotKey) || []).filter((id) => !existing.has(id)),
-        },
-  )
+  return bindings.map((binding) => {
+    if (binding.mode === 'source')
+      return {
+        slotKey: binding.slotKey,
+        mode: 'source' as const,
+        sourceIds: sourceIds.get(binding.slotKey) || [],
+        includeRegex: binding.includeRegex,
+        excludeRegex: binding.excludeRegex,
+      }
+    if (binding.mode === 'tag')
+      return { slotKey: binding.slotKey, mode: 'tag' as const, tags: tagNames.get(binding.slotKey) || [] }
+    return {
+      slotKey: binding.slotKey,
+      mode: 'node' as const,
+      nodeIds: nodeIds.get(binding.slotKey) || [],
+      missingNodeIds: (nodeIds.get(binding.slotKey) || []).filter((id) => !existing.has(id)),
+    }
+  })
 }
 
 export async function replaceProfileSlotBindings(env: Env, profileId: string, bindings: ProfileSlotBindingInput[]) {
+  const bindingTags = new Map<string, Awaited<ReturnType<typeof ensureTags>>>()
+  for (const binding of bindings)
+    if (binding.mode === 'tag') bindingTags.set(binding.slotKey, await ensureTags(env, binding.tags))
   await env.DB.batch([
     env.DB.prepare('DELETE FROM profile_slot_bindings WHERE profile_id = ?').bind(profileId),
     ...bindings.map((binding) =>
@@ -175,6 +202,17 @@ export async function replaceProfileSlotBindings(env: Env, profileId: string, bi
       ),
     ),
     ...bindings.flatMap((binding) =>
+      binding.mode === 'tag'
+        ? (bindingTags.get(binding.slotKey) || []).map((tag) =>
+            env.DB.prepare('INSERT INTO profile_slot_tags (profile_id, slot_key, tag_id) VALUES (?, ?, ?)').bind(
+              profileId,
+              binding.slotKey,
+              tag.id,
+            ),
+          )
+        : [],
+    ),
+    ...bindings.flatMap((binding) =>
       binding.mode === 'source'
         ? binding.sourceIds.map((sourceId) =>
             env.DB.prepare('INSERT INTO profile_slot_sources (profile_id, slot_key, source_id) VALUES (?, ?, ?)').bind(
@@ -183,11 +221,13 @@ export async function replaceProfileSlotBindings(env: Env, profileId: string, bi
               sourceId,
             ),
           )
-        : binding.nodeIds.map((nodeId, position) =>
-            env.DB.prepare(
-              'INSERT INTO profile_slot_nodes (profile_id, slot_key, node_id, position) VALUES (?, ?, ?, ?)',
-            ).bind(profileId, binding.slotKey, nodeId, position),
-          ),
+        : binding.mode === 'node'
+          ? binding.nodeIds.map((nodeId, position) =>
+              env.DB.prepare(
+                'INSERT INTO profile_slot_nodes (profile_id, slot_key, node_id, position) VALUES (?, ?, ?, ?)',
+              ).bind(profileId, binding.slotKey, nodeId, position),
+            )
+          : [],
     ),
   ])
 }

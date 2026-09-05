@@ -14,7 +14,7 @@ import {
 import type { JobType, QueueMessage, TemplateId } from './db'
 import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
-import { matchesAnyTag, mergeTagViews } from './tag-model'
+import { matchesAnyTag, mergeTagViews, normalizeTagName } from './tag-model'
 import { readProfileNodeBinding } from './profile-node-binding'
 import { readProfileSlotBindings, type ProfileNodeBinding, type ProfileSlotBinding } from './profile-slot-bindings'
 import { nodeTagViews, profileFilterTagIds } from './tag-store'
@@ -274,6 +274,14 @@ async function replaceSourceNodes(
   await cleanupOrphanPhysicalNodes(env)
 }
 
+async function tagModeProfileIds(env: Env) {
+  const rows = await env.DB.prepare(
+    `SELECT profile_id AS id FROM profile_node_binding WHERE mode = 'tag'
+     UNION SELECT profile_id AS id FROM profile_slot_bindings WHERE mode = 'tag'`,
+  ).all<{ id: string }>()
+  return rows.results.map(({ id }) => id)
+}
+
 async function sourceModeProfileIds(env: Env, sourceIds: string[]) {
   if (!sourceIds.length) return []
   const [globalRows, slotRows] = await Promise.all([
@@ -290,7 +298,7 @@ async function sourceModeProfileIds(env: Env, sourceIds: string[]) {
 }
 
 export async function affectedProfileIdsForSource(env: Env, sourceId: string) {
-  const [sourceBound, globalDirectBound, slotDirectBound] = await Promise.all([
+  const [sourceBound, globalDirectBound, slotDirectBound, tagBound] = await Promise.all([
     sourceModeProfileIds(env, [sourceId]),
     db(env)
       .select({ id: profileNodeNodes.profileId })
@@ -302,9 +310,15 @@ export async function affectedProfileIdsForSource(env: Env, sourceId: string) {
       .from(profileSlotNodes)
       .innerJoin(nodes, eq(nodes.id, profileSlotNodes.nodeId))
       .where(eq(nodes.sourceId, sourceId)),
+    tagModeProfileIds(env),
   ])
   return [
-    ...new Set([...sourceBound, ...globalDirectBound.map(({ id }) => id), ...slotDirectBound.map(({ id }) => id)]),
+    ...new Set([
+      ...sourceBound,
+      ...globalDirectBound.map(({ id }) => id),
+      ...slotDirectBound.map(({ id }) => id),
+      ...tagBound,
+    ]),
   ]
 }
 
@@ -318,7 +332,7 @@ export async function enqueueAffectedProfiles(env: Env, sourceId: string) {
 
 export async function affectedProfileIdsForNodes(env: Env, nodeIds: string[]) {
   if (!nodeIds.length) return []
-  const [globalDirectBound, slotDirectBound, sourceIds] = await Promise.all([
+  const [globalDirectBound, slotDirectBound, sourceIds, tagBound] = await Promise.all([
     db(env)
       .select({ id: profileNodeNodes.profileId })
       .from(profileNodeNodes)
@@ -331,6 +345,7 @@ export async function affectedProfileIdsForNodes(env: Env, nodeIds: string[]) {
       .selectDistinct({ sourceId: nodes.sourceId })
       .from(nodes)
       .where(sql`${nodes.id} IN (SELECT value FROM json_each(${JSON.stringify(nodeIds)}))`),
+    tagModeProfileIds(env),
   ])
   return [
     ...new Set([
@@ -340,6 +355,7 @@ export async function affectedProfileIdsForNodes(env: Env, nodeIds: string[]) {
         env,
         sourceIds.map(({ sourceId }) => sourceId),
       )),
+      ...tagBound,
     ]),
   ]
 }
@@ -490,6 +506,53 @@ export async function selectDirectSlotNodes(
   return result
 }
 
+async function enabledNodes(env: Env) {
+  return db(env)
+    .select({
+      nodeId: nodes.id,
+      physicalNodeId: nodes.physicalNodeId,
+      config: physicalNodes.config,
+      alias: nodes.alias,
+      originalName: nodes.originalName,
+    })
+    .from(nodes)
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
+    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+}
+
+async function filterNodesByTags<T extends { nodeId: string }>(env: Env, rows: T[], tagNames: string[]) {
+  const wanted = new Set(tagNames.map(normalizeTagName))
+  const views = await nodeTagViews(
+    env,
+    rows.map(({ nodeId }) => nodeId),
+  )
+  return rows.filter(({ nodeId }) => {
+    const view = views.get(nodeId) || { direct: [], inherited: [] }
+    return mergeTagViews(view.direct, view.inherited).some(({ name }) => wanted.has(normalizeTagName(name)))
+  })
+}
+
+async function selectTagSlotNodes(
+  env: Env,
+  bindings: Extract<ProfileSlotBinding, { mode: 'tag' }>[],
+): Promise<SelectedSlotNode[]> {
+  if (!bindings.length) return []
+  const rows = await enabledNodes(env)
+  const result: SelectedSlotNode[] = []
+  for (const binding of bindings)
+    for (const node of await filterNodesByTags(env, rows, binding.tags))
+      result.push({
+        slotKey: binding.slotKey,
+        nodeId: node.nodeId,
+        physicalNodeId: node.physicalNodeId,
+        config: node.config,
+        name: node.alias || node.originalName,
+      })
+  return result
+}
+
 async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNodeBinding): Promise<SelectedNode[]> {
   if (binding.mode === 'source') {
     const rows = await db(env)
@@ -512,6 +575,11 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
       if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
       return [{ ...node, name }]
     })
+  }
+
+  if (binding.mode === 'tag') {
+    const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
+    return rows.map((node) => ({ ...node, name: node.alias || node.originalName }))
   }
 
   const rows = await db(env)
@@ -560,6 +628,10 @@ export async function selectProfileNodes(
       env,
       bindings.filter((binding) => binding.mode === 'node'),
       slotNames,
+    )),
+    ...(await selectTagSlotNodes(
+      env,
+      bindings.filter((binding) => binding.mode === 'tag'),
     )),
   ]
   const selected = [...globalNodes, ...slotNodes]

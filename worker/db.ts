@@ -193,16 +193,32 @@ export const profileNodeBinding = sqliteTable(
     profileId: text('profile_id')
       .primaryKey()
       .references(() => profiles.id, { onDelete: 'cascade' }),
-    mode: text('mode', { enum: ['source', 'node'] }).notNull(),
+    mode: text('mode', { enum: ['source', 'node', 'tag'] }).notNull(),
     includeRegex: text('include_regex'),
     excludeRegex: text('exclude_regex'),
   },
   (table) => [
-    check('profile_node_binding_mode_check', sql`${table.mode} IN ('source', 'node')`),
+    check('profile_node_binding_mode_check', sql`${table.mode} IN ('source', 'node', 'tag')`),
     check(
       'profile_node_binding_node_regex_check',
       sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
     ),
+  ],
+)
+
+export const profileNodeTags = sqliteTable(
+  'profile_node_tags',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profileNodeBinding.profileId, { onDelete: 'cascade' }),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.tagId] }),
+    index('profile_node_tags_tag_idx').on(table.tagId, table.profileId),
   ],
 )
 
@@ -245,17 +261,36 @@ export const profileSlotBindings = sqliteTable(
       .notNull()
       .references(() => profiles.id, { onDelete: 'cascade' }),
     slotKey: text('slot_key').notNull(),
-    mode: text('mode', { enum: ['source', 'node'] }).notNull(),
+    mode: text('mode', { enum: ['source', 'node', 'tag'] }).notNull(),
     includeRegex: text('include_regex'),
     excludeRegex: text('exclude_regex'),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.slotKey] }),
-    check('profile_slot_bindings_mode_check', sql`${table.mode} IN ('source', 'node')`),
+    check('profile_slot_bindings_mode_check', sql`${table.mode} IN ('source', 'node', 'tag')`),
     check(
       'profile_slot_bindings_node_regex_check',
       sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
     ),
+  ],
+)
+
+export const profileSlotTags = sqliteTable(
+  'profile_slot_tags',
+  {
+    profileId: text('profile_id').notNull(),
+    slotKey: text('slot_key').notNull(),
+    tagId: text('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.slotKey, table.tagId] }),
+    foreignKey({
+      columns: [table.profileId, table.slotKey],
+      foreignColumns: [profileSlotBindings.profileId, profileSlotBindings.slotKey],
+    }).onDelete('cascade'),
+    index('profile_slot_tags_tag_idx').on(table.tagId, table.profileId),
   ],
 )
 

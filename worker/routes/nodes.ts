@@ -326,7 +326,17 @@ nodesRouter.get('/options', async (c) => {
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
     .orderBy(asc(sources.name), asc(nodes.position))
     .limit(2000)
-  return ok(c, items)
+  const views = await nodeTagViews(
+    c.env,
+    items.map(({ id }) => id),
+  )
+  return ok(
+    c,
+    items.map((item) => {
+      const view = views.get(item.id) || { direct: [], inherited: [] }
+      return { ...item, tags: mergeTagViews(view.direct, view.inherited).map(({ name }) => name) }
+    }),
+  )
 })
 
 nodesRouter.get('/', async (c) => {
