@@ -453,6 +453,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                       ({ id: templateId }) => templateId === form.state.values.templateId,
                     )
                     const slots = currentTemplate?.sourceSlots || []
+                    const builtinTemplate = currentTemplate?.kind === 'builtin'
                     const effectiveActiveKey = slots.some((s) => s.key === activeSlotKey)
                       ? activeSlotKey
                       : slots[0]?.key || ''
@@ -466,15 +467,21 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                 <Layers className="size-4" />
                               </div>
                               <div>
-                                <h2 className="text-base font-semibold text-foreground">节点分流与槽位绑定</h2>
+                                <h2 className="text-base font-semibold text-foreground">
+                                  {builtinTemplate ? '节点选择' : '节点分流与槽位绑定'}
+                                </h2>
                                 <p className="text-xs text-muted-foreground">
-                                  为模板定义的各节点槽位配置接入节点源或特定固定节点
+                                  {builtinTemplate
+                                    ? '选择加入配置的节点源或特定固定节点'
+                                    : '为模板定义的各节点槽位配置接入节点源或特定固定节点'}
                                 </p>
                               </div>
                             </div>
-                            <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-                              共 {slots.length} 个槽位
-                            </Badge>
+                            {!builtinTemplate && (
+                              <Badge variant="outline" className="text-xs hidden sm:inline-flex">
+                                共 {slots.length} 个槽位
+                              </Badge>
+                            )}
                           </div>
                         </div>
 
@@ -516,14 +523,18 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
                             return (
                               <div key={slot.key} className="space-y-4">
-                                <div className="flex items-center justify-between pb-2 border-b">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-sm text-foreground">当前槽位：{slot.name}</span>
-                                    <Badge variant="secondary" className="text-xs">
-                                      槽位标识: {slot.key}
-                                    </Badge>
+                                {!builtinTemplate && (
+                                  <div className="flex items-center justify-between pb-2 border-b">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-sm text-foreground">
+                                        当前槽位：{slot.name}
+                                      </span>
+                                      <Badge variant="secondary" className="text-xs">
+                                        槽位标识: {slot.key}
+                                      </Badge>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
 
                                 <SlotBindingEditor
                                   slot={slot}
@@ -613,7 +624,11 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                         </span>
                         <span className="text-muted-foreground hidden sm:inline">·</span>
                         <span className="text-xs text-muted-foreground hidden md:inline">
-                          槽位已配：{configuredCount} / {totalSlots}
+                          {currentTemplate?.kind === 'builtin'
+                            ? configuredCount
+                              ? '节点来源已配置'
+                              : '节点来源未配置'
+                            : `槽位已配：${configuredCount} / ${totalSlots}`}
                         </span>
                       </div>
 

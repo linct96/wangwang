@@ -36,6 +36,7 @@ export function ProfileDetailPage() {
   const [compileStatus, setCompileStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
 
   const templateMap = new Map(templates.map((template) => [template.id, template]))
+  const currentTemplate = profile ? templateMap.get(profile.templateId) : undefined
   const sourceMap = new Map(sources.map((s) => [s.id, s.name]))
 
   async function runCompile() {
@@ -203,14 +204,16 @@ export function ProfileDetailPage() {
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">动态节点槽</span>
+                  <span className="meta-label">{currentTemplate?.kind === 'builtin' ? '节点来源' : '动态节点槽'}</span>
                   <div className="flex flex-col gap-2">
                     {profile.slotBindings.map((binding) => (
                       <div key={binding.slotKey} className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs text-muted-foreground">
-                          {templateMap.get(profile.templateId)?.sourceSlots.find(({ key }) => key === binding.slotKey)
-                            ?.name || binding.slotKey}
-                        </span>
+                        {currentTemplate?.kind !== 'builtin' && (
+                          <span className="text-xs text-muted-foreground">
+                            {currentTemplate?.sourceSlots.find(({ key }) => key === binding.slotKey)?.name ||
+                              binding.slotKey}
+                          </span>
+                        )}
                         {binding.mode === 'source' ? (
                           binding.sourceIds.map((sourceId) => (
                             <span key={sourceId} className="profile-pill">

@@ -243,7 +243,7 @@ export function ProfilePreviewPanel({
                       ) : (
                         !group.staticProxies.length && (
                           <div className="preview-empty-group-note">
-                            <span>当前槽位未配置节点，或被该组的正则过滤规则全部过滤。</span>
+                            <span>当前未选择节点，或被该组的正则过滤规则全部过滤。</span>
                           </div>
                         )
                       )}

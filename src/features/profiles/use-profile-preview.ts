@@ -92,36 +92,28 @@ export function useProfilePreview(
     }
 
     // 2. 映射到每个 proxy-group
+    const selectedNodes = [...new Map([...slotMap.values()].flat().map((node) => [node.id, node])).values()]
     const allUniqueNodeIds = new Set<string>()
     const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
       const includeFilters = compileFilter(g.filter)
       const excludeFilters = compileFilter(g['exclude-filter'])
-      const resolvedNodes: NodeOption[] = []
+      const matchesGroup = (node: NodeOption) =>
+        (!includeFilters.length || includeFilters.some((reg) => reg.test(node.name))) &&
+        !excludeFilters.some((reg) => reg.test(node.name))
+      const resolvedNodes: NodeOption[] = g['include-all-proxies'] === true ? selectedNodes.filter(matchesGroup) : []
       const staticProxies: string[] = []
       const proxiesList = Array.isArray(g.proxies) ? g.proxies : []
 
       for (const proxyItem of proxiesList) {
         const itemKey = String(proxyItem)
-        if (slotMap.has(itemKey)) {
-          const slotNodes = slotMap.get(itemKey) || []
-          for (const node of slotNodes) {
-            const matchesInc = !includeFilters.length || includeFilters.some((reg) => reg.test(node.name))
-            const matchesExc = excludeFilters.length > 0 && excludeFilters.some((reg) => reg.test(node.name))
-            if (matchesInc && !matchesExc) {
-              resolvedNodes.push(node)
-              allUniqueNodeIds.add(node.id)
-            }
-          }
-        } else {
-          staticProxies.push(itemKey)
-        }
+        if (slotMap.has(itemKey)) resolvedNodes.push(...(slotMap.get(itemKey) || []).filter(matchesGroup))
+        else staticProxies.push(itemKey)
       }
 
       // 去重保序
       const uniqueNodesMap = new Map<string, NodeOption>()
-      for (const n of resolvedNodes) {
-        if (!uniqueNodesMap.has(n.id)) uniqueNodesMap.set(n.id, n)
-      }
+      for (const node of resolvedNodes) uniqueNodesMap.set(node.id, node)
+      uniqueNodesMap.forEach(({ id }) => allUniqueNodeIds.add(id))
 
       return {
         name: String(g.name || '未命名策略组'),
