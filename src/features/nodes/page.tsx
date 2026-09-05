@@ -45,6 +45,18 @@ export function NodesPage() {
       toast.error(reason instanceof Error ? reason.message : '操作失败')
     }
   }
+  async function syncAfterDelete(deletedCount: number) {
+    await reloadTags()
+    if (tagId && deletedCount > 0) {
+      const check = await api<{ total: number }>(`/nodes?page=1&pageSize=1&tagId=${tagId}`)
+      if (check.total === 0) {
+        setTagId('')
+        setPage(1)
+        return
+      }
+    }
+    await reload()
+  }
   async function remove() {
     if (!deleting) return
     setDeletingBusy(true)
@@ -52,7 +64,7 @@ export function NodesPage() {
       await api(`/nodes/${deleting.id}`, { method: 'DELETE' })
       setDeleting(undefined)
       setSelected((ids) => ids.filter((id) => id !== deleting.id))
-      await Promise.all([reload(), reloadTags()])
+      await syncAfterDelete(1)
       toast.success('手动节点已删除')
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : '删除失败')
@@ -70,7 +82,7 @@ export function NodesPage() {
       })
       setDeletingBatch(undefined)
       setSelected([])
-      await Promise.all([reload(), reloadTags()])
+      await syncAfterDelete(result.deleted)
       const details = [
         result.deleted ? `删除 ${result.deleted} 个` : '',
         result.skipped ? `跳过 ${result.skipped} 个订阅节点` : '',
