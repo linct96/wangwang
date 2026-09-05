@@ -1,5 +1,5 @@
 import { parse } from 'yaml'
-import { parseTemplateSourceSlots } from './source-slots'
+import { validateTemplateSourceSlots, type TemplateSourceSlot } from './source-slots'
 export const MAX_TEMPLATE_BYTES = 1024 * 1024
 
 export type MihomoTemplateConfig = Record<string, unknown>
@@ -40,7 +40,7 @@ function validateGroups(value: unknown, rendered: boolean, slotKeys = new Set<st
 function validateShape(config: MihomoTemplateConfig, rendered: boolean, slotKeys?: Set<string>) {
   validateGroups(config['proxy-groups'], rendered, slotKeys)
   for (const [key, value] of Object.entries(config)) {
-    if (key !== 'proxy-groups' && key !== 'proxies' && key !== 'x-wangwang') assertNoPlaceholder(value)
+    if (key !== 'proxy-groups') assertNoPlaceholder(value)
   }
   if (
     config.rules !== undefined &&
@@ -49,7 +49,7 @@ function validateShape(config: MihomoTemplateConfig, rendered: boolean, slotKeys
     throw new Error('rules 必须是字符串数组')
 }
 
-export function parseTemplateYaml(yaml: string) {
+export function parseTemplateYaml(yaml: string, sourceSlots: TemplateSourceSlot[]) {
   if (!yaml.trim()) throw new Error('模板 YAML 不能为空')
   if (new TextEncoder().encode(yaml).byteLength > MAX_TEMPLATE_BYTES) throw new Error('模板 YAML 超过 1 MiB')
   let config: unknown
@@ -59,8 +59,9 @@ export function parseTemplateYaml(yaml: string) {
     throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : '格式错误'}`)
   }
   if (!object(config)) throw new Error('模板根节点必须是对象')
+  if (Object.hasOwn(config, 'x-wangwang')) throw new Error('模板 YAML 不能包含 x-wangwang')
   if (Object.hasOwn(config, 'proxies')) throw new Error('模板不能直接定义根级 proxies')
-  const slots = parseTemplateSourceSlots(config)
+  const slots = validateTemplateSourceSlots(sourceSlots)
   validateShape(config, false, new Set(slots.map(({ key }) => key)))
   return config
 }

@@ -5,13 +5,10 @@ export type BuiltinTemplate = {
   name: string
   description: string
   yaml: string
+  sourceSlots: { key: string; name: string }[]
 }
 
-const minimalYaml = `x-wangwang:
-  sources:
-    - key: __WANGWANG_SOURCE_SLOT_mini01__
-      name: 默认节点源
-mixed-port: 7890
+const minimalYaml = `mixed-port: 7890
 allow-lan: false
 mode: rule
 log-level: info
@@ -112,11 +109,7 @@ rules:
   - MATCH,🚀 节点选择
 `
 
-const standardYaml = `x-wangwang:
-  sources:
-    - key: __WANGWANG_SOURCE_SLOT_std001__
-      name: 默认节点源
-mixed-port: 7890
+const standardYaml = `mixed-port: 7890
 allow-lan: false
 mode: rule
 log-level: info
@@ -301,11 +294,7 @@ rules:
   - MATCH,🐟 漏网之鱼
 `
 
-const fullYaml = `x-wangwang:
-  sources:
-    - key: __WANGWANG_SOURCE_SLOT_full01__
-      name: 默认节点源
-mixed-port: 7890
+const fullYaml = `mixed-port: 7890
 allow-lan: false
 mode: rule
 log-level: info
@@ -671,18 +660,21 @@ export const builtinTemplates: BuiltinTemplate[] = [
     name: '精简规则模板',
     description: '基础 DNS / 国内直连 / 自动选择',
     yaml: minimalYaml,
+    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_mini01__', name: '默认节点源' }],
   },
   {
     id: 'builtin:standard',
     name: '标准规则模板',
     description: '常用分流 / 国内直连 / AI 与流媒体',
     yaml: standardYaml,
+    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_std001__', name: '默认节点源' }],
   },
   {
     id: 'builtin:full',
     name: '完全规则模板',
     description: '标准超集 / 多服务分流 / IP 规则',
     yaml: fullYaml,
+    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_full01__', name: '默认节点源' }],
   },
 ]
 

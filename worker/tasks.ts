@@ -9,8 +9,6 @@ import { readProfileSlotBindings, type ProfileSlotBinding } from './profile-slot
 import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
-import { parseTemplateSourceSlots } from './templates/source-slots'
-import { parseTemplateYaml } from './templates/validator'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
 
@@ -498,9 +496,7 @@ export async function compileProfile(env: Env, profileId: string) {
   const template = await resolveTemplate(env, profile.templateId)
   if (!template) throw new Error('订阅模板不存在')
 
-  const slotNames = new Map(
-    parseTemplateSourceSlots(parseTemplateYaml(template.yaml)).map(({ key, name }) => [key, name]),
-  )
+  const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
   const yaml = renderMihomoConfig({ nodes: await selectProfileNodes(env, profile, slotNames), template })
   const revision = profile.revision + 1
   const now = new Date()

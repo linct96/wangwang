@@ -156,6 +156,19 @@ export const templates = sqliteTable('templates', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 })
 
+export const templateSlots = sqliteTable(
+  'template_slots',
+  {
+    templateId: text('template_id')
+      .notNull()
+      .references(() => templates.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    position: integer('position').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.templateId, table.key] })],
+)
+
 export const profiles = sqliteTable(
   'profiles',
   {

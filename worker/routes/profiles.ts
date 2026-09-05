@@ -7,8 +7,6 @@ import type { TemplateId } from '../db'
 import { createJob, db } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
-import { parseTemplateSourceSlots } from '../templates/source-slots'
-import { parseTemplateYaml } from '../templates/validator'
 import {
   readProfileSlotBindings,
   replaceProfileSlotBindings,
@@ -64,7 +62,7 @@ export const profileUpdateSchema = profileSchema.partial().strict()
 
 async function templateSlots(env: Env, templateId: string) {
   const template = await resolveTemplate(env, templateId)
-  return template ? parseTemplateSourceSlots(parseTemplateYaml(template.yaml)) : null
+  return template?.sourceSlots || null
 }
 
 export async function profileView(

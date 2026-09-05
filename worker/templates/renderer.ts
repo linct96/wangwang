@@ -1,6 +1,6 @@
 import { stringify } from 'yaml'
 import type { PhysicalProxyConfig } from '../db'
-import { parseTemplateSourceSlots } from './source-slots'
+import type { TemplateSourceSlot } from './source-slots'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
 
 export type SelectedSlotNode = {
@@ -10,9 +10,15 @@ export type SelectedSlotNode = {
   config: PhysicalProxyConfig
 }
 
-export function renderMihomoConfig({ nodes, template }: { nodes: SelectedSlotNode[]; template: { yaml: string } }) {
-  const config = parseTemplateYaml(template.yaml)
-  const slots = parseTemplateSourceSlots(config)
+export function renderMihomoConfig({
+  nodes,
+  template,
+}: {
+  nodes: SelectedSlotNode[]
+  template: { yaml: string; sourceSlots: TemplateSourceSlot[] }
+}) {
+  const slots = template.sourceSlots
+  const config = parseTemplateYaml(template.yaml, slots)
   const uniqueNodes = [
     ...nodes
       .reduce((seen, node) => seen.set(node.nodeId, seen.get(node.nodeId) || node), new Map<string, SelectedSlotNode>())
@@ -55,7 +61,6 @@ export function renderMihomoConfig({ nodes, template }: { nodes: SelectedSlotNod
     group.proxies = [...new Set(expanded)]
   }
 
-  delete config['x-wangwang']
   validateRenderedConfig(config)
   const output = stringify(config, { lineWidth: 0 })
   if (new TextEncoder().encode(output).byteLength > MAX_TEMPLATE_BYTES) throw new Error('生成配置超过 1 MiB')
