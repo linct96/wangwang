@@ -10,8 +10,10 @@ import { resolveTemplate } from '../templates/resolver'
 import {
   readProfileSlotBindings,
   replaceProfileSlotBindings,
+  validateProfileNodeBinding,
   validateProfileSlotBindings,
 } from '../profile-slot-bindings'
+import { readProfileNodeBinding, replaceProfileNodeBinding } from '../profile-node-binding'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
@@ -24,6 +26,22 @@ const regexSchema = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim() || null : value),
   z.string().max(200).nullable(),
 )
+const nodeBindingSchema = z.discriminatedUnion('mode', [
+  z
+    .object({
+      mode: z.literal('source'),
+      sourceIds: z.array(z.string().min(1)).min(1).max(20),
+      includeRegex: regexSchema,
+      excludeRegex: regexSchema,
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal('node'),
+      nodeIds: z.array(z.string().min(1)).min(1).max(1000),
+    })
+    .strict(),
+])
 const slotBindingsSchema = z
   .array(
     z.discriminatedUnion('mode', [
@@ -45,13 +63,13 @@ const slotBindingsSchema = z
         .strict(),
     ]),
   )
-  .min(1)
   .max(20)
 
 export const profileSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
+    nodeBinding: nodeBindingSchema,
     slotBindings: slotBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
@@ -72,7 +90,8 @@ export async function profileView(
   includeYaml = false,
 ) {
   const slots = (await templateSlots(env, profile.templateId)) || []
-  const [bindings, tags] = await Promise.all([
+  const [nodeBinding, bindings, tags] = await Promise.all([
+    readProfileNodeBinding(env, profile.id),
     readProfileSlotBindings(env, profile.id),
     profileTagViews(env, profile.id),
   ])
@@ -82,6 +101,7 @@ export async function profileView(
     ...profile,
     tags: tags.map(({ name }) => name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
+    nodeBinding,
     slotBindings: slots.flatMap(({ key }) => {
       const binding = bySlot.get(key)
       return binding ? [binding] : []
@@ -105,11 +125,15 @@ profilesRouter.post('/', async (c) => {
   const slots = await templateSlots(c.env, input.templateId)
   if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
 
+  let nodeBinding
   let bindings
   try {
-    bindings = await validateProfileSlotBindings(c.env, slots, input.slotBindings)
+    ;[nodeBinding, bindings] = await Promise.all([
+      validateProfileNodeBinding(c.env, input.nodeBinding),
+      validateProfileSlotBindings(c.env, slots, input.slotBindings),
+    ])
   } catch (error) {
-    return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
+    return fail(c, 400, 'PROFILE_BINDINGS_INVALID', error instanceof Error ? error.message : '节点绑定无效')
   }
 
   const now = new Date()
@@ -123,6 +147,7 @@ profilesRouter.post('/', async (c) => {
   }
   await database.insert(profiles).values(profile)
   await Promise.all([
+    replaceProfileNodeBinding(c.env, profile.id, nodeBinding),
     replaceProfileSlotBindings(c.env, profile.id, bindings),
     replaceProfileTagFilters(c.env, profile.id, normalizeTagInputs(input.tags, 20)),
   ])
@@ -153,6 +178,15 @@ profilesRouter.patch('/:id', async (c) => {
   if (input.templateId && input.templateId !== current.templateId && !input.slotBindings)
     return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', '切换模板时必须重新绑定动态节点槽')
 
+  let nodeBinding
+  if (input.nodeBinding) {
+    try {
+      nodeBinding = await validateProfileNodeBinding(c.env, input.nodeBinding)
+    } catch (error) {
+      return fail(c, 400, 'PROFILE_NODE_BINDING_INVALID', error instanceof Error ? error.message : '节点选择无效')
+    }
+  }
+
   let bindings
   if (input.slotBindings) {
     const slots = await templateSlots(c.env, input.templateId || current.templateId)
@@ -174,6 +208,7 @@ profilesRouter.patch('/:id', async (c) => {
     })
     .where(eq(profiles.id, id))
   await Promise.all([
+    nodeBinding ? replaceProfileNodeBinding(c.env, id, nodeBinding) : Promise.resolve(),
     bindings ? replaceProfileSlotBindings(c.env, id, bindings) : Promise.resolve(),
     input.tags === undefined
       ? Promise.resolve()

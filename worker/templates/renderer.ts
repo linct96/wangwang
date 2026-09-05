@@ -3,25 +3,32 @@ import type { PhysicalProxyConfig } from '../db'
 import type { TemplateSourceSlot } from './source-slots'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
 
-export type SelectedSlotNode = {
-  slotKey: string
+export type SelectedNode = {
   nodeId: string
+  physicalNodeId: string
   name: string
   config: PhysicalProxyConfig
 }
 
+export type SelectedSlotNode = SelectedNode & { slotKey: string }
+
 export function renderMihomoConfig({
-  nodes,
+  globalNodes,
+  slotNodes,
   template,
 }: {
-  nodes: SelectedSlotNode[]
+  globalNodes: SelectedNode[]
+  slotNodes: SelectedSlotNode[]
   template: { yaml: string; sourceSlots: TemplateSourceSlot[] }
 }) {
   const slots = template.sourceSlots
   const config = parseTemplateYaml(template.yaml, slots)
   const uniqueNodes = [
-    ...nodes
-      .reduce((seen, node) => seen.set(node.nodeId, seen.get(node.nodeId) || node), new Map<string, SelectedSlotNode>())
+    ...[...globalNodes, ...slotNodes]
+      .reduce(
+        (seen, node) => seen.set(node.physicalNodeId, seen.get(node.physicalNodeId) || node),
+        new Map<string, SelectedNode>(),
+      )
       .values(),
   ]
   if (!uniqueNodes.length) throw new Error('配置没有可用节点')
@@ -29,18 +36,18 @@ export function renderMihomoConfig({
 
   const seenNames = new Map<string, number>()
   const names = new Map<string, string>()
-  config.proxies = uniqueNodes.map(({ nodeId, config: proxy, name }) => {
+  config.proxies = uniqueNodes.map(({ physicalNodeId, config: proxy, name }) => {
     const base = name.trim() || `${proxy.server}:${proxy.port}`
     const count = (seenNames.get(base) || 0) + 1
     seenNames.set(base, count)
     const finalName = count === 1 ? base : `${base}-${count}`
-    names.set(nodeId, finalName)
+    names.set(physicalNodeId, finalName)
     return { ...proxy, name: finalName }
   })
 
   const members = new Map(slots.map(({ key }) => [key, [] as string[]]))
-  for (const node of nodes) {
-    const name = names.get(node.nodeId)
+  for (const node of slotNodes) {
+    const name = names.get(node.physicalNodeId)
     const slot = members.get(node.slotKey)
     if (name && slot && !slot.includes(name)) slot.push(name)
   }

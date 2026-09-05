@@ -673,21 +673,21 @@ export const builtinTemplates: BuiltinTemplate[] = [
     name: '精简规则模板',
     description: '基础 DNS / 国内直连 / 自动选择',
     yaml: minimalYaml,
-    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_mini01__', name: '默认节点源' }],
+    sourceSlots: [],
   },
   {
     id: 'builtin:standard',
     name: '标准规则模板',
     description: '常用分流 / 国内直连 / AI 与流媒体',
     yaml: standardYaml,
-    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_std001__', name: '默认节点源' }],
+    sourceSlots: [],
   },
   {
     id: 'builtin:full',
     name: '完全规则模板',
     description: '标准超集 / 多服务分流 / IP 规则',
     yaml: fullYaml,
-    sourceSlots: [{ key: '__WANGWANG_SOURCE_SLOT_full01__', name: '默认节点源' }],
+    sourceSlots: [],
   },
 ]
 

@@ -187,6 +187,57 @@ export const profiles = sqliteTable(
   (table) => [index('profiles_template_id_idx').on(table.templateId)],
 )
 
+export const profileNodeBinding = sqliteTable(
+  'profile_node_binding',
+  {
+    profileId: text('profile_id')
+      .primaryKey()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: ['source', 'node'] }).notNull(),
+    includeRegex: text('include_regex'),
+    excludeRegex: text('exclude_regex'),
+  },
+  (table) => [
+    check('profile_node_binding_mode_check', sql`${table.mode} IN ('source', 'node')`),
+    check(
+      'profile_node_binding_node_regex_check',
+      sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
+    ),
+  ],
+)
+
+export const profileNodeSources = sqliteTable(
+  'profile_node_sources',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profileNodeBinding.profileId, { onDelete: 'cascade' }),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.sourceId] }),
+    index('profile_node_sources_source_idx').on(table.sourceId, table.profileId),
+  ],
+)
+
+export const profileNodeNodes = sqliteTable(
+  'profile_node_nodes',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profileNodeBinding.profileId, { onDelete: 'cascade' }),
+    nodeId: text('node_id').notNull(),
+    position: integer('position').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.nodeId] }),
+    index('profile_node_nodes_node_idx').on(table.nodeId, table.profileId),
+    index('profile_node_nodes_position_idx').on(table.profileId, table.position),
+  ],
+)
+
 export const profileSlotBindings = sqliteTable(
   'profile_slot_bindings',
   {

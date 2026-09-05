@@ -10,7 +10,7 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 export function validateTemplateSourceSlots(value: unknown): TemplateSourceSlot[] {
-  if (!Array.isArray(value) || !value.length || value.length > 20) throw new Error('模板必须包含 1 到 20 个节点源槽位')
+  if (!Array.isArray(value) || value.length > 20) throw new Error('模板最多包含 20 个节点源槽位')
 
   const slots = value.map((source) => {
     if (!object(source) || typeof source.key !== 'string' || !SOURCE_SLOT_KEY_PATTERN.test(source.key))

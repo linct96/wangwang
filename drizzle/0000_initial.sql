@@ -62,6 +62,35 @@ CREATE TABLE `physical_nodes` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `physical_nodes_fingerprint_idx` ON `physical_nodes` (`fingerprint`);--> statement-breakpoint
+CREATE TABLE `profile_node_binding` (
+	`profile_id` text PRIMARY KEY NOT NULL,
+	`mode` text NOT NULL,
+	`include_regex` text,
+	`exclude_regex` text,
+	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "profile_node_binding_mode_check" CHECK("profile_node_binding"."mode" IN ('source', 'node')),
+	CONSTRAINT "profile_node_binding_node_regex_check" CHECK("profile_node_binding"."mode" = 'source' OR ("profile_node_binding"."include_regex" IS NULL AND "profile_node_binding"."exclude_regex" IS NULL))
+);
+--> statement-breakpoint
+CREATE TABLE `profile_node_nodes` (
+	`profile_id` text NOT NULL,
+	`node_id` text NOT NULL,
+	`position` integer NOT NULL,
+	PRIMARY KEY(`profile_id`, `node_id`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profile_node_binding`(`profile_id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_node_nodes_node_idx` ON `profile_node_nodes` (`node_id`,`profile_id`);--> statement-breakpoint
+CREATE INDEX `profile_node_nodes_position_idx` ON `profile_node_nodes` (`profile_id`,`position`);--> statement-breakpoint
+CREATE TABLE `profile_node_sources` (
+	`profile_id` text NOT NULL,
+	`source_id` text NOT NULL,
+	PRIMARY KEY(`profile_id`, `source_id`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profile_node_binding`(`profile_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_node_sources_source_idx` ON `profile_node_sources` (`source_id`,`profile_id`);--> statement-breakpoint
 CREATE TABLE `profile_slot_bindings` (
 	`profile_id` text NOT NULL,
 	`slot_key` text NOT NULL,

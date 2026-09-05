@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
-import { asc, count, countDistinct, eq } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
-import { profileSlotSources, sources } from '../db'
+import { profileNodeSources, profileSlotSources, sources } from '../db'
 import {
   affectedProfileIdsForSource,
   cleanupOrphanPhysicalNodes,
@@ -14,7 +14,7 @@ import {
 import { assertRemoteUrl } from '../security'
 import { normalizeTagInputs, normalizeTagName } from '../tag-model'
 import { replaceSourceTags, sourceTagViews } from '../tag-store'
-import { sourceRequiredBySlot } from '../profile-slot-bindings'
+import { sourceRequiredByProfile } from '../profile-slot-bindings'
 
 const nodeNameFilterSchema = z
   .string()
@@ -82,11 +82,18 @@ sourcesRouter.get('/', async (c) => {
   )
   const views = await Promise.all(
     result.map(async (source) => {
-      const [{ value }] = await database
-        .select({ value: countDistinct(profileSlotSources.profileId) })
-        .from(profileSlotSources)
-        .where(eq(profileSlotSources.sourceId, source.id))
-      return sourceView(source, Number(value), tagsBySource.get(source.id)?.map((tag) => tag.name) ?? [])
+      const [globalProfiles, slotProfiles] = await Promise.all([
+        database
+          .select({ id: profileNodeSources.profileId })
+          .from(profileNodeSources)
+          .where(eq(profileNodeSources.sourceId, source.id)),
+        database
+          .select({ id: profileSlotSources.profileId })
+          .from(profileSlotSources)
+          .where(eq(profileSlotSources.sourceId, source.id)),
+      ])
+      const profileCount = new Set([...globalProfiles, ...slotProfiles].map(({ id }) => id)).size
+      return sourceView(source, profileCount, tagsBySource.get(source.id)?.map((tag) => tag.name) ?? [])
     }),
   )
   return ok(c, views)
@@ -130,7 +137,7 @@ sourcesRouter.patch('/:id', async (c) => {
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   if (current.kind !== 'url') return fail(c, 403, 'SYSTEM_SOURCE', '系统节点源不能修改')
   const disabling = input.enabled === false && current.enabled
-  if (disabling && (await sourceRequiredBySlot(c.env, current.id, true)))
+  if (disabling && (await sourceRequiredByProfile(c.env, current.id, true)))
     return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源是某个槽位的唯一可用源，无法停用')
   if (input.url) assertRemoteUrl(input.url)
   const nodeNameFilter =
@@ -177,7 +184,7 @@ sourcesRouter.delete('/:id', async (c) => {
   const current = await db(c.env).select().from(sources).where(eq(sources.id, id)).get()
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   if (current.kind !== 'url') return fail(c, 403, 'SYSTEM_SOURCE', '系统节点源不能删除')
-  if (await sourceRequiredBySlot(c.env, id, false))
+  if (await sourceRequiredByProfile(c.env, id, false))
     return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源是某个槽位的唯一绑定，无法删除')
   const profileIds = await affectedProfileIdsForSource(c.env, id)
   await db(c.env).delete(sources).where(eq(sources.id, id))

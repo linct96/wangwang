@@ -7,7 +7,7 @@ import type { TemplateId } from '../db'
 import { body, fail, ok } from '../http'
 import { db, enqueueProfilesForTemplate, selectProfileNodes } from '../tasks'
 import { builtinTemplates } from '../templates/builtin'
-import { renderMihomoConfig, type SelectedSlotNode } from '../templates/renderer'
+import { renderMihomoConfig, type SelectedNode, type SelectedSlotNode } from '../templates/renderer'
 import { resolveCustomTemplates, resolveTemplate, templateView } from '../templates/resolver'
 import { SOURCE_SLOT_KEY_PATTERN } from '../templates/source-slots'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml } from '../templates/validator'
@@ -25,7 +25,6 @@ const sourceSlotsSchema = z
       })
       .strict(),
   )
-  .min(1)
   .max(20)
 const createSchema = z.object({
   name: z.string().trim().min(1, '请输入模板名称').max(60),
@@ -129,21 +128,34 @@ templatesRouter.post('/preview', async (c) => {
   } catch (error) {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')
   }
-  let nodes: SelectedSlotNode[] = slots.map(({ key, name }, index) => ({
+  let globalNodes: SelectedNode[] = [
+    {
+      nodeId: 'preview-global',
+      physicalNodeId: 'preview-global',
+      name: '全局示例节点',
+      config: { type: 'ss', server: 'global.example.com', port: 8388 },
+    },
+  ]
+  let slotNodes: SelectedSlotNode[] = slots.map(({ key, name }, index) => ({
     slotKey: key,
-    nodeId: `preview-${index}`,
+    nodeId: `preview-slot-${index}`,
+    physicalNodeId: `preview-slot-${index}`,
     name: `${name}示例`,
     config: { type: 'ss', server: `slot${index + 1}.example.com`, port: 8388 },
   }))
   if (input.profileId) {
     const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
     if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
-    nodes = await selectProfileNodes(c.env, profile, new Map(slots.map(({ key, name }) => [key, name])))
+    ;({ globalNodes, slotNodes } = await selectProfileNodes(
+      c.env,
+      profile,
+      new Map(slots.map(({ key, name }) => [key, name])),
+    ))
   }
   try {
     return ok(c, {
-      yaml: renderMihomoConfig({ nodes, template }),
-      nodeCount: new Set(nodes.map(({ nodeId }) => nodeId)).size,
+      yaml: renderMihomoConfig({ globalNodes, slotNodes, template }),
+      nodeCount: new Set([...globalNodes, ...slotNodes].map(({ physicalNodeId }) => physicalNodeId)).size,
     })
   } catch (error) {
     return fail(c, 422, 'TEMPLATE_INVALID', error instanceof Error ? error.message : '模板无效')

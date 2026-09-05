@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5501367e-fda6-4a99-a4c7-9d4c12ca27a5",
+  "id": "7bed51b5-353b-4b72-8b40-4bfcc4a47863",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "admin_account": {
@@ -384,6 +384,174 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "profile_node_binding": {
+      "name": "profile_node_binding",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "include_regex": {
+          "name": "include_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "exclude_regex": {
+          "name": "exclude_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "profile_node_binding_profile_id_profiles_id_fk": {
+          "name": "profile_node_binding_profile_id_profiles_id_fk",
+          "tableFrom": "profile_node_binding",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "profile_node_binding_mode_check": {
+          "name": "profile_node_binding_mode_check",
+          "value": "\"profile_node_binding\".\"mode\" IN ('source', 'node')"
+        },
+        "profile_node_binding_node_regex_check": {
+          "name": "profile_node_binding_node_regex_check",
+          "value": "\"profile_node_binding\".\"mode\" = 'source' OR (\"profile_node_binding\".\"include_regex\" IS NULL AND \"profile_node_binding\".\"exclude_regex\" IS NULL)"
+        }
+      }
+    },
+    "profile_node_nodes": {
+      "name": "profile_node_nodes",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "profile_node_nodes_node_idx": {
+          "name": "profile_node_nodes_node_idx",
+          "columns": ["node_id", "profile_id"],
+          "isUnique": false
+        },
+        "profile_node_nodes_position_idx": {
+          "name": "profile_node_nodes_position_idx",
+          "columns": ["profile_id", "position"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "profile_node_nodes_profile_id_profile_node_binding_profile_id_fk": {
+          "name": "profile_node_nodes_profile_id_profile_node_binding_profile_id_fk",
+          "tableFrom": "profile_node_nodes",
+          "tableTo": "profile_node_binding",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["profile_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_node_nodes_profile_id_node_id_pk": {
+          "columns": ["profile_id", "node_id"],
+          "name": "profile_node_nodes_profile_id_node_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "profile_node_sources": {
+      "name": "profile_node_sources",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "profile_node_sources_source_idx": {
+          "name": "profile_node_sources_source_idx",
+          "columns": ["source_id", "profile_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "profile_node_sources_profile_id_profile_node_binding_profile_id_fk": {
+          "name": "profile_node_sources_profile_id_profile_node_binding_profile_id_fk",
+          "tableFrom": "profile_node_sources",
+          "tableTo": "profile_node_binding",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["profile_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "profile_node_sources_source_id_sources_id_fk": {
+          "name": "profile_node_sources_source_id_sources_id_fk",
+          "tableFrom": "profile_node_sources",
+          "tableTo": "sources",
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_node_sources_profile_id_source_id_pk": {
+          "columns": ["profile_id", "source_id"],
+          "name": "profile_node_sources_profile_id_source_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
