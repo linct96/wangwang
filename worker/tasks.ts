@@ -455,7 +455,7 @@ export async function selectSourceSlotNodes(
     .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
     .where(and(eq(profileSlotSources.profileId, profileId), eq(nodes.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+    .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
   return selected.flatMap((node) => {
     const binding = bySlot.get(node.slotKey)
     const name = node.alias || node.originalName
@@ -525,7 +525,7 @@ async function enabledNodes(env: Env) {
     .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
     .where(and(eq(nodes.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+    .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
 }
 
 async function filterNodesByTags<T extends { nodeId: string }>(env: Env, rows: T[], tagNames: string[]) {
@@ -578,7 +578,7 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
       .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
       .innerJoin(sources, eq(sources.id, nodes.sourceId))
       .where(and(eq(profileNodeSources.profileId, profileId), eq(nodes.enabled, true), eq(sources.enabled, true)))
-      .orderBy(asc(nodes.position), asc(nodes.createdAt))
+      .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
       if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
@@ -682,7 +682,7 @@ async function selectDraftGlobalNodes(env: Env, binding: ProfileNodeBindingInput
       .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
       .innerJoin(sources, eq(sources.id, nodes.sourceId))
       .where(and(inArray(nodes.sourceId, binding.sourceIds), eq(nodes.enabled, true), eq(sources.enabled, true)))
-      .orderBy(asc(nodes.position), asc(nodes.createdAt))
+      .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
       if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
@@ -748,7 +748,7 @@ async function selectDraftSourceSlotNodes(
     .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
     .where(and(inArray(nodes.sourceId, allSourceIds), eq(nodes.enabled, true), eq(sources.enabled, true)))
-    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+    .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
 
   const result: SelectedSlotNode[] = []
   for (const binding of bindings) {

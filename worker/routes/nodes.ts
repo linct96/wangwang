@@ -325,7 +325,7 @@ nodesRouter.get('/options', async (c) => {
     })
     .from(nodes)
     .innerJoin(sources, eq(sources.id, nodes.sourceId))
-    .orderBy(asc(sources.name), asc(nodes.position))
+    .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
     .limit(2000)
   const views = await nodeTagViews(
     c.env,

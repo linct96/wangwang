@@ -23,8 +23,9 @@ export function renderMihomoConfig({
 }) {
   const slots = template.sourceSlots
   const config = parseTemplateYaml(template.yaml, slots)
+  const orderedSlotNodes = slots.flatMap(({ key }) => slotNodes.filter((node) => node.slotKey === key))
   const uniqueNodes = [
-    ...[...globalNodes, ...slotNodes]
+    ...[...globalNodes, ...orderedSlotNodes]
       .reduce(
         (seen, node) => seen.set(node.physicalNodeId, seen.get(node.physicalNodeId) || node),
         new Map<string, SelectedNode>(),
@@ -46,7 +47,7 @@ export function renderMihomoConfig({
   })
 
   const members = new Map(slots.map(({ key }) => [key, [] as string[]]))
-  for (const node of slotNodes) {
+  for (const node of orderedSlotNodes) {
     const name = names.get(node.physicalNodeId)
     const slot = members.get(node.slotKey)
     if (name && slot && !slot.includes(name)) slot.push(name)
@@ -56,14 +57,11 @@ export function renderMihomoConfig({
     if (!Array.isArray(group.proxies)) continue
     const filter = compileNodeFilter(group.filter, 'filter')
     const exclude = compileNodeFilter(group['exclude-filter'], 'exclude-filter')
+    const matches = (name: string) =>
+      !exclude.some((pattern) => pattern.test(name)) && (!filter.length || filter.some((pattern) => pattern.test(name)))
     const expanded = group.proxies.flatMap((item) => {
       const slot = typeof item === 'string' ? members.get(item) : undefined
-      return slot
-        ? slot.filter(
-            (name) =>
-              !exclude.some((pattern) => pattern.test(name)) && (!filter.length || filter.some((p) => p.test(name))),
-          )
-        : [item]
+      return slot ? slot.filter(matches) : [item]
     })
     group.proxies = [...new Set(expanded)]
   }
