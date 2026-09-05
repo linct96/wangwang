@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const adminAccount = sqliteTable(
@@ -284,27 +284,6 @@ export const jobs = sqliteTable(
   },
   (table) => [index('jobs_entity_idx').on(table.type, table.entityId, table.createdAt)],
 )
-
-export const sourcesRelations = relations(sources, ({ many }) => ({
-  nodes: many(nodes),
-  tags: many(sourceTags),
-  profiles: many(profileSlotSources),
-}))
-export const physicalNodesRelations = relations(physicalNodes, ({ many }) => ({ nodes: many(nodes) }))
-export const nodesRelations = relations(nodes, ({ one, many }) => ({
-  source: one(sources, { fields: [nodes.sourceId], references: [sources.id] }),
-  physicalNode: one(physicalNodes, { fields: [nodes.physicalNodeId], references: [physicalNodes.id] }),
-  tags: many(nodeTags),
-}))
-export const tagsRelations = relations(tags, ({ many }) => ({
-  nodes: many(nodeTags),
-  sources: many(sourceTags),
-  profiles: many(profileTagFilters),
-}))
-export const profilesRelations = relations(profiles, ({ many }) => ({
-  slotBindings: many(profileSlotBindings),
-  tagFilters: many(profileTagFilters),
-}))
 
 export type QueueMessage = {
   jobId: string
