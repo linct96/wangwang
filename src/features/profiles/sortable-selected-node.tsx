@@ -28,16 +28,31 @@ export function SortableSelectedNode({
   const unavailable = !node || !node.enabled || !node.sourceEnabled
 
   return (
-    <div ref={ref} className={cn('selected-node-row', isDragging && 'selected-node-dragging')}>
-      <div ref={handleRef} className="selected-node-drag-handle" title="拖拽排序" aria-label="拖拽排序">
-        <GripVertical />
+    <div
+      ref={ref}
+      className={cn(
+        'selected-node-row',
+        isDragging && 'selected-node-dragging',
+        unavailable && 'selected-node-unavailable',
+      )}
+    >
+      <div ref={handleRef} className="selected-node-drag-handle" title="拖动调整顺序" aria-label="拖拽调整节点顺序">
+        <GripVertical className="size-3.5" />
       </div>
       <span className="selected-node-index">{index + 1}</span>
       <div className="selected-node-info">
-        <strong>{unavailable ? '节点不可用' : node.name}</strong>
-        <span>{node ? node.sourceName : nodeId}</span>
+        <div className="selected-node-title-wrap">
+          <span className="selected-node-name" title={node?.name || nodeId}>
+            {unavailable ? node?.name || '未知或已失效节点' : node.name}
+          </span>
+          {unavailable && (
+            <Badge variant="destructive" className="px-1.5 py-0 text-[10px] h-4">
+              不可用
+            </Badge>
+          )}
+        </div>
+        <span className="selected-node-source">{node ? node.sourceName : nodeId}</span>
       </div>
-      {unavailable && <Badge variant="destructive">不可用</Badge>}
       <div className="selected-node-actions">
         <Button
           type="button"
@@ -45,9 +60,10 @@ export function SortableSelectedNode({
           size="icon-xs"
           disabled={index === 0}
           onClick={onMoveUp}
-          aria-label="上移"
+          aria-label="上移一位"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
         >
-          <ArrowUp />
+          <ArrowUp className="size-3" />
         </Button>
         <Button
           type="button"
@@ -55,12 +71,20 @@ export function SortableSelectedNode({
           size="icon-xs"
           disabled={index === total - 1}
           onClick={onMoveDown}
-          aria-label="下移"
+          aria-label="下移一位"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground"
         >
-          <ArrowDown />
+          <ArrowDown className="size-3" />
         </Button>
-        <Button type="button" variant="ghost" size="icon-xs" onClick={onRemove} aria-label="移除节点">
-          <X />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={onRemove}
+          aria-label="移除该节点"
+          className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+        >
+          <X className="size-3" />
         </Button>
       </div>
     </div>
