@@ -16,7 +16,13 @@ import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews, normalizeTagName } from './tag-model'
 import { readProfileNodeBinding } from './profile-node-binding'
-import { readProfileSlotBindings, type ProfileNodeBinding, type ProfileSlotBinding } from './profile-slot-bindings'
+import {
+  readProfileSlotBindings,
+  type ProfileNodeBinding,
+  type ProfileNodeBindingInput,
+  type ProfileSlotBinding,
+  type ProfileSlotBindingInput,
+} from './profile-slot-bindings'
 import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig, type SelectedNode, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
@@ -462,7 +468,7 @@ export async function selectSourceSlotNodes(
 
 export async function selectDirectSlotNodes(
   env: Env,
-  bindings: Extract<ProfileSlotBinding, { mode: 'node' }>[],
+  bindings: Extract<ProfileSlotBindingInput, { mode: 'node' }>[],
   slotNames: Map<string, string>,
 ): Promise<SelectedSlotNode[]> {
   const nodeIds = [...new Set(bindings.flatMap((binding) => binding.nodeIds))]
@@ -536,7 +542,7 @@ async function filterNodesByTags<T extends { nodeId: string }>(env: Env, rows: T
 
 async function selectTagSlotNodes(
   env: Env,
-  bindings: Extract<ProfileSlotBinding, { mode: 'tag' }>[],
+  bindings: Extract<ProfileSlotBindingInput, { mode: 'tag' }>[],
 ): Promise<SelectedSlotNode[]> {
   if (!bindings.length) return []
   const rows = await enabledNodes(env)
@@ -646,6 +652,160 @@ export async function selectProfileNodes(
     seen.add(key)
     return true
   })
+  return {
+    globalNodes: filtered.filter((node): node is SelectedNode => !('slotKey' in node)),
+    slotNodes: filtered.filter((node): node is SelectedSlotNode => 'slotKey' in node),
+  }
+}
+
+async function selectDraftGlobalNodes(env: Env, binding: ProfileNodeBindingInput): Promise<SelectedNode[]> {
+  if (binding.mode === 'source') {
+    if (!binding.sourceIds.length) return []
+    const rows = await db(env)
+      .select({
+        nodeId: nodes.id,
+        physicalNodeId: nodes.physicalNodeId,
+        config: physicalNodes.config,
+        alias: nodes.alias,
+        originalName: nodes.originalName,
+      })
+      .from(nodes)
+      .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+      .innerJoin(sources, eq(sources.id, nodes.sourceId))
+      .where(and(inArray(nodes.sourceId, binding.sourceIds), eq(nodes.enabled, true), eq(sources.enabled, true)))
+      .orderBy(asc(nodes.position), asc(nodes.createdAt))
+    return rows.flatMap((node) => {
+      const name = node.alias || node.originalName
+      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
+      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      return [{ ...node, name }]
+    })
+  }
+
+  if (binding.mode === 'tag') {
+    const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
+    return rows.map((node) => ({ ...node, name: node.alias || node.originalName }))
+  }
+
+  if (!binding.nodeIds.length) return []
+  const rows = await db(env)
+    .select({
+      nodeId: nodes.id,
+      physicalNodeId: nodes.physicalNodeId,
+      config: physicalNodes.config,
+      alias: nodes.alias,
+      originalName: nodes.originalName,
+      nodeEnabled: nodes.enabled,
+      sourceEnabled: sources.enabled,
+    })
+    .from(nodes)
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .where(sql`${nodes.id} IN (SELECT value FROM json_each(${JSON.stringify(binding.nodeIds)}))`)
+  const byId = new Map(rows.map((node) => [node.nodeId, node]))
+  const unavailable = binding.nodeIds.filter((id) => {
+    const node = byId.get(id)
+    return !node || !node.nodeEnabled || !node.sourceEnabled
+  })
+  if (unavailable.length) throw new Error(`节点选择包含 ${unavailable.length} 个不可用的指定节点，请重新选择`)
+  return binding.nodeIds.map((id) => {
+    const node = byId.get(id)!
+    return { ...node, name: node.alias || node.originalName }
+  })
+}
+
+async function selectDraftSourceSlotNodes(
+  env: Env,
+  bindings: Extract<ProfileSlotBindingInput, { mode: 'source' }>[],
+): Promise<SelectedSlotNode[]> {
+  if (!bindings.length) return []
+  const allSourceIds = [...new Set(bindings.flatMap((b) => b.sourceIds))]
+  if (!allSourceIds.length) return []
+  const rows = await db(env)
+    .select({
+      id: nodes.id,
+      sourceId: nodes.sourceId,
+      physicalNodeId: nodes.physicalNodeId,
+      config: physicalNodes.config,
+      alias: nodes.alias,
+      originalName: nodes.originalName,
+    })
+    .from(nodes)
+    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
+    .innerJoin(sources, eq(sources.id, nodes.sourceId))
+    .where(and(inArray(nodes.sourceId, allSourceIds), eq(nodes.enabled, true), eq(sources.enabled, true)))
+    .orderBy(asc(nodes.position), asc(nodes.createdAt))
+
+  const result: SelectedSlotNode[] = []
+  for (const binding of bindings) {
+    const sourceSet = new Set(binding.sourceIds)
+    const slotNodes = rows.filter((node) => sourceSet.has(node.sourceId))
+    for (const node of slotNodes) {
+      const name = node.alias || node.originalName
+      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) continue
+      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) continue
+      result.push({
+        slotKey: binding.slotKey,
+        nodeId: node.id,
+        physicalNodeId: node.physicalNodeId,
+        config: node.config,
+        name,
+      })
+    }
+  }
+  return result
+}
+
+export async function selectDraftProfileNodes(
+  env: Env,
+  draft: {
+    nodeBinding: ProfileNodeBindingInput
+    slotBindings: ProfileSlotBindingInput[]
+    tags?: string[]
+  },
+  slotNames = new Map<string, string>(),
+): Promise<{ globalNodes: SelectedNode[]; slotNodes: SelectedSlotNode[] }> {
+  const globalNodes = await selectDraftGlobalNodes(env, draft.nodeBinding)
+  const slotNodes = [
+    ...(await selectDraftSourceSlotNodes(
+      env,
+      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'source' }> => b.mode === 'source'),
+    )),
+    ...(await selectDirectSlotNodes(
+      env,
+      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'node' }> => b.mode === 'node'),
+      slotNames,
+    )),
+    ...(await selectTagSlotNodes(
+      env,
+      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'tag' }> => b.mode === 'tag'),
+    )),
+  ]
+
+  const selected = [...globalNodes, ...slotNodes]
+  const filterTags = draft.tags || []
+  let filterTagIds: string[] = []
+  if (filterTags.length > 0) {
+    const normalized = filterTags.map(normalizeTagName)
+    const rows = await env.DB.prepare(
+      `SELECT id FROM tags WHERE normalized_name IN (${normalized.map(() => '?').join(',')})`,
+    )
+      .bind(...normalized)
+      .all<{ id: string }>()
+    filterTagIds = rows.results.length ? rows.results.map((r) => r.id) : ['__nonexistent_tag__']
+  }
+
+  const views = await nodeTagViews(env, [...new Set(selected.map(({ nodeId }) => nodeId))])
+  const seen = new Set<string>()
+  const filtered = selected.filter((node) => {
+    const view = views.get(node.nodeId) || { direct: [], inherited: [] }
+    const effectiveTagIds = mergeTagViews(view.direct, view.inherited).map(({ id }) => id)
+    const key = `${'slotKey' in node ? node.slotKey : 'global'}:${node.physicalNodeId}`
+    if (!matchesAnyTag(effectiveTagIds, filterTagIds) || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   return {
     globalNodes: filtered.filter((node): node is SelectedNode => !('slotKey' in node)),
     slotNodes: filtered.filter((node): node is SelectedSlotNode => 'slotKey' in node),

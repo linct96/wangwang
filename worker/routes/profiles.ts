@@ -4,9 +4,10 @@ import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profiles } from '../db'
 import type { TemplateId } from '../db'
-import { createJob, db } from '../tasks'
+import { createJob, db, selectDraftProfileNodes } from '../tasks'
 import { subscriptionToken } from '../security'
 import { resolveTemplate } from '../templates/resolver'
+import { renderMihomoConfig } from '../templates/renderer'
 import {
   readProfileSlotBindings,
   replaceProfileSlotBindings,
@@ -170,6 +171,32 @@ profilesRouter.post('/', async (c) => {
     { data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } },
     202,
   )
+})
+
+const previewProfileSchema = z.object({
+  templateId: templateIdSchema,
+  nodeBinding: nodeBindingSchema,
+  slotBindings: slotBindingsSchema.default([]),
+  tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
+})
+
+profilesRouter.post('/preview', async (c) => {
+  const input = await body(c, previewProfileSchema)
+  const template = await resolveTemplate(c.env, input.templateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+
+  const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
+  try {
+    const { globalNodes, slotNodes } = await selectDraftProfileNodes(c.env, input, slotNames)
+    const uniquePhysicalCount = new Set([...globalNodes, ...slotNodes].map((n) => n.physicalNodeId)).size
+    if (!uniquePhysicalCount) {
+      return ok(c, { yaml: '', error: '当前配置没有可用节点', nodeCount: 0 })
+    }
+    const yaml = renderMihomoConfig({ globalNodes, slotNodes, template })
+    return ok(c, { yaml, error: null, nodeCount: uniquePhysicalCount })
+  } catch (error) {
+    return ok(c, { yaml: '', error: error instanceof Error ? error.message : '生成配置预览失败', nodeCount: 0 })
+  }
 })
 
 profilesRouter.get('/:id', async (c) => {
