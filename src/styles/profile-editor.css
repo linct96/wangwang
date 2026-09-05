@@ -735,21 +735,8 @@
     margin: 0 auto;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 16px;
-  }
-
-  .profile-footer-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    min-width: 0;
-  }
-
-  .profile-footer-status-title {
-    max-width: 260px;
-    color: var(--foreground);
   }
 
   .profile-template-loss-list {

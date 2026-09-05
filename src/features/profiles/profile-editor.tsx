@@ -727,10 +727,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             <div className="profile-sticky-footer-inner">
               <form.Subscribe selector={(state) => [state.values, state.isSubmitting, state.canSubmit] as const}>
                 {([values, isSubmitting, canSubmit]) => {
-                  const currentTemplate = templates.find((t) => t.id === values.templateId)
-                  const configuredCount = values.slotBindings.filter(hasConfiguration).length
-                  const totalSlots = currentTemplate?.sourceSlots.length || 0
-
                   const unavailable = [values.nodeBinding, ...values.slotBindings].some(
                     (binding) =>
                       binding.mode === 'node' &&
@@ -741,51 +737,33 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                   )
 
                   return (
-                    <>
-                      <div className="profile-footer-status">
-                        <span className="profile-footer-status-title font-medium truncate">
-                          {values.name || '未命名配置'}
-                        </span>
-                        <span className="text-muted-foreground hidden sm:inline">·</span>
-                        <span className="text-muted-foreground text-xs hidden sm:inline">
-                          模板：{currentTemplate?.name || '未知'}
-                        </span>
-                        <span className="text-muted-foreground hidden sm:inline">·</span>
-                        <span className="text-xs text-muted-foreground hidden md:inline">
-                          {totalSlots > 0
-                            ? `全部节点已选 · 槽位已配：${configuredCount} / ${totalSlots}`
-                            : '全部节点已选'}
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={phase !== 'idle'}
+                        onClick={() => void navigate({ to: '/profiles' })}
+                        className="h-9 px-4"
+                      >
+                        取消
+                      </Button>
 
-                      <div className="flex items-center gap-3">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          disabled={phase !== 'idle'}
-                          onClick={() => void navigate({ to: '/profiles' })}
-                          className="h-9 px-4"
-                        >
-                          取消
-                        </Button>
-
-                        <Button
-                          disabled={Boolean(isSubmitting) || !canSubmit || unavailable || phase !== 'idle'}
-                          className="h-9 px-5 font-medium shadow-sm"
-                        >
-                          {phase !== 'idle' && <RefreshCw data-icon="inline-start" className="spin size-4" />}
-                          {phase === 'generating'
-                            ? '正在生成配置...'
-                            : phase === 'saving'
-                              ? id
-                                ? '正在保存...'
-                                : '正在创建...'
-                              : id
-                                ? '保存并生成'
-                                : '创建并生成'}
-                        </Button>
-                      </div>
-                    </>
+                      <Button
+                        disabled={Boolean(isSubmitting) || !canSubmit || unavailable || phase !== 'idle'}
+                        className="h-9 px-5 font-medium shadow-sm"
+                      >
+                        {phase !== 'idle' && <RefreshCw data-icon="inline-start" className="spin size-4" />}
+                        {phase === 'generating'
+                          ? '正在生成配置...'
+                          : phase === 'saving'
+                            ? id
+                              ? '正在保存...'
+                              : '正在创建...'
+                            : id
+                              ? '保存并生成'
+                              : '创建并生成'}
+                      </Button>
+                    </div>
                   )
                 }}
               </form.Subscribe>
