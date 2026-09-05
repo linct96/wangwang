@@ -61,20 +61,76 @@
     margin-bottom: 16px;
   }
 
-  /* 基础区块规范：平坦、清晰、无多余嵌套 */
+  /* 基础区块卡牌规范（参考 GEO 规则数据源可折叠卡牌） */
   .profile-section {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-sm);
     box-shadow: 0 1px 2px oklch(0 0 0 / 0.02);
     overflow: hidden;
-    transition: border-color 0.15s ease;
+    padding: 0;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .profile-section:hover {
+    border-color: var(--border-hover, color-mix(in oklch, var(--border) 80%, var(--foreground)));
   }
 
   .profile-section-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-    background: color-mix(in oklch, var(--muted) 35%, var(--card));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    background: var(--card);
+  }
+
+  .profile-section-header-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    flex: 1;
+    min-width: 0;
+    padding: 10px 0;
+  }
+
+  .profile-section-header-trigger:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs, 4px);
+  }
+
+  .profile-collapse-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .profile-collapse-icon.expanded {
+    transform: rotate(180deg);
+  }
+
+  .profile-section-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 22px;
+  }
+
+  .profile-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   .profile-section-icon {
@@ -90,86 +146,15 @@
   }
 
   .profile-section-body {
-    padding: 18px;
-  }
-
-  /* 槽位选项卡 (Slot Tabs) */
-  .slot-tabs-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
     background: color-mix(in oklch, var(--muted) 25%, var(--card));
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-
-  .slot-tab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 9999px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--muted-foreground);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s ease;
-  }
-
-  .slot-tab-btn:hover {
-    color: var(--foreground);
-    background: color-mix(in oklch, var(--muted) 80%, transparent);
-  }
-
-  .slot-tab-btn-active {
-    background: var(--background);
-    color: var(--foreground);
-    border-color: var(--border);
-    font-weight: 600;
-    box-shadow: 0 1px 3px oklch(0 0 0 / 0.05);
-  }
-
-  .slot-tab-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 9999px;
-    background: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
-    color: var(--muted-foreground);
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  .slot-tab-btn-active .slot-tab-index {
-    background: var(--primary);
-    color: var(--primary-foreground);
-  }
-
-  .slot-tab-badge {
-    font-size: 11px;
-    padding: 1px 6px;
-    border-radius: 9999px;
-    background: color-mix(in oklch, var(--muted) 80%, transparent);
-    color: var(--muted-foreground);
-  }
-
-  .slot-tab-btn-active .slot-tab-badge {
-    background: color-mix(in oklch, var(--primary) 10%, transparent);
-    color: var(--primary);
+    transition: all 0.2s ease-in-out;
   }
 
   /* 槽位内部工作区 */
   .slot-workspace {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
   }
 
   .slot-mode-selector-wrap {
@@ -178,15 +163,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding-bottom: 16px;
-    border-bottom: 1px dashed var(--border);
   }
 
   /* 按节点源模式 */
   .slot-source-form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
   }
 
   .source-picker-grid {
@@ -224,54 +207,6 @@
   .source-picker-item-disabled {
     cursor: not-allowed;
     opacity: 0.55;
-  }
-
-  /* 正则过滤区 */
-  .source-regex-section {
-    padding: 14px 16px;
-    border-radius: var(--radius-sm);
-    background: color-mix(in oklch, var(--muted) 35%, var(--card));
-    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-  }
-
-  .source-regex-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .regex-preset-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 5px;
-    margin-top: 6px;
-  }
-
-  .regex-preset-label {
-    font-size: 11px;
-    color: var(--muted-foreground);
-    margin-right: 2px;
-  }
-
-  .regex-preset-tag {
-    font-size: 11px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--background);
-    color: var(--foreground);
-    cursor: pointer;
-    transition: all 0.12s ease;
-    user-select: none;
-  }
-
-  .regex-preset-tag:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-    background: color-mix(in oklch, var(--primary) 6%, var(--background));
   }
 
   /* 指定节点工作台 (Direct Node Workbench) */
@@ -442,31 +377,29 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: column;
-  }
-
-  .selected-node-title-wrap {
-    display: flex;
     align-items: center;
-    gap: 6px;
-    min-width: 0;
+    gap: 8px;
   }
 
   .selected-node-name {
+    flex: 1;
+    min-width: 0;
     font-size: 12.5px;
     font-weight: 550;
-    truncate: ellipsis;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--foreground);
   }
 
   .selected-node-source {
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--muted-foreground);
-    truncate: ellipsis;
+    max-width: 140px;
     overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .selected-node-actions {
@@ -727,67 +660,39 @@
     border-radius: 4px;
   }
 
-  .preview-static-proxies-wrap {
+  .preview-node-ref-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .preview-static-chip {
-    font-size: 10.5px;
-    font-family: monospace;
-    padding: 1.5px 6px;
-    border-radius: 4px;
-    background: color-mix(in oklch, var(--primary) 8%, transparent);
-    color: var(--primary);
-    border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
-  }
-
-  .preview-node-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-
-  .preview-node-row {
-    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 7px;
-    border-radius: 4px;
-    font-size: 11.5px;
-    background: color-mix(in oklch, var(--muted) 30%, transparent);
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 1px;
   }
 
-  .preview-node-idx {
-    font-size: 10px;
-    color: var(--muted-foreground);
-    width: 18px;
-    text-align: center;
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
+  .preview-node-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: var(--radius-xs, 4px);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.4;
+    max-width: 240px;
+    transition: all 0.12s ease;
   }
 
-  .preview-node-name {
-    flex: 1;
-    font-weight: 500;
-    color: var(--foreground);
+  .preview-node-tag:hover {
+    border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
   }
 
-  .preview-node-source {
-    font-size: 10px;
-    color: var(--muted-foreground);
-    flex-shrink: 0;
-    max-width: 100px;
-  }
-
-  .preview-node-more {
-    padding: 6px;
-    text-align: center;
-    font-size: 11px;
-    color: var(--muted-foreground);
+  .preview-node-tag-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .preview-empty-group-note {

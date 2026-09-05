@@ -7,7 +7,9 @@ import {
   Layers,
   Network,
   PanelRightClose,
+  Radio,
   Search,
+  Server,
   Sparkles,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -211,41 +213,42 @@ export function ProfilePreviewPanel({
                         </div>
                       )}
 
-                      {/* 静态代理引用 (DIRECT, REJECT, 其他组) */}
-                      {group.staticProxies.length > 0 && (
-                        <div className="preview-static-proxies-wrap">
-                          {group.staticProxies.map((sp) => (
-                            <span key={sp} className="preview-static-chip">
-                              {sp}
+                      {/* 静态代理引用与节点 Tag 列表 */}
+                      {group.staticProxies.length > 0 || group.nodes.length > 0 ? (
+                        <div className="preview-node-ref-tags">
+                          {group.staticProxies.map((sp) => {
+                            const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
+                            return (
+                              <div key={sp} className="preview-node-tag" title={sp}>
+                                {isBuiltin ? (
+                                  <Radio className="size-3 text-emerald-500 shrink-0" />
+                                ) : (
+                                  <Network className="size-3 text-blue-500 shrink-0" />
+                                )}
+                                <span className="preview-node-tag-name font-mono">{sp}</span>
+                              </div>
+                            )
+                          })}
+                          {group.nodes.slice(0, 80).map((node) => (
+                            <div
+                              key={node.id}
+                              className="preview-node-tag"
+                              title={`${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`}
+                            >
+                              <Server className="size-3 text-purple-500 shrink-0" />
+                              <span className="preview-node-tag-name">{node.name}</span>
+                            </div>
+                          ))}
+                          {group.nodes.length > 80 && (
+                            <span className="text-[11px] text-muted-foreground self-center px-1">
+                              +{group.nodes.length - 80} 更多
                             </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* 实际展开的节点列表 */}
-                      {group.nodes.length > 0 ? (
-                        <div className="preview-node-list">
-                          {group.nodes.slice(0, 40).map((node, idx) => (
-                            <div key={node.id} className="preview-node-row">
-                              <span className="preview-node-idx">{idx + 1}</span>
-                              <span className="preview-node-name truncate" title={node.name}>
-                                {node.name}
-                              </span>
-                              <span className="preview-node-source truncate">{node.sourceName}</span>
-                            </div>
-                          ))}
-                          {group.nodes.length > 40 && (
-                            <div className="preview-node-more">
-                              <span>已显示前 40 个，剩余 {group.nodes.length - 40} 个节点已折叠</span>
-                            </div>
                           )}
                         </div>
                       ) : (
-                        !group.staticProxies.length && (
-                          <div className="preview-empty-group-note">
-                            <span>当前未选择节点，或被该组的正则过滤规则全部过滤。</span>
-                          </div>
-                        )
+                        <div className="preview-empty-group-note">
+                          <span>当前未选择节点，或被该组的正则过滤规则全部过滤。</span>
+                        </div>
                       )}
                     </div>
                   )}

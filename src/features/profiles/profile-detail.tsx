@@ -204,7 +204,7 @@ export function ProfileDetailPage() {
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">节点选择</span>
+                  <span className="meta-label">全部节点</span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {profile.nodeBinding.mode === 'source' ? (
                       profile.nodeBinding.sourceIds.map((sourceId) => (
@@ -223,7 +223,9 @@ export function ProfileDetailPage() {
                   </div>
                 </div>
 
-                {profile.slotBindings.length > 0 && (
+                {Boolean(
+                  (currentTemplate ? currentTemplate.sourceSlots.length > 0 : true) && profile.slotBindings.length > 0,
+                ) && (
                   <div className="meta-row">
                     <span className="meta-label">动态节点槽</span>
                     <div className="flex flex-col gap-2">

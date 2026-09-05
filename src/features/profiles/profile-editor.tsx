@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { ArrowLeft, CheckCircle2, Layers, PanelRightOpen, RefreshCw, Zap } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, Globe, PanelRightOpen, Plug, RefreshCw, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { api } from '@/api/client'
@@ -23,7 +23,7 @@ import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import {
@@ -50,7 +50,7 @@ function validRegex(value: string | null) {
   }
 }
 
-const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '节点选择' }
+const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '全部节点' }
 
 function emptyNodeBinding(): ProfileNodeBinding {
   return { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
@@ -105,9 +105,13 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const [error, setError] = useState('')
   const [phase, setPhase] = useState<'idle' | 'saving' | 'generating'>('idle')
   const [pendingTemplate, setPendingTemplate] = useState<{ id: TemplateId; lost: string[] }>()
-  const [activeSlotKey, setActiveSlotKey] = useState<string>('')
+  const [collapsedSlotKeys, setCollapsedSlotKeys] = useState<Record<string, boolean>>({})
   const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form')
   const [previewCollapsed, setPreviewCollapsed] = useState(false)
+  const [formMounted, setFormMounted] = useState(false)
+
+  const [basicExpanded, setBasicExpanded] = useState(true)
+  const [nodesExpanded, setNodesExpanded] = useState(true)
 
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail>()
   const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
@@ -118,7 +122,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     defaultValues: {
       name: '',
       tags: [] as string[],
-      templateId: 'builtin:minimal' as TemplateId,
+      templateId: initialTemplateId || ('builtin:minimal' as TemplateId),
       nodeBinding: emptyNodeBinding(),
       slotBindings: [] as ProfileSlotBinding[],
     },
@@ -132,8 +136,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           z.object({
             mode: z.literal('source'),
             sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
-            includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
-            excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
+            includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+            excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
           }),
           z.object({
             mode: z.literal('node'),
@@ -147,8 +151,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               slotKey: z.string(),
               mode: z.literal('source'),
               sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
-              includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
-              excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
+              includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+              excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
             }),
             z.object({
               slotKey: z.string(),
@@ -222,7 +226,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   }, [id])
 
   useEffect(() => {
-    if (initialized.current || !templates.length || (id && !profile)) return
+    if (initialized.current || !formMounted || !templates.length || (id && !profile)) return
     initialized.current = true
     const selectedTemplate =
       templates.find(({ id: templateId }) => templateId === initialTemplateId) ||
@@ -230,9 +234,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       templates[0]
 
     const initialBindings = profile ? profile.slotBindings : emptyBindings(selectedTemplate)
-    if (initialBindings.length > 0 && !activeSlotKey) {
-      setActiveSlotKey(initialBindings[0].slotKey)
-    }
 
     form.reset(
       profile
@@ -250,8 +251,9 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             nodeBinding: emptyNodeBinding(),
             slotBindings: initialBindings,
           },
+      { keepDefaultValues: true },
     )
-  }, [form, id, initialTemplateId, profile, templates, activeSlotKey])
+  }, [form, id, initialTemplateId, profile, templates, formMounted])
 
   useEffect(() => {
     const currentId = form.state.values.templateId
@@ -299,14 +301,12 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
     form.setFieldValue('templateId', templateId)
     form.setFieldValue('slotBindings', newBindings)
-    if (newBindings.length > 0) {
-      setActiveSlotKey(newBindings[0].slotKey)
-    }
+    setCollapsedSlotKeys({})
     setPendingTemplate(undefined)
   }
 
   function requestTemplateChange(templateId: TemplateId) {
-    if (templateId === form.state.values.templateId) return
+    if (!templateId || templateId === form.state.values.templateId) return
     const nextKeys = new Set(
       templates.find(({ id: currentId }) => currentId === templateId)?.sourceSlots.map(({ key }) => key),
     )
@@ -344,7 +344,13 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       <PageState loading={loading} error={loadError} />
 
       {!loading && !loadError && (
-        <form onSubmit={submit} noValidate>
+        <form
+          ref={(node) => {
+            if (node) setFormMounted(true)
+          }}
+          onSubmit={submit}
+          noValidate
+        >
           <div className="profile-editor-mobile-switcher">
             <Segmented
               block
@@ -359,267 +365,341 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
           <div className={cn('profile-editor-layout', previewCollapsed && 'profile-editor-layout-collapsed')}>
             <main className={cn('profile-editor-main', mobileTab !== 'form' && 'profile-pane-mobile-hidden')}>
+              {/* 模块 1：基础信息 */}
               <section className="profile-section">
-                <div className="profile-section-header">
-                  <div className="flex items-center gap-2">
-                    <div className="profile-section-icon">
-                      <Zap className="size-4" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-semibold text-foreground">基础属性</h2>
-                      <p className="text-xs text-muted-foreground">
-                        {id ? '设置订阅名称、套用规则模板与全局节点标签过滤' : '设置订阅名称与套用规则模板'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <form.Subscribe
+                  selector={(state) => [state.values.name, state.values.templateId, state.values.tags] as const}
+                >
+                  {([name, templateId, tags]) => {
+                    const selectedTemplate = templates.find((t) => t.id === templateId)
+                    return (
+                      <>
+                        <div className="profile-section-header">
+                          <div
+                            className="profile-section-header-trigger"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setBasicExpanded((prev) => !prev)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setBasicExpanded((prev) => !prev)
+                              }
+                            }}
+                          >
+                            <ChevronDown className={cn('profile-collapse-icon', basicExpanded && 'expanded')} />
+                            <div className="flex items-center gap-2">
+                              <Zap className="size-4 text-amber-500" />
+                              <strong className="text-sm font-semibold text-foreground">基础信息</strong>
+                            </div>
 
-                <div className="profile-section-body">
-                  <FieldGroup className="gap-5">
-                    <form.Field name="name">
-                      {(field) => {
-                        const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-                        return (
-                          <Field data-invalid={invalid}>
-                            <FieldLabel htmlFor="profile-name" className="text-sm font-medium">
-                              配置名称 <span className="text-destructive">*</span>
-                            </FieldLabel>
-                            <Input
-                              id="profile-name"
-                              value={field.state.value}
-                              onBlur={field.handleBlur}
-                              onChange={(event) => field.handleChange(event.target.value)}
-                              placeholder="例如：日常主力聚合 / 极速游戏专线"
-                              aria-invalid={invalid}
-                            />
-                            {invalid && <FieldError errors={field.state.meta.errors} />}
-                          </Field>
-                        )
-                      }}
-                    </form.Field>
-
-                    <form.Field name="templateId">
-                      {(field) => {
-                        return (
-                          <Field>
-                            <FieldLabel htmlFor="profile-template" className="text-sm font-medium">
-                              规则模板 <span className="text-destructive">*</span>
-                            </FieldLabel>
-                            <Select
-                              value={field.state.value}
-                              onValueChange={(value) => requestTemplateChange(value as TemplateId)}
-                            >
-                              <SelectTrigger id="profile-template" className="w-full">
-                                <SelectValue placeholder="选择规则模板" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectGroup>
-                                  <SelectLabel>内置预设模板</SelectLabel>
-                                  {builtin.map((template) => (
-                                    <SelectItem key={template.id} value={template.id}>
-                                      {template.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                                {custom.length > 0 && (
-                                  <SelectGroup>
-                                    <SelectLabel>我的自定义模板</SelectLabel>
-                                    {custom.map((template) => (
-                                      <SelectItem key={template.id} value={template.id}>
-                                        {template.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </Field>
-                        )
-                      }}
-                    </form.Field>
-
-                    {id && (
-                      <form.Field name="tags">
-                        {(field) => {
-                          const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-                          return (
-                            <Field data-invalid={invalid}>
-                              <FieldLabel htmlFor="profile-tags" className="text-sm font-medium">
-                                节点标签过滤
-                              </FieldLabel>
-                              <TagCombobox
-                                id="profile-tags"
-                                value={field.state.value}
-                                options={tagOptions}
-                                max={20}
-                                allowCreate={false}
-                                placeholder="选择标签进行全局筛选；留空表示不过滤"
-                                invalid={invalid}
-                                onBlur={field.handleBlur}
-                                onChange={field.handleChange}
-                              />
-                              <FieldDescription className="text-xs">
-                                若设置了标签，仅带有相应标签的节点才会参与分流处理。
-                              </FieldDescription>
-                              {invalid && <FieldError errors={field.state.meta.errors} />}
-                            </Field>
-                          )
-                        }}
-                      </form.Field>
-                    )}
-                  </FieldGroup>
-                </div>
-              </section>
-
-              <section className="profile-section">
-                <form.Field name="nodeBinding">
-                  {(field) => (
-                    <div className="flex flex-col gap-0">
-                      <div className="profile-section-header">
-                        <div className="flex items-center gap-2">
-                          <div className="profile-section-icon">
-                            <Layers className="size-4" />
+                            <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
+                              {selectedTemplate && (
+                                <Badge variant="outline" className="text-xs">
+                                  {selectedTemplate.name}
+                                </Badge>
+                              )}
+                              {id && tags && tags.length > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {tags.length} 个标签过滤
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <h2 className="text-base font-semibold text-foreground">节点选择</h2>
-                            <p className="text-xs text-muted-foreground">选择配置全局使用的节点源或特定固定节点</p>
+
+                          <div className="profile-section-actions" onClick={(e) => e.stopPropagation()}>
+                            {!basicExpanded && name && (
+                              <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[200px]">
+                                {name}
+                              </span>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <div className="profile-section-body">
-                        <SlotBindingEditor
-                          slot={NODE_BINDING_EDITOR_SCOPE}
-                          value={field.state.value}
-                          sources={sources}
-                          nodes={nodes}
-                          onChange={field.handleChange}
-                        />
-                        {!field.state.meta.isValid && (
-                          <div className="pt-3">
-                            <FieldError errors={field.state.meta.errors} />
+
+                        {basicExpanded && (
+                          <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <form.Field name="name">
+                                {(field) => {
+                                  const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                                  return (
+                                    <Field data-invalid={invalid}>
+                                      <FieldLabel htmlFor="profile-name" className="text-sm font-medium">
+                                        配置名称 <span className="text-destructive">*</span>
+                                      </FieldLabel>
+                                      <Input
+                                        id="profile-name"
+                                        value={field.state.value}
+                                        onBlur={field.handleBlur}
+                                        onChange={(event) => field.handleChange(event.target.value)}
+                                        placeholder="例如：日常主力聚合 / 极速游戏专线"
+                                        aria-invalid={invalid}
+                                      />
+                                      {invalid && <FieldError errors={field.state.meta.errors} />}
+                                    </Field>
+                                  )
+                                }}
+                              </form.Field>
+
+                              <form.Field name="templateId">
+                                {(field) => (
+                                  <Field>
+                                    <FieldLabel htmlFor="profile-template" className="text-sm font-medium">
+                                      规则模板 <span className="text-destructive">*</span>
+                                    </FieldLabel>
+                                    <Select
+                                      value={field.state.value}
+                                      onValueChange={(value) => requestTemplateChange(value as TemplateId)}
+                                    >
+                                      <SelectTrigger id="profile-template" className="w-full">
+                                        <SelectValue placeholder="选择规则模板" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectGroup>
+                                          <SelectLabel>内置预设模板</SelectLabel>
+                                          {builtin.map((template) => (
+                                            <SelectItem key={template.id} value={template.id}>
+                                              {template.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectGroup>
+                                        {custom.length > 0 && (
+                                          <SelectGroup>
+                                            <SelectLabel>我的自定义模板</SelectLabel>
+                                            {custom.map((template) => (
+                                              <SelectItem key={template.id} value={template.id}>
+                                                {template.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectGroup>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </Field>
+                                )}
+                              </form.Field>
+                            </div>
+
+                            {id && (
+                              <>
+                                <div className="h-px bg-border/60" />
+                                <form.Field name="tags">
+                                  {(field) => {
+                                    const invalid = field.state.meta.isTouched && !field.state.meta.isValid
+                                    return (
+                                      <Field data-invalid={invalid}>
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                          <FieldLabel htmlFor="profile-tags" className="text-sm font-medium mb-0">
+                                            全局节点标签过滤
+                                          </FieldLabel>
+                                          <span className="text-xs text-muted-foreground">
+                                            若设置，仅带有相应标签的节点才会参与分流处理（留空不过滤）
+                                          </span>
+                                        </div>
+                                        <TagCombobox
+                                          id="profile-tags"
+                                          value={field.state.value}
+                                          options={tagOptions}
+                                          max={20}
+                                          allowCreate={false}
+                                          placeholder="选择标签进行全局筛选；留空表示不过滤"
+                                          invalid={invalid}
+                                          onBlur={field.handleBlur}
+                                          onChange={field.handleChange}
+                                        />
+                                        {invalid && <FieldError errors={field.state.meta.errors} />}
+                                      </Field>
+                                    )
+                                  }}
+                                </form.Field>
+                              </>
+                            )}
                           </div>
                         )}
-                      </div>
-                    </div>
-                  )}
-                </form.Field>
+                      </>
+                    )
+                  }}
+                </form.Subscribe>
               </section>
 
-              {Boolean(
-                templates.find(({ id: templateId }) => templateId === form.state.values.templateId)?.sourceSlots.length,
-              ) && (
-                <section className="profile-section">
-                  <form.Field name="slotBindings">
-                    {(field) => {
-                      const currentTemplate = templates.find(
-                        ({ id: templateId }) => templateId === form.state.values.templateId,
-                      )
-                      const slots = currentTemplate?.sourceSlots || []
-                      const effectiveActiveKey = slots.some((s) => s.key === activeSlotKey)
-                        ? activeSlotKey
-                        : slots[0]?.key || ''
+              {/* 模块 2：全部节点 */}
+              <section className="profile-section">
+                <form.Field name="nodeBinding">
+                  {(field) => {
+                    const binding = field.state.value
+                    return (
+                      <div className="flex flex-col gap-0">
+                        <div className="profile-section-header">
+                          <div
+                            className="profile-section-header-trigger"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setNodesExpanded((prev) => !prev)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setNodesExpanded((prev) => !prev)
+                              }
+                            }}
+                          >
+                            <ChevronDown className={cn('profile-collapse-icon', nodesExpanded && 'expanded')} />
+                            <div className="flex items-center gap-2">
+                              <Globe className="size-4 text-sky-500" />
+                              <strong className="text-sm font-semibold text-foreground">全部节点</strong>
+                            </div>
 
-                      return (
-                        <div className="flex flex-col gap-0">
-                          <div className="profile-section-header">
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex items-center gap-2">
-                                <div className="profile-section-icon">
-                                  <Layers className="size-4" />
-                                </div>
-                                <div>
-                                  <h2 className="text-base font-semibold text-foreground">动态节点槽</h2>
-                                  <p className="text-xs text-muted-foreground">
-                                    为模板定义的定向节点集合绑定节点源或特定固定节点
-                                  </p>
-                                </div>
-                              </div>
-                              <Badge variant="outline" className="text-xs hidden sm:inline-flex">
-                                共 {slots.length} 个槽位
-                              </Badge>
+                            <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
+                              {binding.mode === 'source' ? (
+                                <>
+                                  <Badge
+                                    variant={binding.sourceIds.length > 0 ? 'default' : 'secondary'}
+                                    className="text-xs"
+                                  >
+                                    {binding.sourceIds.length > 0
+                                      ? `${binding.sourceIds.length} 个节点源`
+                                      : '未选节点源'}
+                                  </Badge>
+                                  {(binding.includeRegex || binding.excludeRegex) && (
+                                    <Badge variant="outline" className="text-xs">
+                                      正则已启用
+                                    </Badge>
+                                  )}
+                                </>
+                              ) : (
+                                <Badge
+                                  variant={binding.nodeIds.length > 0 ? 'default' : 'secondary'}
+                                  className="text-xs"
+                                >
+                                  {binding.nodeIds.length > 0 ? `${binding.nodeIds.length} 个指定节点` : '未选指定节点'}
+                                </Badge>
+                              )}
                             </div>
                           </div>
 
-                          {slots.length > 1 && (
-                            <div className="slot-tabs-bar">
-                              {slots.map((slot, index) => {
-                                const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
-                                const isConfigured = binding ? hasConfiguration(binding) : false
-                                const isActive = slot.key === effectiveActiveKey
+                          <div className="profile-section-actions" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-xs text-muted-foreground hidden sm:inline">全局默认分流</span>
+                          </div>
+                        </div>
 
-                                return (
-                                  <button
-                                    key={slot.key}
-                                    type="button"
-                                    onClick={() => setActiveSlotKey(slot.key)}
-                                    className={cn('slot-tab-btn', isActive && 'slot-tab-btn-active')}
-                                  >
-                                    <span className="slot-tab-index">{index + 1}</span>
-                                    <span className="slot-tab-name truncate">{slot.name}</span>
-                                    {binding && (
-                                      <span className="slot-tab-badge">
-                                        {binding.mode === 'node'
-                                          ? `${binding.nodeIds.length} 节点`
-                                          : `${binding.sourceIds.length} 源`}
-                                      </span>
-                                    )}
-                                    {isConfigured && (
-                                      <CheckCircle2 className="size-3 text-emerald-500 shrink-0 ml-0.5" />
-                                    )}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-
-                          <div className="profile-section-body">
-                            {slots.map((slot) => {
-                              if (slots.length > 1 && slot.key !== effectiveActiveKey) return null
-                              const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
-                              if (!binding) return null
-
-                              return (
-                                <div key={slot.key} className="space-y-4">
-                                  <div className="flex items-center justify-between pb-2 border-b">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-sm text-foreground">
-                                        当前槽位：{slot.name}
-                                      </span>
-                                      <Badge variant="secondary" className="text-xs">
-                                        槽位标识: {slot.key}
-                                      </Badge>
-                                    </div>
-                                  </div>
-
-                                  <SlotBindingEditor
-                                    slot={slot}
-                                    value={binding}
-                                    sources={sources}
-                                    nodes={nodes}
-                                    onChange={(next) =>
-                                      field.handleChange(
-                                        field.state.value.map((item) =>
-                                          item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                </div>
-                              )
-                            })}
-
+                        {nodesExpanded && (
+                          <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
+                            <SlotBindingEditor
+                              slot={NODE_BINDING_EDITOR_SCOPE}
+                              value={field.state.value}
+                              sources={sources}
+                              nodes={nodes}
+                              onChange={field.handleChange}
+                            />
                             {!field.state.meta.isValid && (
-                              <div className="pt-3">
+                              <div className="pt-2">
                                 <FieldError errors={field.state.meta.errors} />
                               </div>
                             )}
                           </div>
-                        </div>
-                      )
-                    }}
-                  </form.Field>
-                </section>
-              )}
+                        )}
+                      </div>
+                    )
+                  }}
+                </form.Field>
+              </section>
+
+              {/* 模块 3：动态节点槽 */}
+              {/* 模块 3：动态节点槽（直接平铺为独立折叠卡片） */}
+              <form.Subscribe selector={(state) => [state.values.templateId, state.values.slotBindings] as const}>
+                {([templateId]) => {
+                  const currentTemplate = templates.find(({ id: currentId }) => currentId === templateId)
+                  const slots = currentTemplate?.sourceSlots || []
+                  if (slots.length === 0) return null
+
+                  const isSlotExpanded = (key: string) => !collapsedSlotKeys[key]
+                  const toggleSlot = (key: string) => setCollapsedSlotKeys((prev) => ({ ...prev, [key]: !prev[key] }))
+
+                  return (
+                    <form.Field name="slotBindings">
+                      {(field) => (
+                        <>
+                          {slots.map((slot) => {
+                            const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
+                            if (!binding) return null
+                            const isConfigured = hasConfiguration(binding)
+                            const isExpanded = isSlotExpanded(slot.key)
+
+                            return (
+                              <section key={slot.key} className="profile-section">
+                                <div className="profile-section-header">
+                                  <div
+                                    className="profile-section-header-trigger"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => toggleSlot(slot.key)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
+                                        toggleSlot(slot.key)
+                                      }
+                                    }}
+                                  >
+                                    <ChevronDown className={cn('profile-collapse-icon', isExpanded && 'expanded')} />
+                                    <div className="flex items-center gap-2">
+                                      <Plug className="size-4 text-amber-500" />
+                                      <strong className="text-sm font-semibold text-foreground">
+                                        动态节点槽 · {slot.name}
+                                      </strong>
+                                    </div>
+
+                                    {binding.mode === 'source' && (binding.includeRegex || binding.excludeRegex) && (
+                                      <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
+                                        <Badge variant="outline" className="text-xs hidden md:inline-flex">
+                                          正则已启用
+                                        </Badge>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="profile-section-actions" onClick={(e) => e.stopPropagation()}>
+                                    {isConfigured ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                        <CheckCircle2 className="size-3.5" />
+                                        <span className="hidden sm:inline">已配置</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground hidden sm:inline">未配置</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {isExpanded && (
+                                  <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
+                                    <SlotBindingEditor
+                                      slot={slot}
+                                      value={binding}
+                                      sources={sources}
+                                      nodes={nodes}
+                                      onChange={(next) =>
+                                        field.handleChange(
+                                          field.state.value.map((item) =>
+                                            item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </section>
+                            )
+                          })}
+
+                          {!field.state.meta.isValid && (
+                            <div className="pt-1">
+                              <FieldError errors={field.state.meta.errors} />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </form.Field>
+                  )
+                }}
+              </form.Subscribe>
 
               {error && (
                 <Alert variant="destructive">
@@ -687,7 +767,9 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                         </span>
                         <span className="text-muted-foreground hidden sm:inline">·</span>
                         <span className="text-xs text-muted-foreground hidden md:inline">
-                          节点已选 · 槽位已配：{configuredCount} / {totalSlots}
+                          {totalSlots > 0
+                            ? `全部节点已选 · 槽位已配：${configuredCount} / ${totalSlots}`
+                            : '全部节点已选'}
                         </span>
                       </div>
 

@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldError } from '@/components/ui/field'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -300,10 +300,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
                       nodeId={nodeId}
                       node={nodesById.get(nodeId)}
                       index={index}
-                      total={value.nodeIds.length}
                       onRemove={() => onChange({ ...value, nodeIds: value.nodeIds.filter((id) => id !== nodeId) })}
-                      onMoveUp={() => moveNode(index, index - 1)}
-                      onMoveDown={() => moveNode(index, index + 1)}
                     />
                   ))}
                   {!value.nodeIds.length && (
@@ -318,11 +315,6 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
                 </div>
               </DragDropProvider>
             </div>
-            {!value.nodeIds.length && (
-              <div className="pt-2">
-                <FieldError>请至少选择一个节点以完成槽位配置</FieldError>
-              </div>
-            )}
           </Field>
         </section>
       </div>
