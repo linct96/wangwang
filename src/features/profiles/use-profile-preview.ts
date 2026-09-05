@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { parse } from 'yaml'
-import type { NodeOption, ProfileSlotBinding, TemplateDetail } from '@/api/types'
+import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
 
 export type ResolvedProxyGroup = {
   name: string
@@ -39,6 +39,7 @@ function compileFilter(patternStr?: unknown): RegExp[] {
 
 export function useProfilePreview(
   template: TemplateDetail | undefined,
+  nodeBinding: ProfileNodeBinding,
   slotBindings: ProfileSlotBinding[],
   allNodes: NodeOption[],
 ): ProfilePreviewResult {
@@ -58,42 +59,36 @@ export function useProfilePreview(
       Record<string, unknown>
     >
 
-    // 1. 各槽位分配的节点集合
-    const slotMap = new Map<string, NodeOption[]>()
-    const nodesById = new Map(allNodes.map((n) => [n.id, n]))
-
-    for (const binding of slotBindings) {
-      if (binding.mode === 'source') {
-        const selectedSourceIds = new Set(binding.sourceIds)
-        let filtered = allNodes.filter((n) => n.enabled && n.sourceEnabled && selectedSourceIds.has(n.sourceId))
+    const nodesById = new Map(allNodes.map((node) => [node.id, node]))
+    const resolveBinding = (binding: ProfileNodeBinding) => {
+      if (binding.mode === 'node')
+        return binding.nodeIds
+          .map((id) => nodesById.get(id))
+          .filter((node): node is NodeOption => Boolean(node?.enabled && node.sourceEnabled))
+      const selectedSourceIds = new Set(binding.sourceIds)
+      let filtered = allNodes.filter(
+        (node) => node.enabled && node.sourceEnabled && selectedSourceIds.has(node.sourceId),
+      )
+      try {
         if (binding.includeRegex) {
-          try {
-            const inc = new RegExp(binding.includeRegex)
-            filtered = filtered.filter((n) => inc.test(n.name))
-          } catch {
-            // 正则无效则不应用
-          }
+          const include = new RegExp(binding.includeRegex)
+          filtered = filtered.filter((node) => include.test(node.name))
         }
         if (binding.excludeRegex) {
-          try {
-            const exc = new RegExp(binding.excludeRegex)
-            filtered = filtered.filter((n) => !exc.test(n.name))
-          } catch {
-            // 正则无效则不应用
-          }
+          const exclude = new RegExp(binding.excludeRegex)
+          filtered = filtered.filter((node) => !exclude.test(node.name))
         }
-        slotMap.set(binding.slotKey, filtered)
-      } else if (binding.mode === 'node') {
-        const directNodes = binding.nodeIds
-          .map((id) => nodesById.get(id))
-          .filter((n): n is NodeOption => Boolean(n && n.enabled && n.sourceEnabled))
-        slotMap.set(binding.slotKey, directNodes)
+      } catch {
+        // 表单校验会显示无效正则，预览暂时忽略它。
       }
+      return filtered
     }
 
-    // 2. 映射到每个 proxy-group
-    const selectedNodes = [...new Map([...slotMap.values()].flat().map((node) => [node.id, node])).values()]
-    const allUniqueNodeIds = new Set<string>()
+    const slotMap = new Map(slotBindings.map((binding) => [binding.slotKey, resolveBinding(binding)]))
+    const selectedNodes = [
+      ...new Map([resolveBinding(nodeBinding), ...slotMap.values()].flat().map((node) => [node.id, node])).values(),
+    ]
+    const allUniqueNodeIds = new Set(selectedNodes.map(({ id }) => id))
     const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
       const includeFilters = compileFilter(g.filter)
       const excludeFilters = compileFilter(g['exclude-filter'])
@@ -113,7 +108,6 @@ export function useProfilePreview(
       // 去重保序
       const uniqueNodesMap = new Map<string, NodeOption>()
       for (const node of resolvedNodes) uniqueNodesMap.set(node.id, node)
-      uniqueNodesMap.forEach(({ id }) => allUniqueNodeIds.add(id))
 
       return {
         name: String(g.name || '未命名策略组'),
@@ -133,5 +127,5 @@ export function useProfilePreview(
       totalUniqueNodes: allUniqueNodeIds.size,
       emptyGroupCount,
     }
-  }, [template, slotBindings, allNodes])
+  }, [template, nodeBinding, slotBindings, allNodes])
 }

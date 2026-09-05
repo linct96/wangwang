@@ -99,20 +99,19 @@ export type NodeImportResult = {
 }
 
 export type TemplateSourceSlot = { key: string; name: string }
-export type ProfileSourceSlotBinding = {
-  slotKey: string
-  mode: 'source'
-  sourceIds: string[]
-  includeRegex: string | null
-  excludeRegex: string | null
-}
-export type ProfileNodeSlotBinding = {
-  slotKey: string
-  mode: 'node'
-  nodeIds: string[]
-  missingNodeIds: string[]
-}
-export type ProfileSlotBinding = ProfileSourceSlotBinding | ProfileNodeSlotBinding
+export type ProfileNodeBinding =
+  | {
+      mode: 'source'
+      sourceIds: string[]
+      includeRegex: string | null
+      excludeRegex: string | null
+    }
+  | {
+      mode: 'node'
+      nodeIds: string[]
+      missingNodeIds: string[]
+    }
+export type ProfileSlotBinding = ProfileNodeBinding & { slotKey: string }
 
 export type NodeOption = {
   id: string
@@ -150,6 +149,7 @@ export type Profile = {
   compiledYaml?: string | null
   compiledAt: string | null
   error: string | null
+  nodeBinding: ProfileNodeBinding
   slotBindings: ProfileSlotBinding[]
   subscriptionUrl: string
 }

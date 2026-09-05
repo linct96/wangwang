@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { CheckSquare, Sparkles, X } from 'lucide-react'
-import type { NodeOption, ProfileSlotBinding, Source, TemplateSourceSlot } from '@/api/types'
+import type { NodeOption, ProfileNodeBinding, Source, TemplateSourceSlot } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -43,10 +43,10 @@ export function SlotBindingEditor({
   onChange,
 }: {
   slot: TemplateSourceSlot
-  value: ProfileSlotBinding
+  value: ProfileNodeBinding
   sources: Source[]
   nodes: NodeOption[]
-  onChange: (value: ProfileSlotBinding) => void
+  onChange: (value: ProfileNodeBinding) => void
 }) {
   const includeInvalid = value.mode === 'source' && regexError(value.includeRegex)
   const excludeInvalid = value.mode === 'source' && regexError(value.excludeRegex)
@@ -55,8 +55,8 @@ export function SlotBindingEditor({
     if (mode === value.mode) return
     onChange(
       mode === 'source'
-        ? { slotKey: slot.key, mode, sourceIds: [], includeRegex: null, excludeRegex: null }
-        : { slotKey: slot.key, mode, nodeIds: [], missingNodeIds: [] },
+        ? { mode, sourceIds: [], includeRegex: null, excludeRegex: null }
+        : { mode, nodeIds: [], missingNodeIds: [] },
     )
   }
 

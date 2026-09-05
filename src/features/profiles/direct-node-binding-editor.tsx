@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation } from '@dnd-kit/react/sortable'
 import { AlertCircle, CheckSquare, Search, Trash2, XCircle } from 'lucide-react'
-import type { NodeOption, ProfileSlotBinding, TemplateSourceSlot } from '@/api/types'
+import type { NodeOption, ProfileNodeBinding, TemplateSourceSlot } from '@/api/types'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,9 +16,9 @@ import { SortableSelectedNode } from './sortable-selected-node'
 
 type DirectNodeBindingEditorProps = {
   slot: TemplateSourceSlot
-  value: Extract<ProfileSlotBinding, { mode: 'node' }>
+  value: Extract<ProfileNodeBinding, { mode: 'node' }>
   nodes: NodeOption[]
-  onChange: (value: ProfileSlotBinding) => void
+  onChange: (value: ProfileNodeBinding) => void
 }
 
 export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: DirectNodeBindingEditorProps) {

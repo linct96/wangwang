@@ -204,32 +204,52 @@ export function ProfileDetailPage() {
                 </div>
 
                 <div className="meta-row">
-                  <span className="meta-label">{currentTemplate?.kind === 'builtin' ? '节点来源' : '动态节点槽'}</span>
-                  <div className="flex flex-col gap-2">
-                    {profile.slotBindings.map((binding) => (
-                      <div key={binding.slotKey} className="flex flex-wrap items-center gap-1.5">
-                        {currentTemplate?.kind !== 'builtin' && (
+                  <span className="meta-label">节点选择</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {profile.nodeBinding.mode === 'source' ? (
+                      profile.nodeBinding.sourceIds.map((sourceId) => (
+                        <span key={sourceId} className="profile-pill">
+                          {sourceMap.get(sourceId) || sourceId}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="profile-pill">
+                        指定 {profile.nodeBinding.nodeIds.length} 个节点
+                        {profile.nodeBinding.missingNodeIds.length
+                          ? ` · ${profile.nodeBinding.missingNodeIds.length} 个失效`
+                          : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {profile.slotBindings.length > 0 && (
+                  <div className="meta-row">
+                    <span className="meta-label">动态节点槽</span>
+                    <div className="flex flex-col gap-2">
+                      {profile.slotBindings.map((binding) => (
+                        <div key={binding.slotKey} className="flex flex-wrap items-center gap-1.5">
                           <span className="text-xs text-muted-foreground">
                             {currentTemplate?.sourceSlots.find(({ key }) => key === binding.slotKey)?.name ||
                               binding.slotKey}
                           </span>
-                        )}
-                        {binding.mode === 'source' ? (
-                          binding.sourceIds.map((sourceId) => (
-                            <span key={sourceId} className="profile-pill">
-                              {sourceMap.get(sourceId) || sourceId}
+                          {binding.mode === 'source' ? (
+                            binding.sourceIds.map((sourceId) => (
+                              <span key={sourceId} className="profile-pill">
+                                {sourceMap.get(sourceId) || sourceId}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="profile-pill">
+                              指定 {binding.nodeIds.length} 个节点
+                              {binding.missingNodeIds.length ? ` · ${binding.missingNodeIds.length} 个失效` : ''}
                             </span>
-                          ))
-                        ) : (
-                          <span className="profile-pill">
-                            指定 {binding.nodeIds.length} 个节点
-                            {binding.missingNodeIds.length ? ` · ${binding.missingNodeIds.length} 个失效` : ''}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="meta-row">
                   <span className="meta-label">标签筛选</span>

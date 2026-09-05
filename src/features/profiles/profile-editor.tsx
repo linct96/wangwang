@@ -10,6 +10,7 @@ import { useApi, waitForJob } from '@/api/use-api'
 import type {
   NodeOption,
   Profile,
+  ProfileNodeBinding,
   ProfileSlotBinding,
   Source,
   TagOption,
@@ -49,6 +50,12 @@ function validRegex(value: string | null) {
   }
 }
 
+const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '节点选择' }
+
+function emptyNodeBinding(): ProfileNodeBinding {
+  return { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
+}
+
 function emptyBindings(template: TemplateSummary | undefined): ProfileSlotBinding[] {
   return (
     template?.sourceSlots.map(({ key }) => ({
@@ -61,7 +68,7 @@ function emptyBindings(template: TemplateSummary | undefined): ProfileSlotBindin
   )
 }
 
-function hasConfiguration(binding: ProfileSlotBinding) {
+function hasConfiguration(binding: ProfileNodeBinding) {
   return binding.mode === 'node'
     ? binding.nodeIds.length > 0
     : binding.sourceIds.length > 0 || Boolean(binding.includeRegex || binding.excludeRegex)
@@ -112,6 +119,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       name: '',
       tags: [] as string[],
       templateId: 'builtin:minimal' as TemplateId,
+      nodeBinding: emptyNodeBinding(),
       slotBindings: [] as ProfileSlotBinding[],
     },
     validators: {
@@ -120,25 +128,36 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
         tags: z
           .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
           .max(20, '标签不能超过 20 个'),
-        slotBindings: z
-          .array(
-            z.discriminatedUnion('mode', [
-              z.object({
-                slotKey: z.string(),
-                mode: z.literal('source'),
-                sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
-                includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
-                excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
-              }),
-              z.object({
-                slotKey: z.string(),
-                mode: z.literal('node'),
-                nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
-                missingNodeIds: z.array(z.string()),
-              }),
-            ]),
-          )
-          .min(1, '模板必须包含至少一个动态节点槽'),
+        nodeBinding: z.discriminatedUnion('mode', [
+          z.object({
+            mode: z.literal('source'),
+            sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
+            includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
+            excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
+          }),
+          z.object({
+            mode: z.literal('node'),
+            nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
+            missingNodeIds: z.array(z.string()),
+          }),
+        ]),
+        slotBindings: z.array(
+          z.discriminatedUnion('mode', [
+            z.object({
+              slotKey: z.string(),
+              mode: z.literal('source'),
+              sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
+              includeRegex: z.string().nullable().refine(validRegex, '包含正则格式无效'),
+              excludeRegex: z.string().nullable().refine(validRegex, '排除正则格式无效'),
+            }),
+            z.object({
+              slotKey: z.string(),
+              mode: z.literal('node'),
+              nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
+              missingNodeIds: z.array(z.string()),
+            }),
+          ]),
+        ),
         templateId: z.custom<TemplateId>(
           (value) => typeof value === 'string' && value.length > 0,
           '请选择订阅规则模板',
@@ -155,6 +174,10 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             name: value.name,
             tags: value.tags,
             templateId: value.templateId,
+            nodeBinding:
+              value.nodeBinding.mode === 'source'
+                ? value.nodeBinding
+                : { mode: value.nodeBinding.mode, nodeIds: value.nodeBinding.nodeIds },
             slotBindings: value.slotBindings.map((binding) =>
               binding.mode === 'source'
                 ? binding
@@ -217,12 +240,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             name: profile.name,
             tags: profile.tags,
             templateId: profile.templateId,
+            nodeBinding: profile.nodeBinding,
             slotBindings: profile.slotBindings,
           }
         : {
             name: '',
             tags: [],
             templateId: selectedTemplate?.id || 'builtin:minimal',
+            nodeBinding: emptyNodeBinding(),
             slotBindings: initialBindings,
           },
     )
@@ -447,83 +472,114 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               </section>
 
               <section className="profile-section">
-                <form.Field name="slotBindings">
-                  {(field) => {
-                    const currentTemplate = templates.find(
-                      ({ id: templateId }) => templateId === form.state.values.templateId,
-                    )
-                    const slots = currentTemplate?.sourceSlots || []
-                    const builtinTemplate = currentTemplate?.kind === 'builtin'
-                    const effectiveActiveKey = slots.some((s) => s.key === activeSlotKey)
-                      ? activeSlotKey
-                      : slots[0]?.key || ''
+                <form.Field name="nodeBinding">
+                  {(field) => (
+                    <div className="flex flex-col gap-0">
+                      <div className="profile-section-header">
+                        <div className="flex items-center gap-2">
+                          <div className="profile-section-icon">
+                            <Layers className="size-4" />
+                          </div>
+                          <div>
+                            <h2 className="text-base font-semibold text-foreground">节点选择</h2>
+                            <p className="text-xs text-muted-foreground">选择配置全局使用的节点源或特定固定节点</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="profile-section-body">
+                        <SlotBindingEditor
+                          slot={NODE_BINDING_EDITOR_SCOPE}
+                          value={field.state.value}
+                          sources={sources}
+                          nodes={nodes}
+                          onChange={field.handleChange}
+                        />
+                        {!field.state.meta.isValid && (
+                          <div className="pt-3">
+                            <FieldError errors={field.state.meta.errors} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </form.Field>
+              </section>
 
-                    return (
-                      <div className="flex flex-col gap-0">
-                        <div className="profile-section-header">
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                              <div className="profile-section-icon">
-                                <Layers className="size-4" />
+              {Boolean(
+                templates.find(({ id: templateId }) => templateId === form.state.values.templateId)?.sourceSlots.length,
+              ) && (
+                <section className="profile-section">
+                  <form.Field name="slotBindings">
+                    {(field) => {
+                      const currentTemplate = templates.find(
+                        ({ id: templateId }) => templateId === form.state.values.templateId,
+                      )
+                      const slots = currentTemplate?.sourceSlots || []
+                      const effectiveActiveKey = slots.some((s) => s.key === activeSlotKey)
+                        ? activeSlotKey
+                        : slots[0]?.key || ''
+
+                      return (
+                        <div className="flex flex-col gap-0">
+                          <div className="profile-section-header">
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2">
+                                <div className="profile-section-icon">
+                                  <Layers className="size-4" />
+                                </div>
+                                <div>
+                                  <h2 className="text-base font-semibold text-foreground">动态节点槽</h2>
+                                  <p className="text-xs text-muted-foreground">
+                                    为模板定义的定向节点集合绑定节点源或特定固定节点
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <h2 className="text-base font-semibold text-foreground">
-                                  {builtinTemplate ? '节点选择' : '节点分流与槽位绑定'}
-                                </h2>
-                                <p className="text-xs text-muted-foreground">
-                                  {builtinTemplate
-                                    ? '选择加入配置的节点源或特定固定节点'
-                                    : '为模板定义的各节点槽位配置接入节点源或特定固定节点'}
-                                </p>
-                              </div>
-                            </div>
-                            {!builtinTemplate && (
                               <Badge variant="outline" className="text-xs hidden sm:inline-flex">
                                 共 {slots.length} 个槽位
                               </Badge>
-                            )}
+                            </div>
                           </div>
-                        </div>
 
-                        {slots.length > 1 && (
-                          <div className="slot-tabs-bar">
-                            {slots.map((slot, index) => {
+                          {slots.length > 1 && (
+                            <div className="slot-tabs-bar">
+                              {slots.map((slot, index) => {
+                                const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
+                                const isConfigured = binding ? hasConfiguration(binding) : false
+                                const isActive = slot.key === effectiveActiveKey
+
+                                return (
+                                  <button
+                                    key={slot.key}
+                                    type="button"
+                                    onClick={() => setActiveSlotKey(slot.key)}
+                                    className={cn('slot-tab-btn', isActive && 'slot-tab-btn-active')}
+                                  >
+                                    <span className="slot-tab-index">{index + 1}</span>
+                                    <span className="slot-tab-name truncate">{slot.name}</span>
+                                    {binding && (
+                                      <span className="slot-tab-badge">
+                                        {binding.mode === 'node'
+                                          ? `${binding.nodeIds.length} 节点`
+                                          : `${binding.sourceIds.length} 源`}
+                                      </span>
+                                    )}
+                                    {isConfigured && (
+                                      <CheckCircle2 className="size-3 text-emerald-500 shrink-0 ml-0.5" />
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          <div className="profile-section-body">
+                            {slots.map((slot) => {
+                              if (slots.length > 1 && slot.key !== effectiveActiveKey) return null
                               const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
-                              const isConfigured = binding ? hasConfiguration(binding) : false
-                              const isActive = slot.key === effectiveActiveKey
+                              if (!binding) return null
 
                               return (
-                                <button
-                                  key={slot.key}
-                                  type="button"
-                                  onClick={() => setActiveSlotKey(slot.key)}
-                                  className={cn('slot-tab-btn', isActive && 'slot-tab-btn-active')}
-                                >
-                                  <span className="slot-tab-index">{index + 1}</span>
-                                  <span className="slot-tab-name truncate">{slot.name}</span>
-                                  {binding && (
-                                    <span className="slot-tab-badge">
-                                      {binding.mode === 'node'
-                                        ? `${binding.nodeIds.length} 节点`
-                                        : `${binding.sourceIds.length} 源`}
-                                    </span>
-                                  )}
-                                  {isConfigured && <CheckCircle2 className="size-3 text-emerald-500 shrink-0 ml-0.5" />}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-
-                        <div className="profile-section-body">
-                          {slots.map((slot) => {
-                            if (slots.length > 1 && slot.key !== effectiveActiveKey) return null
-                            const binding = field.state.value.find(({ slotKey }) => slotKey === slot.key)
-                            if (!binding) return null
-
-                            return (
-                              <div key={slot.key} className="space-y-4">
-                                {!builtinTemplate && (
+                                <div key={slot.key} className="space-y-4">
                                   <div className="flex items-center justify-between pb-2 border-b">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm text-foreground">
@@ -534,34 +590,36 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                       </Badge>
                                     </div>
                                   </div>
-                                )}
 
-                                <SlotBindingEditor
-                                  slot={slot}
-                                  value={binding}
-                                  sources={sources}
-                                  nodes={nodes}
-                                  onChange={(next) =>
-                                    field.handleChange(
-                                      field.state.value.map((item) => (item.slotKey === slot.key ? next : item)),
-                                    )
-                                  }
-                                />
+                                  <SlotBindingEditor
+                                    slot={slot}
+                                    value={binding}
+                                    sources={sources}
+                                    nodes={nodes}
+                                    onChange={(next) =>
+                                      field.handleChange(
+                                        field.state.value.map((item) =>
+                                          item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )
+                            })}
+
+                            {!field.state.meta.isValid && (
+                              <div className="pt-3">
+                                <FieldError errors={field.state.meta.errors} />
                               </div>
-                            )
-                          })}
-
-                          {!field.state.meta.isValid && (
-                            <div className="pt-3">
-                              <FieldError errors={field.state.meta.errors} />
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  }}
-                </form.Field>
-              </section>
+                      )
+                    }}
+                  </form.Field>
+                </section>
+              )}
 
               {error && (
                 <Alert variant="destructive">
@@ -577,14 +635,19 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                 mobileTab !== 'preview' && 'profile-pane-mobile-hidden',
               )}
             >
-              <form.Subscribe selector={(state) => [state.values.slotBindings, state.values.templateId] as const}>
-                {([slotBindings, templateId]) => {
+              <form.Subscribe
+                selector={(state) =>
+                  [state.values.nodeBinding, state.values.slotBindings, state.values.templateId] as const
+                }
+              >
+                {([nodeBinding, slotBindings, templateId]) => {
                   const currentTemplate = templates.find((t) => t.id === templateId)
                   return (
                     <LivePreviewWrapper
                       templateDetail={templateDetail}
                       templateDetailLoading={templateDetailLoading}
                       templateName={currentTemplate?.name}
+                      nodeBinding={nodeBinding}
                       slotBindings={slotBindings}
                       nodes={nodes}
                       onToggleCollapse={() => setPreviewCollapsed((prev) => !prev)}
@@ -603,7 +666,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                   const configuredCount = values.slotBindings.filter(hasConfiguration).length
                   const totalSlots = currentTemplate?.sourceSlots.length || 0
 
-                  const unavailable = values.slotBindings.some(
+                  const unavailable = [values.nodeBinding, ...values.slotBindings].some(
                     (binding) =>
                       binding.mode === 'node' &&
                       binding.nodeIds.some((nodeId) => {
@@ -624,11 +687,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                         </span>
                         <span className="text-muted-foreground hidden sm:inline">·</span>
                         <span className="text-xs text-muted-foreground hidden md:inline">
-                          {currentTemplate?.kind === 'builtin'
-                            ? configuredCount
-                              ? '节点来源已配置'
-                              : '节点来源未配置'
-                            : `槽位已配：${configuredCount} / ${totalSlots}`}
+                          节点已选 · 槽位已配：{configuredCount} / {totalSlots}
                         </span>
                       </div>
 
@@ -691,6 +750,7 @@ function LivePreviewWrapper({
   templateDetail,
   templateDetailLoading,
   templateName,
+  nodeBinding,
   slotBindings,
   nodes,
   onToggleCollapse,
@@ -698,11 +758,12 @@ function LivePreviewWrapper({
   templateDetail: TemplateDetail | undefined
   templateDetailLoading: boolean
   templateName: string | undefined
+  nodeBinding: ProfileNodeBinding
   slotBindings: ProfileSlotBinding[]
   nodes: NodeOption[]
   onToggleCollapse?: () => void
 }) {
-  const preview = useProfilePreview(templateDetail, slotBindings, nodes)
+  const preview = useProfilePreview(templateDetail, nodeBinding, slotBindings, nodes)
 
   return (
     <>
