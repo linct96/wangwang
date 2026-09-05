@@ -193,7 +193,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       add({ level: 'warning', code: 'RAW_GROUP', message: `代理组“${group.name}”仅支持 YAML 编辑`, groupId: group.id })
       return
     }
-    if (!group.members.length)
+    if (!group.members.length && !group.includeAllProxies && !group.includeAllProviders)
       add({
         level: 'error',
         code: 'GROUP_MEMBERS_EMPTY',

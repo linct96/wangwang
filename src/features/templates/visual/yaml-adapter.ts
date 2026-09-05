@@ -55,8 +55,12 @@ const GROUP_KEYS = new Set([
   'tolerance',
   'strategy',
   'default-selected',
+  'include-all',
+  'include-all-proxies',
+  'include-all-providers',
   'filter',
   'exclude-filter',
+  'exclude-type',
 ])
 
 export type VisualParseResult = {
@@ -301,8 +305,21 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
       type: type as SupportedProxyGroupType,
       members: ((value.proxies as string[] | undefined) || []).map((member) => parseMember(member, groupIds, slotKeys)),
       defaultSelected: typeof value['default-selected'] === 'string' ? value['default-selected'] : undefined,
+      includeAllProxies:
+        typeof value['include-all-proxies'] === 'boolean'
+          ? value['include-all-proxies']
+          : typeof value['include-all'] === 'boolean'
+            ? value['include-all']
+            : undefined,
+      includeAllProviders:
+        typeof value['include-all-providers'] === 'boolean'
+          ? value['include-all-providers']
+          : typeof value['include-all'] === 'boolean'
+            ? value['include-all']
+            : undefined,
       filter: typeof value.filter === 'string' ? value.filter : undefined,
       excludeFilter: typeof value['exclude-filter'] === 'string' ? value['exclude-filter'] : undefined,
+      excludeType: typeof value['exclude-type'] === 'string' ? value['exclude-type'] : undefined,
       extras,
     }
     if (type !== 'select') {
@@ -490,8 +507,11 @@ function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
     proxies: group.members.map((member) => memberValue(member, names)),
   }
   if (group.type === 'select' && group.defaultSelected) value['default-selected'] = group.defaultSelected
+  if (group.includeAllProxies !== undefined) value['include-all-proxies'] = group.includeAllProxies
+  if (group.includeAllProviders !== undefined) value['include-all-providers'] = group.includeAllProviders
   if (group.filter) value.filter = group.filter
   if (group.excludeFilter) value['exclude-filter'] = group.excludeFilter
+  if (group.excludeType) value['exclude-type'] = group.excludeType
   if (group.type !== 'select') {
     value.url = group.url
     value.interval = group.interval

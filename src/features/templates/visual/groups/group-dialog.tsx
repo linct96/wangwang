@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Smile } from 'lucide-react'
+import { CircleHelp, Smile } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDialog } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { newGroup } from '../yaml-adapter'
 import {
@@ -153,6 +154,27 @@ export function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) =>
   )
 }
 
+function FieldHelp({ name }: { name: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="button"
+          tabIndex={-1}
+          className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        >
+          <CircleHelp className="size-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="font-mono text-xs">{name}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function GroupDialog({
   groups,
   sourceSlots,
@@ -215,7 +237,10 @@ export function GroupDialog({
           <FieldGroup className="gap-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
-                <FieldLabel>名称 (name)</FieldLabel>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>名称</span>
+                  <FieldHelp name="name" />
+                </FieldLabel>
                 <div className="flex gap-1.5 items-center">
                   <ProxyGroupIconPicker onSelect={handleSelectIcon} />
                   <Input
@@ -227,7 +252,10 @@ export function GroupDialog({
                 </div>
               </Field>
               <Field>
-                <FieldLabel>类型 (type)</FieldLabel>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>类型</span>
+                  <FieldHelp name="type" />
+                </FieldLabel>
                 <Select
                   value={form.type}
                   onValueChange={(type: SupportedProxyGroupType) =>
@@ -262,7 +290,10 @@ export function GroupDialog({
             </div>
             {form.type === 'select' && (
               <Field>
-                <FieldLabel>默认节点 (default-selected)</FieldLabel>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>默认节点</span>
+                  <FieldHelp name="default-selected" />
+                </FieldLabel>
                 <Select
                   value={form.defaultSelected || '__first__'}
                   onValueChange={(defaultSelected) =>
@@ -294,7 +325,48 @@ export function GroupDialog({
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field>
-                <FieldLabel>节点筛选 (filter)</FieldLabel>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>包含全部节点</span>
+                  <FieldHelp name="include-all-proxies" />
+                </FieldLabel>
+                <Select
+                  value={form.includeAllProxies ? 'true' : 'false'}
+                  onValueChange={(val) => setForm({ ...form, includeAllProxies: val === 'true' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">关闭</SelectItem>
+                    <SelectItem value="true">开启</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>包含全部代理集合</span>
+                  <FieldHelp name="include-all-providers" />
+                </FieldLabel>
+                <Select
+                  value={form.includeAllProviders ? 'true' : 'false'}
+                  onValueChange={(val) => setForm({ ...form, includeAllProviders: val === 'true' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">关闭</SelectItem>
+                    <SelectItem value="true">开启</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>节点筛选</span>
+                  <FieldHelp name="filter" />
+                </FieldLabel>
                 <Input
                   value={form.filter || ''}
                   placeholder="例如：(?i)港|hk"
@@ -302,19 +374,35 @@ export function GroupDialog({
                 />
               </Field>
               <Field>
-                <FieldLabel>排除筛选 (exclude-filter)</FieldLabel>
+                <FieldLabel className="items-center gap-1.5">
+                  <span>排除筛选</span>
+                  <FieldHelp name="exclude-filter" />
+                </FieldLabel>
                 <Input
                   value={form.excludeFilter || ''}
                   placeholder="例如：美国|日本"
                   onChange={(event) => setForm({ ...form, excludeFilter: event.target.value || undefined })}
                 />
               </Field>
+              <Field className="sm:col-span-2">
+                <FieldLabel className="items-center gap-1.5">
+                  <span>排除节点类型</span>
+                  <FieldHelp name="exclude-type" />
+                </FieldLabel>
+                <Input
+                  value={form.excludeType || ''}
+                  placeholder="例如：direct|http|socks5"
+                  onChange={(event) => setForm({ ...form, excludeType: event.target.value || undefined })}
+                />
+              </Field>
             </div>
-            <p className="text-xs text-muted-foreground">仅对节点源槽位引入的节点生效，支持用反引号分隔多个正则。</p>
             {form.type !== 'select' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field className={cn(form.type === 'url-test' || form.type === 'load-balance' ? 'sm:col-span-2' : '')}>
-                  <FieldLabel>测试 URL (url)</FieldLabel>
+                  <FieldLabel className="items-center gap-1.5">
+                    <span>测试 URL</span>
+                    <FieldHelp name="url" />
+                  </FieldLabel>
                   <Input
                     value={form.url || ''}
                     placeholder="https://www.gstatic.com/generate_204"
@@ -322,7 +410,10 @@ export function GroupDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>检测间隔 (interval，秒)</FieldLabel>
+                  <FieldLabel className="items-center gap-1.5">
+                    <span>检测间隔（秒）</span>
+                    <FieldHelp name="interval" />
+                  </FieldLabel>
                   <Input
                     type="number"
                     min={1}
@@ -332,7 +423,10 @@ export function GroupDialog({
                 </Field>
                 {form.type === 'url-test' && (
                   <Field>
-                    <FieldLabel>容差 (tolerance，毫秒)</FieldLabel>
+                    <FieldLabel className="items-center gap-1.5">
+                      <span>容差（毫秒）</span>
+                      <FieldHelp name="tolerance" />
+                    </FieldLabel>
                     <Input
                       type="number"
                       min={0}
@@ -343,7 +437,10 @@ export function GroupDialog({
                 )}
                 {form.type === 'load-balance' && (
                   <Field>
-                    <FieldLabel>均衡策略 (strategy)</FieldLabel>
+                    <FieldLabel className="items-center gap-1.5">
+                      <span>均衡策略</span>
+                      <FieldHelp name="strategy" />
+                    </FieldLabel>
                     <Select
                       value={form.strategy || 'consistent-hashing'}
                       onValueChange={(strategy: SupportedLoadBalanceStrategy) => setForm({ ...form, strategy })}

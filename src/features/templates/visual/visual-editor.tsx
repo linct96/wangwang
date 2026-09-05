@@ -1,20 +1,19 @@
-import { useState } from 'react'
-import { nanoid } from 'nanoid'
-import { LibraryBig, ListPlus, Plus, Trash2 } from 'lucide-react'
+import { LibraryBig, ListPlus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { groupReferences, resolvePresetNoResolve, ruleProviderReferences } from './validation'
 import { findPotentialRawProviderReferences, findPotentialRawReferences, newRule } from './yaml-adapter'
 import { GroupList } from './groups/group-list'
 import { RuleList } from './rules/rule-list'
 import { GroupDialog } from './groups/group-dialog'
 import { RuleDialog } from './rules/rule-dialog'
+import { SlotDialog, SlotList } from './slots'
 import {
   type ProxyGroupDraft,
   type RuleSetRuleDraft,
   type RuleProviderDraft,
+  type SourceSlotDraft,
   type StructuredRuleDraft,
   type VisualChangeMeta,
   type VisualIssue,
@@ -39,29 +38,35 @@ export function VisualTemplateEditor({
   customGeo?: boolean
 }) {
   const warnings = issues.filter((issue) => issue.level === 'warning')
-  const [slotName, setSlotName] = useState('')
   const update = (next: VisualTemplateDraft, meta?: VisualChangeMeta) => onChange(next, meta)
 
-  function addSlot() {
-    const name = slotName.trim()
-    if (!name) return
-    if (draft.sourceSlots.some((slot) => slot.name === name)) return void toast.error('槽位名称不能重复')
+  function addSlot(slot: SourceSlotDraft) {
     update({
       ...draft,
-      sourceSlots: [...draft.sourceSlots, { key: `__WANGWANG_SOURCE_SLOT_${nanoid(6)}__`, name }],
+      sourceSlots: [...draft.sourceSlots, slot],
     })
-    setSlotName('')
   }
 
-  function removeSlot(key: string) {
+  function saveSlot(slot: SourceSlotDraft) {
+    update({
+      ...draft,
+      sourceSlots: draft.sourceSlots.map((item) => (item.key === slot.key ? slot : item)),
+    })
+  }
+
+  function updateSlots(sourceSlots: SourceSlotDraft[], meta?: VisualChangeMeta) {
+    update({ ...draft, sourceSlots }, meta)
+  }
+
+  function removeSlot(slot: SourceSlotDraft) {
     const used = draft.groups.some(
       (group) =>
         group.kind === 'structured' &&
-        group.members.some((member) => member.kind === 'source-slot' && member.slotKey === key),
+        group.members.some((member) => member.kind === 'source-slot' && member.slotKey === slot.key),
     )
     if (used) return void toast.error('该槽位正在被代理组引用，请先移除引用')
     if (draft.sourceSlots.length === 1) return void toast.error('模板至少需要一个节点源槽位')
-    update({ ...draft, sourceSlots: draft.sourceSlots.filter((slot) => slot.key !== key) })
+    update({ ...draft, sourceSlots: draft.sourceSlots.filter((item) => item.key !== slot.key) })
   }
 
   function addRule(rule: StructuredRuleDraft) {
@@ -173,53 +178,22 @@ export function VisualTemplateEditor({
             <span className="template-section-count">{draft.sourceSlots.length}</span>
           </div>
           <div className="template-rule-header-right">
-            <Input
-              value={slotName}
-              maxLength={40}
-              placeholder="槽位名称"
-              aria-label="新槽位名称"
-              onChange={(event) => setSlotName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  addSlot()
-                }
-              }}
-            />
-            <Button type="button" variant="outline" disabled={!slotName.trim()} onClick={addSlot}>
-              <Plus data-icon="inline-start" />
-              添加槽位
-            </Button>
+            <SlotDialog slots={draft.sourceSlots} groups={draft.groups} onSave={addSlot}>
+              <Button type="button" disabled={draft.sourceSlots.length >= 20}>
+                <Plus data-icon="inline-start" />
+                添加槽位
+              </Button>
+            </SlotDialog>
           </div>
         </header>
-        <div className="template-visual-list">
-          {draft.sourceSlots.map((slot) => (
-            <div key={slot.key} className="template-visual-card flex items-center gap-2 p-3">
-              <Input
-                value={slot.name}
-                maxLength={40}
-                aria-label="槽位名称"
-                onChange={(event) =>
-                  update({
-                    ...draft,
-                    sourceSlots: draft.sourceSlots.map((item) =>
-                      item.key === slot.key ? { ...item, name: event.target.value } : item,
-                    ),
-                  })
-                }
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`删除槽位 ${slot.name}`}
-                onClick={() => removeSlot(slot.key)}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
-        </div>
+        <SlotList
+          slots={draft.sourceSlots}
+          groups={draft.groups}
+          issues={issues}
+          onChange={updateSlots}
+          onSave={saveSlot}
+          onDelete={removeSlot}
+        />
       </section>
       <section className="template-visual-section">
         <header className="template-visual-toolbar">

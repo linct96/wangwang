@@ -1,8 +1,9 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable'
-import { GripVertical, Plus, X } from 'lucide-react'
+import { CircleHelp, GripVertical, Plus, X } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
   memberLabel,
@@ -97,7 +98,25 @@ export function MemberEditor({
 
   return (
     <Field>
-      <FieldLabel>包含节点与子组 (proxies)</FieldLabel>
+      <FieldLabel className="items-center gap-1.5">
+        <span>包含节点与子组</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="button"
+              tabIndex={-1}
+              className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+            >
+              <CircleHelp className="size-3.5" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="font-mono text-xs">proxies</TooltipContent>
+        </Tooltip>
+      </FieldLabel>
       <DragDropProvider
         onDragEnd={(event) => {
           if (event.canceled || !isSortableOperation(event.operation) || !event.operation.source) return

@@ -8,7 +8,9 @@ export type VisualTemplateDraft = {
   rules: RuleDraft[]
 }
 
-export type VisualChangeMeta = { type: 'normal' } | { type: 'reorder'; scope: 'groups' | 'rules' | 'ruleProviders' }
+export type VisualChangeMeta =
+  | { type: 'normal' }
+  | { type: 'reorder'; scope: 'groups' | 'rules' | 'ruleProviders' | 'sourceSlots' }
 
 export type GeoSettingsDraft = {
   geodataMode?: boolean | null
@@ -33,8 +35,11 @@ export type StructuredProxyGroupDraft = {
   type: SupportedProxyGroupType
   members: ProxyGroupMemberDraft[]
   defaultSelected?: string
+  includeAllProxies?: boolean
+  includeAllProviders?: boolean
   filter?: string
   excludeFilter?: string
+  excludeType?: string
   url?: string
   interval?: number
   tolerance?: number
