@@ -552,7 +552,6 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
-  doc.delete('x-wangwang')
   applyGeoSettings(doc, draft.geo)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
   const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))

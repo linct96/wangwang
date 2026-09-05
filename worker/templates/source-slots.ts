@@ -1,5 +1,3 @@
-import { isMap, parseDocument } from 'yaml'
-
 export const SOURCE_SLOT_KEY_PATTERN = /^__WANGWANG_SOURCE_SLOT_[A-Za-z0-9_-]{6}__$/
 
 export type TemplateSourceSlot = {
@@ -24,15 +22,4 @@ export function validateTemplateSourceSlots(value: unknown): TemplateSourceSlot[
   if (new Set(slots.map(({ key }) => key)).size !== slots.length) throw new Error('节点源槽位 key 不能重复')
   if (new Set(slots.map(({ name }) => name)).size !== slots.length) throw new Error('节点源槽位名称不能重复')
   return slots
-}
-
-export function extractLegacyTemplateSlots(yaml: string) {
-  const doc = parseDocument(yaml)
-  if (doc.errors.length || !isMap(doc.contents)) return null
-  const root = doc.toJS({ maxAliasCount: 20 }) as Record<string, unknown>
-  const metadata = root['x-wangwang']
-  if (!object(metadata) || metadata.sources === undefined) return null
-  const sourceSlots = validateTemplateSourceSlots(metadata.sources)
-  doc.delete('x-wangwang')
-  return { yaml: String(doc), sourceSlots }
 }

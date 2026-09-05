@@ -2,8 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { templateSlots, templates } from '../db'
 import { builtinTemplate } from './builtin'
-import { extractLegacyTemplateSlots, type TemplateSourceSlot } from './source-slots'
-import { parseTemplateYaml } from './validator'
+import type { TemplateSourceSlot } from './source-slots'
 
 export type ResolvedTemplate = {
   id: string
@@ -21,24 +20,7 @@ async function customTemplateView(env: Env, template: typeof templates.$inferSel
     .from(templateSlots)
     .where(eq(templateSlots.templateId, template.id))
     .orderBy(asc(templateSlots.position))
-  if (rows.length) return { ...template, sourceSlots: rows }
-
-  // SQLite 无法安全解析 YAML，旧模板在首次读取时一次性完成数据迁移。
-  const legacy = extractLegacyTemplateSlots(template.yaml)
-  if (!legacy) return { ...template, sourceSlots: [] }
-  parseTemplateYaml(legacy.yaml, legacy.sourceSlots)
-  await env.DB.batch([
-    ...legacy.sourceSlots.map(({ key, name }, position) =>
-      env.DB.prepare('INSERT INTO template_slots (template_id, `key`, name, position) VALUES (?, ?, ?, ?)').bind(
-        template.id,
-        key,
-        name,
-        position,
-      ),
-    ),
-    env.DB.prepare('UPDATE templates SET yaml = ? WHERE id = ?').bind(legacy.yaml, template.id),
-  ])
-  return { ...template, yaml: legacy.yaml, sourceSlots: legacy.sourceSlots }
+  return { ...template, sourceSlots: rows }
 }
 
 export async function resolveCustomTemplates(env: Env, rows: (typeof templates.$inferSelect)[]) {
