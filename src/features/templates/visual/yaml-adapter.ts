@@ -68,6 +68,27 @@ export type VisualParseResult = {
   warnings: VisualIssue[]
 }
 
+const SOURCE_SLOT_KEY_PATTERN = /^__WANGWANG_SOURCE_SLOT_[A-Za-z0-9_-]{6}__$/
+
+export function inferSourceSlots(yamlText: string): SourceSlotDraft[] {
+  const doc = parseDocument(yamlText)
+  if (doc.errors.length || !isMap(doc.contents)) return []
+  const root = doc.toJS() as Record<string, unknown>
+  if (!Array.isArray(root['proxy-groups'])) return []
+  const keys = [
+    ...new Set(
+      root['proxy-groups'].flatMap((group) =>
+        object(group) && Array.isArray(group.proxies)
+          ? group.proxies.filter(
+              (value): value is string => typeof value === 'string' && SOURCE_SLOT_KEY_PATTERN.test(value),
+            )
+          : [],
+      ),
+    ),
+  ]
+  return keys.map((key, index) => ({ key, name: `节点源槽位 ${index + 1}` }))
+}
+
 export function parseGeoSettings(root: Record<string, unknown>): { draft: GeoSettingsDraft; warnings: VisualIssue[] } {
   const warnings: VisualIssue[] = []
   const bool = (key: string, field: 'geodata-mode' | 'geo-auto-update') => {
@@ -257,7 +278,7 @@ function parseRule(
   }
 }
 
-export function parseVisualTemplate(yamlText: string): VisualParseResult {
+export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDraft[]): VisualParseResult {
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
@@ -266,16 +287,9 @@ export function parseVisualTemplate(yamlText: string): VisualParseResult {
   if (root.rules !== undefined && (!Array.isArray(root.rules) || root.rules.some((rule) => typeof rule !== 'string')))
     throw new Error('rules 必须是字符串数组')
 
+  if (Object.hasOwn(root, 'x-wangwang')) throw new Error('模板 YAML 不能包含 x-wangwang')
   const rows = root['proxy-groups']
   const geo = parseGeoSettings(root)
-  const metadata = object(root['x-wangwang']) ? root['x-wangwang'] : {}
-  const sourceSlots: SourceSlotDraft[] = Array.isArray(metadata.sources)
-    ? metadata.sources.flatMap((source) =>
-        object(source) && typeof source.key === 'string' && typeof source.name === 'string'
-          ? [{ key: source.key, name: source.name }]
-          : [],
-      )
-    : []
   const slotKeys = new Set(sourceSlots.map(({ key }) => key))
   const groupIds = new Map<string, string>()
   rows.forEach((row, index) => {
@@ -538,7 +552,7 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   const doc = parseDocument(yamlText)
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
-  doc.set('x-wangwang', { sources: draft.sourceSlots })
+  doc.delete('x-wangwang')
   applyGeoSettings(doc, draft.geo)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
   const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))

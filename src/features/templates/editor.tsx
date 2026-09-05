@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { formatYaml } from '@/lib/yaml-editor'
 import { TemplatePreview } from './template-preview'
 import { Segmented } from '@/components/ui/segmented'
-import { parseVisualTemplate, applyVisualTemplate } from './visual/yaml-adapter'
+import { applyVisualTemplate, inferSourceSlots, parseVisualTemplate } from './visual/yaml-adapter'
 import { validateVisualDraft } from './visual/validation'
 import { VisualTemplateEditor } from './visual/visual-editor'
 import type { VisualChangeMeta, VisualTemplateDraft } from './visual/model'
@@ -25,11 +25,8 @@ import '@/styles/templates.css'
 const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
 type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
-const blankTemplate = `x-wangwang:
-  sources:
-    - key: __WANGWANG_SOURCE_SLOT_blank1__
-      name: 默认节点源
-proxy-groups:
+const blankSourceSlots = [{ key: '__WANGWANG_SOURCE_SLOT_blank1__', name: '默认节点源' }]
+const blankTemplate = `proxy-groups:
   - name: 节点选择
     type: select
     proxies:
@@ -60,11 +57,12 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const initialMode = source === 'import' ? 'yaml' : 'visual'
+  const initialSourceSlots = source === 'blank' ? blankSourceSlots : []
   const [mode, setMode] = useState<'visual' | 'yaml'>(initialMode)
   const [visualDraft, setVisualDraft] = useState<VisualTemplateDraft | null>(() => {
     if (source === 'blank') {
       try {
-        return parseVisualTemplate(blankTemplate).draft
+        return parseVisualTemplate(blankTemplate, initialSourceSlots).draft
       } catch {
         return null
       }
@@ -74,7 +72,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [visualIssues, setVisualIssues] = useState<ReturnType<typeof validateVisualDraft>>(() => {
     if (source === 'blank') {
       try {
-        const result = parseVisualTemplate(blankTemplate)
+        const result = parseVisualTemplate(blankTemplate, initialSourceSlots)
         return validateVisualDraft(result.draft, result.warnings)
       } catch {
         return []
@@ -83,6 +81,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     return []
   })
   const yamlRef = useRef(yaml)
+  const [sourceSlots, setSourceSlots] = useState(initialSourceSlots)
+  const sourceSlotsRef = useRef(initialSourceSlots)
   const visualDraftRef = useRef(visualDraft)
   const materializedDraftRef = useRef(visualDraft)
   const pendingValidationRef = useRef<{ type: 'idle' | 'timeout'; id: number } | null>(null)
@@ -146,9 +146,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         setName(id ? template.name : `${template.name} 副本`)
         setDescription(template.description || '')
         yamlRef.current = template.yaml
+        sourceSlotsRef.current = template.sourceSlots
+        setSourceSlots(template.sourceSlots)
         setYaml(template.yaml)
         try {
-          const result = parseVisualTemplate(template.yaml)
+          const result = parseVisualTemplate(template.yaml, template.sourceSlots)
           visualDraftRef.current = result.draft
           materializedDraftRef.current = result.draft
           setVisualDraft(result.draft)
@@ -174,7 +176,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   useEffect(() => {
     if (source === 'blank' && yaml && !visualDraft) {
       try {
-        const result = parseVisualTemplate(yaml)
+        const result = parseVisualTemplate(yaml, sourceSlotsRef.current)
         visualDraftRef.current = result.draft
         materializedDraftRef.current = result.draft
         setVisualDraft(result.draft)
@@ -188,7 +190,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   function enterVisualMode() {
     try {
-      const result = parseVisualTemplate(yamlRef.current)
+      const result = parseVisualTemplate(yamlRef.current, sourceSlotsRef.current)
       visualDraftRef.current = result.draft
       materializedDraftRef.current = result.draft
       setVisualDraft(result.draft)
@@ -212,6 +214,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   function updateVisualDraft(nextDraft: VisualTemplateDraft, meta?: VisualChangeMeta) {
     if (meta?.type === 'reorder') {
+      sourceSlotsRef.current = nextDraft.sourceSlots
+      setSourceSlots(nextDraft.sourceSlots)
       visualDraftRef.current = nextDraft
       setVisualDraft(nextDraft)
       scheduleVisualValidation(nextDraft)
@@ -223,6 +227,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     try {
       const nextYaml = applyVisualTemplate(yamlRef.current, nextDraft, materializedDraftRef.current || undefined)
       yamlRef.current = nextYaml
+      sourceSlotsRef.current = nextDraft.sourceSlots
+      setSourceSlots(nextDraft.sourceSlots)
       visualDraftRef.current = nextDraft
       materializedDraftRef.current = nextDraft
       setVisualDraft(nextDraft)
@@ -243,6 +249,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     }
     const nextYaml = await file.text()
     yamlRef.current = nextYaml
+    sourceSlotsRef.current = inferSourceSlots(nextYaml)
+    setSourceSlots(sourceSlotsRef.current)
     visualDraftRef.current = null
     materializedDraftRef.current = null
     setYaml(nextYaml)
@@ -257,7 +265,10 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     setError('')
     try {
       const yamlToValidate = mode === 'visual' ? materializeVisualYaml() : yamlRef.current
-      await api('/templates/validate', { method: 'POST', body: JSON.stringify({ yaml: yamlToValidate }) })
+      await api('/templates/validate', {
+        method: 'POST',
+        body: JSON.stringify({ yaml: yamlToValidate, sourceSlots: sourceSlotsRef.current }),
+      })
       toast.success('模板校验通过')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '模板校验失败')
@@ -276,7 +287,12 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         id ? `/templates/${id}` : '/templates',
         {
           method: id ? 'PATCH' : 'POST',
-          body: JSON.stringify({ name, description: description.trim() || null, yaml: yamlToSave }),
+          body: JSON.stringify({
+            name,
+            description: description.trim() || null,
+            yaml: yamlToSave,
+            sourceSlots: sourceSlotsRef.current,
+          }),
         },
       )
       const jobs = 'jobIds' in result ? result.jobIds.length : 0
@@ -433,6 +449,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
               yaml={yaml}
               getYaml={mode === 'visual' ? materializeVisualYaml : undefined}
               profiles={profiles}
+              sourceSlots={sourceSlots}
             />
           </aside>
         </form>

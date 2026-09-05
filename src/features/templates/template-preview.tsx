@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { api } from '@/api/client'
-import type { Profile, TemplateId, TemplatePreview as PreviewResult } from '@/api/types'
+import type { Profile, TemplateId, TemplatePreview as PreviewResult, TemplateSourceSlot } from '@/api/types'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -11,12 +11,14 @@ export function TemplatePreview({
   yaml,
   getYaml,
   profiles,
+  sourceSlots,
   auto = false,
 }: {
   templateId?: TemplateId
   yaml?: string
   getYaml?: () => string
   profiles: Profile[]
+  sourceSlots?: TemplateSourceSlot[]
   auto?: boolean
 }) {
   const [profileId, setProfileId] = useState('sample')
@@ -34,6 +36,7 @@ export function TemplatePreview({
         body: JSON.stringify({
           templateId,
           yaml: currentYaml,
+          sourceSlots: currentYaml ? sourceSlots : undefined,
           profileId: profileId === 'sample' ? undefined : profileId,
         }),
         signal,
