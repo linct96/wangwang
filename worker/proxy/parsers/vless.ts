@@ -17,7 +17,6 @@ export function parseVless(url: URL, config: ProxyConfig) {
       host: url.searchParams.get('host') || undefined,
       mode: url.searchParams.get('mode') || undefined,
     }
-    config['__warning'] = '暂未完整支持的 VLESS transport: xhttp'
   }
   const security = url.searchParams.get('security')
   if (security === 'tls' || security === 'reality' || ['1', 'true'].includes(url.searchParams.get('tls') || '')) {

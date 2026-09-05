@@ -172,7 +172,7 @@ export async function parseProxyText(text: string, nodeNameFilter: string | null
   if (!configs.length) {
     for (const [index, line] of content.split(/\r?\n/).entries()) {
       const value = line.trim()
-      if (!value) continue
+      if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) continue
       try {
         configs.push(normalize(parseUri(value)))
       } catch (error) {

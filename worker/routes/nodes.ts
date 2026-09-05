@@ -316,6 +316,7 @@ nodesRouter.get('/options', async (c) => {
   const items = await db(c.env)
     .select({
       id: nodes.id,
+      physicalNodeId: nodes.physicalNodeId,
       name: sql<string>`coalesce(${nodes.alias}, ${nodes.originalName})`,
       sourceId: sources.id,
       sourceName: sources.name,
