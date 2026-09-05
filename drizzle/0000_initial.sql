@@ -164,7 +164,7 @@ CREATE TABLE `sources` (
 	`url` text,
 	`pending_url` text,
 	`node_name_filter` text,
-	`user_agent` text DEFAULT 'mihomo' NOT NULL,
+	`user_agent` text DEFAULT 'clash-verge/v2.5.2' NOT NULL,
 	`refresh_interval_hours` integer DEFAULT 0 NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
 	`etag` text,

@@ -22,10 +22,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { formatBytes, formatDate, formatRelativeTime } from '@/lib/format'
 
 const customUserAgent = '__custom__'
+const defaultUserAgent = 'clash-verge/v2.5.2'
 const userAgentPresets = [
-  { label: 'Clash Verge Rev', value: 'clash-verge/v2.5.2' },
+  { label: 'Clash Verge Rev', value: defaultUserAgent },
   { label: 'FlClash', value: 'FlClash/v0.8.96 clash-verge Platform/windows' },
-  { label: 'Mihomo', value: 'mihomo' },
 ]
 
 export function SourcesPage() {
@@ -295,7 +295,7 @@ function SourceDialog({
 }) {
   const [error, setError] = useState('')
   const { data: tagOptions = [] } = useApi<TagOption[]>('/tags')
-  const initialUserAgent = source?.userAgent || 'mihomo'
+  const initialUserAgent = source?.userAgent || defaultUserAgent
   const [userAgentOption, setUserAgentOption] = useState(
     userAgentPresets.some(({ value }) => value === initialUserAgent) ? initialUserAgent : customUserAgent,
   )
@@ -303,7 +303,7 @@ function SourceDialog({
     defaultValues: {
       name: source?.name || '',
       url: source?.url || '',
-      userAgent: source?.userAgent || 'mihomo',
+      userAgent: source?.userAgent || defaultUserAgent,
       nodeTags: source?.nodeTags || [],
       nodeNameFilter: source?.nodeNameFilter || '',
       interval: source?.refreshIntervalHours ?? 6,
@@ -465,7 +465,7 @@ function SourceDialog({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
-                      placeholder="mihomo"
+                      placeholder={defaultUserAgent}
                       readOnly={userAgentOption !== customUserAgent}
                       aria-readonly={userAgentOption !== customUserAgent}
                       aria-invalid={invalid}

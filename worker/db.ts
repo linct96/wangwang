@@ -31,7 +31,7 @@ export const sources = sqliteTable(
     url: text('url'),
     pendingUrl: text('pending_url'),
     nodeNameFilter: text('node_name_filter'),
-    userAgent: text('user_agent').notNull().default('mihomo'),
+    userAgent: text('user_agent').notNull().default('clash-verge/v2.5.2'),
     refreshIntervalHours: integer('refresh_interval_hours').notNull().default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     etag: text('etag'),

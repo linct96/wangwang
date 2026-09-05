@@ -1005,7 +1005,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'mihomo'"
+          "default": "'clash-verge/v2.5.2'"
         },
         "refresh_interval_hours": {
           "name": "refresh_interval_hours",
