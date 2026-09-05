@@ -86,8 +86,16 @@ export function ProfilePreviewPanel({
           method: 'POST',
           body: JSON.stringify({
             templateId,
-            nodeBinding: nodeBinding || { mode: 'source', sourceIds: [] },
-            slotBindings: slotBindings || [],
+            nodeBinding:
+              nodeBinding?.mode === 'node'
+                ? { mode: nodeBinding.mode, nodeIds: nodeBinding.nodeIds }
+                : nodeBinding || { mode: 'source', sourceIds: [] },
+            slotBindings:
+              slotBindings?.map((binding) =>
+                binding.mode === 'node'
+                  ? { slotKey: binding.slotKey, mode: binding.mode, nodeIds: binding.nodeIds }
+                  : binding,
+              ) || [],
           }),
           signal: controller.signal,
         })
@@ -295,9 +303,9 @@ export function ProfilePreviewPanel({
                                   </div>
                                 )
                               })}
-                              {group.nodes.slice(0, 80).map((node) => (
+                              {group.nodes.slice(0, 80).map((node, index) => (
                                 <div
-                                  key={node.id}
+                                  key={`${node.id}-${index}`}
                                   className="preview-node-tag"
                                   title={`${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`}
                                 >

@@ -104,12 +104,12 @@ export function useProfilePreview(
       return filtered
     }
 
-    const slotMap = new Map(slotBindings.map((binding) => [binding.slotKey, resolveBinding(binding)]))
-    const selectedNodes = [
-      ...new Map(
-        [resolveBinding(nodeBinding), ...slotMap.values()].flat().map((node) => [node.physicalNodeId, node]),
-      ).values(),
-    ]
+    const resolvedSlots = new Map(slotBindings.map((binding) => [binding.slotKey, resolveBinding(binding)]))
+    const slotMap = new Map(template.sourceSlots.map(({ key }) => [key, resolvedSlots.get(key) || []]))
+    const selectedNodesMap = new Map<string, NodeOption>()
+    for (const node of [resolveBinding(nodeBinding), ...slotMap.values()].flat())
+      if (!selectedNodesMap.has(node.physicalNodeId)) selectedNodesMap.set(node.physicalNodeId, node)
+    const selectedNodes = [...selectedNodesMap.values()]
     const allUniqueNodeIds = new Set(selectedNodes.map(({ id }) => id))
     const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
       const includeFilters = compileFilter(g.filter)
@@ -117,7 +117,7 @@ export function useProfilePreview(
       const matchesGroup = (node: NodeOption) =>
         (!includeFilters.length || includeFilters.some((reg) => reg.test(node.name))) &&
         !excludeFilters.some((reg) => reg.test(node.name))
-      const resolvedNodes: NodeOption[] = g['include-all-proxies'] === true ? selectedNodes.filter(matchesGroup) : []
+      const resolvedNodes: NodeOption[] = []
       const staticProxies: string[] = []
       const proxiesList = Array.isArray(g.proxies) ? g.proxies : []
 
@@ -126,10 +126,14 @@ export function useProfilePreview(
         if (slotMap.has(itemKey)) resolvedNodes.push(...(slotMap.get(itemKey) || []).filter(matchesGroup))
         else staticProxies.push(itemKey)
       }
-
-      // 去重保序
-      const uniqueNodesMap = new Map<string, NodeOption>()
-      for (const node of resolvedNodes) uniqueNodesMap.set(node.physicalNodeId, node)
+      const includeAllProxies =
+        typeof g['include-all-proxies'] === 'boolean' ? g['include-all-proxies'] : g['include-all'] === true
+      if (includeAllProxies)
+        resolvedNodes.push(
+          ...selectedNodes
+            .filter(matchesGroup)
+            .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+        )
 
       return {
         name: String(g.name || '未命名策略组'),
@@ -137,7 +141,7 @@ export function useProfilePreview(
         proxies: proxiesList.map(String),
         filter: typeof g.filter === 'string' ? g.filter : undefined,
         excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
-        nodes: Array.from(uniqueNodesMap.values()),
+        nodes: resolvedNodes,
         staticProxies,
       }
     })
