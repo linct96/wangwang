@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { ChevronDown, CircleAlert, Edit2, GripVertical, Network, Trash2, Zap } from 'lucide-react'
+import { ChevronDown, CircleAlert, Edit2, GripVertical, Network, Plug, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/app-primitives'
 import { cn } from '@/lib/utils'
 import type { ProxyGroupDraft, SourceSlotDraft, VisualIssue } from '../model'
@@ -67,7 +67,7 @@ export function SlotCard({
         >
           <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
           <div className="flex items-center gap-2 min-w-0">
-            <Zap className="size-4 text-amber-500 shrink-0" />
+            <Plug className="size-4 text-amber-500 shrink-0" />
             <strong className="truncate">{slot.name || '未命名槽位'}</strong>
           </div>
           {slotIssues.length > 0 && (

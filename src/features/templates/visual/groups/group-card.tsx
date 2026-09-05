@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { ChevronDown, Edit2, Eye, GripVertical, Network, Radio, Server, Trash2, Zap } from 'lucide-react'
+import { Boxes, ChevronDown, Edit2, Eye, Globe, GripVertical, Network, Plug, Radio, Server, Trash2 } from 'lucide-react'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -138,15 +138,27 @@ export function GroupCard({
                 </div>
               )}
               <div className="template-node-ref-title">包含节点与子组</div>
-              {group.members.length === 0 ? (
+              {group.members.length === 0 && !group.includeAllProxies && !group.includeAllProviders ? (
                 <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (
                 <div className="template-node-ref-tags">
+                  {group.includeAllProxies && (
+                    <div className="template-node-tag border-dashed border-sky-300 bg-sky-50/60 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
+                      <Globe className="template-node-ref-icon text-sky-500" />
+                      <span className="template-node-tag-name">包含全部节点</span>
+                    </div>
+                  )}
+                  {group.includeAllProviders && (
+                    <div className="template-node-tag border-dashed border-indigo-300 bg-indigo-50/60 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300">
+                      <Boxes className="template-node-ref-icon text-indigo-500" />
+                      <span className="template-node-tag-name">包含全部代理集合</span>
+                    </div>
+                  )}
                   {group.members.map((member, index) => {
                     const label = memberLabel(member, groups, sourceSlots)
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'source-slot' && <Zap className="template-node-ref-icon text-amber-500" />}
+                        {member.kind === 'source-slot' && <Plug className="template-node-ref-icon text-amber-500" />}
                         {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
                         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
                         {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}

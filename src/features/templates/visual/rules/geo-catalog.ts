@@ -1,4 +1,3 @@
-import { parse } from 'yaml'
 import type { GeoSettingsDraft } from '../model'
 export type GeoCatalogType = 'geosite' | 'geoip'
 export type GeoProvider = 'metacubex' | 'metacubex-lite' | 'loyalsoldier' | 'custom'
@@ -8,18 +7,6 @@ export type GeoCatalogResponse = {
   items: string[]
   updatedAt: string
   stale: boolean
-}
-export function detectGeoSource(yaml: string, type: 'GEOSITE' | 'GEOIP'): { provider: GeoProvider } {
-  let config: Record<string, unknown> = {}
-  try {
-    config = (parse(yaml) || {}) as Record<string, unknown>
-  } catch {
-    return { provider: 'custom' }
-  }
-  const geodataMode = config['geodata-mode'] === true
-  const geox = (config['geox-url'] || {}) as Record<string, unknown>
-  const source = type === 'GEOSITE' ? String(geox.geosite || '') : String(geox[geodataMode ? 'geoip' : 'mmdb'] || '')
-  return { provider: inferProvider(source, type) }
 }
 function inferProvider(source: string, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
   if (!source) return 'custom'
