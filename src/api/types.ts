@@ -121,6 +121,7 @@ export type ProfileSlotBinding = ProfileNodeBinding & { slotKey: string }
 
 export type NodeOption = {
   id: string
+  physicalNodeId: string
   name: string
   sourceId: string
   sourceName: string

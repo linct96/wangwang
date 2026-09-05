@@ -263,6 +263,7 @@
     min-height: 220px;
     max-height: 380px;
     overflow-y: auto;
+    contain: paint;
     padding-right: 4px;
   }
 

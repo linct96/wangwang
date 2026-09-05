@@ -28,7 +28,6 @@ type ProfilePreviewPanelProps = {
   templateId?: TemplateId
   nodeBinding?: ProfileNodeBinding
   slotBindings?: ProfileSlotBinding[]
-  tags?: string[]
   onToggleCollapse?: () => void
 }
 
@@ -52,7 +51,6 @@ export function ProfilePreviewPanel({
   templateId,
   nodeBinding,
   slotBindings,
-  tags,
   onToggleCollapse,
 }: ProfilePreviewPanelProps) {
   const [viewMode, setViewMode] = useState<'groups' | 'yaml'>('groups')
@@ -90,7 +88,6 @@ export function ProfilePreviewPanel({
             templateId,
             nodeBinding: nodeBinding || { mode: 'source', sourceIds: [] },
             slotBindings: slotBindings || [],
-            tags: tags || [],
           }),
           signal: controller.signal,
         })
@@ -114,7 +111,7 @@ export function ProfilePreviewPanel({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [viewMode, templateId, nodeBinding, slotBindings, tags, refreshTick])
+  }, [viewMode, templateId, nodeBinding, slotBindings, refreshTick])
 
   function toggleGroup(name: string) {
     setCollapsedGroups((prev) => {
@@ -360,7 +357,7 @@ export function ProfilePreviewPanel({
               </Button>
             </div>
 
-            {yamlLoading && !yamlData ? (
+            {yamlLoading ? (
               <div className="preview-empty-state flex-1">
                 <Sparkles className="size-6 text-muted-foreground/50 spin mb-2" />
                 <span className="text-xs text-muted-foreground">正在编译并生成 YAML 预览...</span>

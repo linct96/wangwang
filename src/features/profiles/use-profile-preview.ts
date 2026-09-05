@@ -106,7 +106,9 @@ export function useProfilePreview(
 
     const slotMap = new Map(slotBindings.map((binding) => [binding.slotKey, resolveBinding(binding)]))
     const selectedNodes = [
-      ...new Map([resolveBinding(nodeBinding), ...slotMap.values()].flat().map((node) => [node.id, node])).values(),
+      ...new Map(
+        [resolveBinding(nodeBinding), ...slotMap.values()].flat().map((node) => [node.physicalNodeId, node]),
+      ).values(),
     ]
     const allUniqueNodeIds = new Set(selectedNodes.map(({ id }) => id))
     const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
@@ -127,7 +129,7 @@ export function useProfilePreview(
 
       // 去重保序
       const uniqueNodesMap = new Map<string, NodeOption>()
-      for (const node of resolvedNodes) uniqueNodesMap.set(node.id, node)
+      for (const node of resolvedNodes) uniqueNodesMap.set(node.physicalNodeId, node)
 
       return {
         name: String(g.name || '未命名策略组'),

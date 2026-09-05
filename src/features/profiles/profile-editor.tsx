@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useForm } from '@tanstack/react-form'
+import { useForm, useStore } from '@tanstack/react-form'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { ArrowLeft, CheckCircle2, ChevronDown, Globe, PanelRightOpen, Plug, RefreshCw, Zap } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,7 +19,6 @@ import type {
   TemplateSummary,
 } from '@/api/types'
 import { AppConfirmDialog, IconButton, PageState } from '@/components/app-primitives'
-import { TagCombobox } from '@/components/tag-combobox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -81,7 +80,7 @@ export function NewProfilePage() {
 
 export function EditProfilePage() {
   const { id } = useParams({ from: '/app/profiles/$id/edit' })
-  return <ProfileEditor id={id} />
+  return <ProfileEditor key={id} id={id} />
 }
 
 function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplateId?: TemplateId }) {
@@ -121,7 +120,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const form = useForm({
     defaultValues: {
       name: '',
-      tags: [] as string[],
       templateId: initialTemplateId || ('builtin:minimal' as TemplateId),
       nodeBinding: emptyNodeBinding(),
       slotBindings: [] as ProfileSlotBinding[],
@@ -129,9 +127,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     validators: {
       onSubmit: z.object({
         name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
-        tags: z
-          .array(z.string().trim().min(1, '标签不能为空').max(24, '单个标签不能超过 24 个字符'))
-          .max(20, '标签不能超过 20 个'),
         nodeBinding: z.discriminatedUnion('mode', [
           z.object({
             mode: z.literal('source'),
@@ -189,7 +184,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           method: id ? 'PATCH' : 'POST',
           body: JSON.stringify({
             name: value.name,
-            tags: value.tags,
+            tags: [],
             templateId: value.templateId,
             nodeBinding:
               value.nodeBinding.mode === 'node'
@@ -252,14 +247,12 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       profile
         ? {
             name: profile.name,
-            tags: profile.tags,
             templateId: profile.templateId,
             nodeBinding: profile.nodeBinding,
             slotBindings: profile.slotBindings,
           }
         : {
             name: '',
-            tags: [],
             templateId: selectedTemplate?.id || 'builtin:minimal',
             nodeBinding: emptyNodeBinding(),
             slotBindings: initialBindings,
@@ -268,19 +261,21 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     )
   }, [form, id, initialTemplateId, profile, templates, formMounted])
 
+  const selectedTemplateId = useStore(form.store, (state) => state.values.templateId)
+
   useEffect(() => {
-    const currentId = form.state.values.templateId
-    if (!currentId) return
-    if (templateDetailsCache.current.has(currentId)) {
-      setTemplateDetail(templateDetailsCache.current.get(currentId))
+    if (!selectedTemplateId) return
+    if (templateDetailsCache.current.has(selectedTemplateId)) {
+      setTemplateDetail(templateDetailsCache.current.get(selectedTemplateId))
+      setTemplateDetailLoading(false)
       return
     }
     const controller = new AbortController()
     setTemplateDetailLoading(true)
-    void api<TemplateDetail>(`/templates/${currentId}`, { signal: controller.signal })
+    void api<TemplateDetail>(`/templates/${selectedTemplateId}`, { signal: controller.signal })
       .then((detail) => {
         if (!controller.signal.aborted) {
-          templateDetailsCache.current.set(currentId, detail)
+          templateDetailsCache.current.set(selectedTemplateId, detail)
           setTemplateDetail(detail)
         }
       })
@@ -289,7 +284,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
         if (!controller.signal.aborted) setTemplateDetailLoading(false)
       })
     return () => controller.abort()
-  }, [form.state.values.templateId])
+  }, [selectedTemplateId])
 
   const builtin = useMemo(() => templates.filter((template) => template.kind === 'builtin'), [templates])
   const custom = useMemo(() => templates.filter((template) => template.kind === 'custom'), [templates])
@@ -385,10 +380,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             <main className={cn('profile-editor-main', mobileTab !== 'form' && 'profile-pane-mobile-hidden')}>
               {/* 模块 1：基础信息 */}
               <section className="profile-section">
-                <form.Subscribe
-                  selector={(state) => [state.values.name, state.values.templateId, state.values.tags] as const}
-                >
-                  {([name, templateId, tags]) => {
+                <form.Subscribe selector={(state) => [state.values.name, state.values.templateId] as const}>
+                  {([name, templateId]) => {
                     const selectedTemplate = templates.find((t) => t.id === templateId)
                     return (
                       <>
@@ -415,11 +408,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                               {selectedTemplate && (
                                 <Badge variant="outline" className="text-xs">
                                   {selectedTemplate.name}
-                                </Badge>
-                              )}
-                              {id && tags && tags.length > 0 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {tags.length} 个标签过滤
                                 </Badge>
                               )}
                             </div>
@@ -497,41 +485,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                 )}
                               </form.Field>
                             </div>
-
-                            {id && (
-                              <>
-                                <div className="h-px bg-border/60" />
-                                <form.Field name="tags">
-                                  {(field) => {
-                                    const invalid = field.state.meta.isTouched && !field.state.meta.isValid
-                                    return (
-                                      <Field data-invalid={invalid}>
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                                          <FieldLabel htmlFor="profile-tags" className="text-sm font-medium mb-0">
-                                            全局节点标签过滤
-                                          </FieldLabel>
-                                          <span className="text-xs text-muted-foreground">
-                                            若设置，仅带有相应标签的节点才会参与分流处理（留空不过滤）
-                                          </span>
-                                        </div>
-                                        <TagCombobox
-                                          id="profile-tags"
-                                          value={field.state.value}
-                                          options={tagOptions}
-                                          max={20}
-                                          allowCreate={false}
-                                          placeholder="选择标签进行全局筛选；留空表示不过滤"
-                                          invalid={invalid}
-                                          onBlur={field.handleBlur}
-                                          onChange={field.handleChange}
-                                        />
-                                        {invalid && <FieldError errors={field.state.meta.errors} />}
-                                      </Field>
-                                    )
-                                  }}
-                                </form.Field>
-                              </>
-                            )}
                           </div>
                         )}
                       </>
@@ -752,22 +705,16 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             >
               <form.Subscribe
                 selector={(state) =>
-                  [
-                    state.values.templateId,
-                    state.values.nodeBinding,
-                    state.values.slotBindings,
-                    state.values.tags,
-                  ] as const
+                  [state.values.templateId, state.values.nodeBinding, state.values.slotBindings] as const
                 }
               >
-                {([templateId, nodeBinding, slotBindings, tags]) => (
+                {([templateId, nodeBinding, slotBindings]) => (
                   <LivePreviewWrapper
                     templateDetail={templateDetail}
                     templateDetailLoading={templateDetailLoading}
                     templateId={templateId}
                     nodeBinding={nodeBinding}
                     slotBindings={slotBindings}
-                    tags={tags}
                     nodes={nodes}
                     onToggleCollapse={() => setPreviewCollapsed((prev) => !prev)}
                   />
@@ -872,7 +819,6 @@ function LivePreviewWrapper({
   templateId,
   nodeBinding,
   slotBindings,
-  tags,
   nodes,
   onToggleCollapse,
 }: {
@@ -881,11 +827,11 @@ function LivePreviewWrapper({
   templateId: TemplateId
   nodeBinding: ProfileNodeBinding
   slotBindings: ProfileSlotBinding[]
-  tags: string[]
   nodes: NodeOption[]
   onToggleCollapse?: () => void
 }) {
-  const preview = useProfilePreview(templateDetail, nodeBinding, slotBindings, nodes)
+  const currentTemplate = templateDetail?.id === templateId ? templateDetail : undefined
+  const preview = useProfilePreview(currentTemplate, nodeBinding, slotBindings, nodes)
 
   return (
     <>
@@ -910,11 +856,10 @@ function LivePreviewWrapper({
       <div className="profile-preview-expanded-wrap">
         <ProfilePreviewPanel
           preview={preview}
-          loading={templateDetailLoading}
+          loading={templateDetailLoading || !currentTemplate}
           templateId={templateId}
           nodeBinding={nodeBinding}
           slotBindings={slotBindings}
-          tags={tags}
           onToggleCollapse={onToggleCollapse}
         />
       </div>
