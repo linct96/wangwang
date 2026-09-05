@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "137c0c9f-1d89-48dc-a489-a1e33aa9c14d",
+  "id": "5501367e-fda6-4a99-a4c7-9d4c12ca27a5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "admin_account": {
@@ -157,8 +157,62 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "node_entries": {
-      "name": "node_entries",
+    "node_tags": {
+      "name": "node_tags",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "node_tags_tag_idx": {
+          "name": "node_tags_tag_idx",
+          "columns": ["tag_id", "node_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "node_tags_node_id_nodes_id_fk": {
+          "name": "node_tags_node_id_nodes_id_fk",
+          "tableFrom": "node_tags",
+          "tableTo": "nodes",
+          "columnsFrom": ["node_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "node_tags_tag_id_tags_id_fk": {
+          "name": "node_tags_tag_id_tags_id_fk",
+          "tableFrom": "node_tags",
+          "tableTo": "tags",
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "node_tags_node_id_tag_id_pk": {
+          "columns": ["node_id", "tag_id"],
+          "name": "node_tags_node_id_tag_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "nodes": {
+      "name": "nodes",
       "columns": {
         "id": {
           "name": "id",
@@ -167,15 +221,22 @@
           "notNull": true,
           "autoincrement": false
         },
-        "node_id": {
-          "name": "node_id",
+        "source_id": {
+          "name": "source_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "name": {
-          "name": "name",
+        "physical_node_id": {
+          "name": "physical_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_name": {
+          "name": "original_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -196,6 +257,13 @@
           "autoincrement": false,
           "default": true
         },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -212,20 +280,34 @@
         }
       },
       "indexes": {
-        "node_entries_node_idx": {
-          "name": "node_entries_node_idx",
-          "columns": ["node_id"],
+        "nodes_source_position_idx": {
+          "name": "nodes_source_position_idx",
+          "columns": ["source_id", "position"],
+          "isUnique": false
+        },
+        "nodes_physical_idx": {
+          "name": "nodes_physical_idx",
+          "columns": ["physical_node_id"],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "node_entries_node_id_nodes_id_fk": {
-          "name": "node_entries_node_id_nodes_id_fk",
-          "tableFrom": "node_entries",
-          "tableTo": "nodes",
-          "columnsFrom": ["node_id"],
+        "nodes_source_id_sources_id_fk": {
+          "name": "nodes_source_id_sources_id_fk",
+          "tableFrom": "nodes",
+          "tableTo": "sources",
+          "columnsFrom": ["source_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "nodes_physical_node_id_physical_nodes_id_fk": {
+          "name": "nodes_physical_node_id_physical_nodes_id_fk",
+          "tableFrom": "nodes",
+          "tableTo": "physical_nodes",
+          "columnsFrom": ["physical_node_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -233,62 +315,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "node_entry_tags": {
-      "name": "node_entry_tags",
-      "columns": {
-        "entry_id": {
-          "name": "entry_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tag_id": {
-          "name": "tag_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "node_entry_tags_tag_idx": {
-          "name": "node_entry_tags_tag_idx",
-          "columns": ["tag_id", "entry_id"],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "node_entry_tags_entry_id_node_entries_id_fk": {
-          "name": "node_entry_tags_entry_id_node_entries_id_fk",
-          "tableFrom": "node_entry_tags",
-          "tableTo": "node_entries",
-          "columnsFrom": ["entry_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "node_entry_tags_tag_id_tags_id_fk": {
-          "name": "node_entry_tags_tag_id_tags_id_fk",
-          "tableFrom": "node_entry_tags",
-          "tableTo": "tags",
-          "columnsFrom": ["tag_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "node_entry_tags_entry_id_tag_id_pk": {
-          "columns": ["entry_id", "tag_id"],
-          "name": "node_entry_tags_entry_id_tag_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "nodes": {
-      "name": "nodes",
+    "physical_nodes": {
+      "name": "physical_nodes",
       "columns": {
         "id": {
           "name": "id",
@@ -348,8 +376,8 @@
         }
       },
       "indexes": {
-        "nodes_fingerprint_idx": {
-          "name": "nodes_fingerprint_idx",
+        "physical_nodes_fingerprint_idx": {
+          "name": "physical_nodes_fingerprint_idx",
           "columns": ["fingerprint"],
           "isUnique": true
         }
@@ -359,8 +387,141 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "profile_source_bindings": {
-      "name": "profile_source_bindings",
+    "profile_slot_bindings": {
+      "name": "profile_slot_bindings",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_key": {
+          "name": "slot_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "include_regex": {
+          "name": "include_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "exclude_regex": {
+          "name": "exclude_regex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "profile_slot_bindings_profile_id_profiles_id_fk": {
+          "name": "profile_slot_bindings_profile_id_profiles_id_fk",
+          "tableFrom": "profile_slot_bindings",
+          "tableTo": "profiles",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_slot_bindings_profile_id_slot_key_pk": {
+          "columns": ["profile_id", "slot_key"],
+          "name": "profile_slot_bindings_profile_id_slot_key_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "profile_slot_bindings_mode_check": {
+          "name": "profile_slot_bindings_mode_check",
+          "value": "\"profile_slot_bindings\".\"mode\" IN ('source', 'node')"
+        },
+        "profile_slot_bindings_node_regex_check": {
+          "name": "profile_slot_bindings_node_regex_check",
+          "value": "\"profile_slot_bindings\".\"mode\" = 'source' OR (\"profile_slot_bindings\".\"include_regex\" IS NULL AND \"profile_slot_bindings\".\"exclude_regex\" IS NULL)"
+        }
+      }
+    },
+    "profile_slot_nodes": {
+      "name": "profile_slot_nodes",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slot_key": {
+          "name": "slot_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "profile_slot_nodes_node_idx": {
+          "name": "profile_slot_nodes_node_idx",
+          "columns": ["node_id", "profile_id"],
+          "isUnique": false
+        },
+        "profile_slot_nodes_slot_position_idx": {
+          "name": "profile_slot_nodes_slot_position_idx",
+          "columns": ["profile_id", "slot_key", "position"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "profile_slot_nodes_profile_id_slot_key_profile_slot_bindings_profile_id_slot_key_fk": {
+          "name": "profile_slot_nodes_profile_id_slot_key_profile_slot_bindings_profile_id_slot_key_fk",
+          "tableFrom": "profile_slot_nodes",
+          "tableTo": "profile_slot_bindings",
+          "columnsFrom": ["profile_id", "slot_key"],
+          "columnsTo": ["profile_id", "slot_key"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_slot_nodes_profile_id_slot_key_node_id_pk": {
+          "columns": ["profile_id", "slot_key", "node_id"],
+          "name": "profile_slot_nodes_profile_id_slot_key_node_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "profile_slot_sources": {
+      "name": "profile_slot_sources",
       "columns": {
         "profile_id": {
           "name": "profile_id",
@@ -385,36 +546,36 @@
         }
       },
       "indexes": {
-        "profile_source_bindings_source_idx": {
-          "name": "profile_source_bindings_source_idx",
+        "profile_slot_sources_source_idx": {
+          "name": "profile_slot_sources_source_idx",
           "columns": ["source_id", "profile_id"],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "profile_source_bindings_profile_id_profiles_id_fk": {
-          "name": "profile_source_bindings_profile_id_profiles_id_fk",
-          "tableFrom": "profile_source_bindings",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "profile_source_bindings_source_id_sources_id_fk": {
-          "name": "profile_source_bindings_source_id_sources_id_fk",
-          "tableFrom": "profile_source_bindings",
+        "profile_slot_sources_source_id_sources_id_fk": {
+          "name": "profile_slot_sources_source_id_sources_id_fk",
+          "tableFrom": "profile_slot_sources",
           "tableTo": "sources",
           "columnsFrom": ["source_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "profile_slot_sources_profile_id_slot_key_profile_slot_bindings_profile_id_slot_key_fk": {
+          "name": "profile_slot_sources_profile_id_slot_key_profile_slot_bindings_profile_id_slot_key_fk",
+          "tableFrom": "profile_slot_sources",
+          "tableTo": "profile_slot_bindings",
+          "columnsFrom": ["profile_id", "slot_key"],
+          "columnsTo": ["profile_id", "slot_key"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "profile_source_bindings_profile_id_slot_key_source_id_pk": {
+        "profile_slot_sources_profile_id_slot_key_source_id_pk": {
           "columns": ["profile_id", "slot_key", "source_id"],
-          "name": "profile_source_bindings_profile_id_slot_key_source_id_pk"
+          "name": "profile_slot_sources_profile_id_slot_key_source_id_pk"
         }
       },
       "uniqueConstraints": {},
@@ -568,86 +729,6 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "source_entries": {
-      "name": "source_entries",
-      "columns": {
-        "source_id": {
-          "name": "source_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "entry_id": {
-          "name": "entry_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source_key": {
-          "name": "source_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "original_name": {
-          "name": "original_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "source_entries_key_idx": {
-          "name": "source_entries_key_idx",
-          "columns": ["source_id", "source_key"],
-          "isUnique": true
-        },
-        "source_entries_entry_idx": {
-          "name": "source_entries_entry_idx",
-          "columns": ["entry_id"],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "source_entries_source_id_sources_id_fk": {
-          "name": "source_entries_source_id_sources_id_fk",
-          "tableFrom": "source_entries",
-          "tableTo": "sources",
-          "columnsFrom": ["source_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "source_entries_entry_id_node_entries_id_fk": {
-          "name": "source_entries_entry_id_node_entries_id_fk",
-          "tableFrom": "source_entries",
-          "tableTo": "node_entries",
-          "columnsFrom": ["entry_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "source_entries_source_id_entry_id_pk": {
-          "columns": ["source_id", "entry_id"],
-          "name": "source_entries_source_id_entry_id_pk"
-        }
-      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -942,6 +1023,59 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "template_slots": {
+      "name": "template_slots",
+      "columns": {
+        "template_id": {
+          "name": "template_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "template_slots_template_id_templates_id_fk": {
+          "name": "template_slots_template_id_templates_id_fk",
+          "tableFrom": "template_slots",
+          "tableTo": "templates",
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "template_slots_template_id_key_pk": {
+          "columns": ["template_id", "key"],
+          "name": "template_slots_template_id_key_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

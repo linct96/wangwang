@@ -25,28 +25,32 @@ CREATE TABLE `jobs` (
 );
 --> statement-breakpoint
 CREATE INDEX `jobs_entity_idx` ON `jobs` (`type`,`entity_id`,`created_at`);--> statement-breakpoint
-CREATE TABLE `node_entries` (
-	`id` text PRIMARY KEY NOT NULL,
+CREATE TABLE `node_tags` (
 	`node_id` text NOT NULL,
-	`name` text NOT NULL,
-	`alias` text,
-	`enabled` integer DEFAULT true NOT NULL,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `node_entries_node_idx` ON `node_entries` (`node_id`);--> statement-breakpoint
-CREATE TABLE `node_entry_tags` (
-	`entry_id` text NOT NULL,
 	`tag_id` text NOT NULL,
-	PRIMARY KEY(`entry_id`, `tag_id`),
-	FOREIGN KEY (`entry_id`) REFERENCES `node_entries`(`id`) ON UPDATE no action ON DELETE cascade,
+	PRIMARY KEY(`node_id`, `tag_id`),
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `node_entry_tags_tag_idx` ON `node_entry_tags` (`tag_id`,`entry_id`);--> statement-breakpoint
+CREATE INDEX `node_tags_tag_idx` ON `node_tags` (`tag_id`,`node_id`);--> statement-breakpoint
 CREATE TABLE `nodes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`source_id` text NOT NULL,
+	`physical_node_id` text NOT NULL,
+	`original_name` text NOT NULL,
+	`alias` text,
+	`enabled` integer DEFAULT true NOT NULL,
+	`position` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`physical_node_id`) REFERENCES `physical_nodes`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `nodes_source_position_idx` ON `nodes` (`source_id`,`position`);--> statement-breakpoint
+CREATE INDEX `nodes_physical_idx` ON `nodes` (`physical_node_id`);--> statement-breakpoint
+CREATE TABLE `physical_nodes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`fingerprint` text NOT NULL,
 	`protocol` text NOT NULL,
@@ -57,18 +61,40 @@ CREATE TABLE `nodes` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `nodes_fingerprint_idx` ON `nodes` (`fingerprint`);--> statement-breakpoint
-CREATE TABLE `profile_source_bindings` (
+CREATE UNIQUE INDEX `physical_nodes_fingerprint_idx` ON `physical_nodes` (`fingerprint`);--> statement-breakpoint
+CREATE TABLE `profile_slot_bindings` (
+	`profile_id` text NOT NULL,
+	`slot_key` text NOT NULL,
+	`mode` text NOT NULL,
+	`include_regex` text,
+	`exclude_regex` text,
+	PRIMARY KEY(`profile_id`, `slot_key`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "profile_slot_bindings_mode_check" CHECK("profile_slot_bindings"."mode" IN ('source', 'node')),
+	CONSTRAINT "profile_slot_bindings_node_regex_check" CHECK("profile_slot_bindings"."mode" = 'source' OR ("profile_slot_bindings"."include_regex" IS NULL AND "profile_slot_bindings"."exclude_regex" IS NULL))
+);
+--> statement-breakpoint
+CREATE TABLE `profile_slot_nodes` (
+	`profile_id` text NOT NULL,
+	`slot_key` text NOT NULL,
+	`node_id` text NOT NULL,
+	`position` integer NOT NULL,
+	PRIMARY KEY(`profile_id`, `slot_key`, `node_id`),
+	FOREIGN KEY (`profile_id`,`slot_key`) REFERENCES `profile_slot_bindings`(`profile_id`,`slot_key`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_slot_nodes_node_idx` ON `profile_slot_nodes` (`node_id`,`profile_id`);--> statement-breakpoint
+CREATE INDEX `profile_slot_nodes_slot_position_idx` ON `profile_slot_nodes` (`profile_id`,`slot_key`,`position`);--> statement-breakpoint
+CREATE TABLE `profile_slot_sources` (
 	`profile_id` text NOT NULL,
 	`slot_key` text NOT NULL,
 	`source_id` text NOT NULL,
 	PRIMARY KEY(`profile_id`, `slot_key`, `source_id`),
-	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`profile_id`,`slot_key`) REFERENCES `profile_slot_bindings`(`profile_id`,`slot_key`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `profile_source_bindings_source_idx` ON `profile_source_bindings` (`source_id`,`profile_id`);
---> statement-breakpoint
+CREATE INDEX `profile_slot_sources_source_idx` ON `profile_slot_sources` (`source_id`,`profile_id`);--> statement-breakpoint
 CREATE TABLE `profile_tag_filters` (
 	`profile_id` text NOT NULL,
 	`tag_id` text NOT NULL,
@@ -93,19 +119,6 @@ CREATE TABLE `profiles` (
 );
 --> statement-breakpoint
 CREATE INDEX `profiles_template_id_idx` ON `profiles` (`template_id`);--> statement-breakpoint
-CREATE TABLE `source_entries` (
-	`source_id` text NOT NULL,
-	`entry_id` text NOT NULL,
-	`source_key` text NOT NULL,
-	`original_name` text NOT NULL,
-	`position` integer NOT NULL,
-	PRIMARY KEY(`source_id`, `entry_id`),
-	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`entry_id`) REFERENCES `node_entries`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `source_entries_key_idx` ON `source_entries` (`source_id`,`source_key`);--> statement-breakpoint
-CREATE INDEX `source_entries_entry_idx` ON `source_entries` (`entry_id`);--> statement-breakpoint
 CREATE TABLE `source_tags` (
 	`source_id` text NOT NULL,
 	`tag_id` text NOT NULL,
@@ -152,6 +165,15 @@ CREATE TABLE `tags` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `tags_normalized_name_idx` ON `tags` (`normalized_name`);--> statement-breakpoint
+CREATE TABLE `template_slots` (
+	`template_id` text NOT NULL,
+	`key` text NOT NULL,
+	`name` text NOT NULL,
+	`position` integer NOT NULL,
+	PRIMARY KEY(`template_id`, `key`),
+	FOREIGN KEY (`template_id`) REFERENCES `templates`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `templates` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -160,3 +182,6 @@ CREATE TABLE `templates` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
+--> statement-breakpoint
+INSERT INTO `sources` (`id`, `name`, `kind`, `status`, `created_at`, `updated_at`)
+VALUES ('system-manual', '手动节点', 'manual', 'ready', unixepoch() * 1000, unixepoch() * 1000);

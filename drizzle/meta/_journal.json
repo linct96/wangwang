@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1788369523286,
+      "when": 1788596030696,
       "tag": "0000_initial",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1788399190000,
-      "tag": "0001_seed_manual_source",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1788400000000,
-      "tag": "0002_node_model_refactor",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1788502410227,
-      "tag": "0003_clever_killmonger",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1788504457925,
-      "tag": "0004_low_jack_power",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1788595097009,
-      "tag": "0005_outstanding_deadpool",
       "breakpoints": true
     }
   ]

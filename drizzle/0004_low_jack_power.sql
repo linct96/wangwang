@@ -1,2 +1,0 @@
-ALTER TABLE `profile_slot_nodes` ADD `position` integer NOT NULL;--> statement-breakpoint
-CREATE INDEX `profile_slot_nodes_slot_position_idx` ON `profile_slot_nodes` (`profile_id`,`slot_key`,`position`);
