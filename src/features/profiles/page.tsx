@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Copy, Eye, FileCode2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { Copy, FileCode2, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi, waitForJob } from '@/api/use-api'
@@ -235,12 +235,6 @@ export function ProfilesPage() {
                           </span>
                         </div>
                         <div className="profile-action-buttons">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to="/profiles/$id" params={{ id: profile.id }}>
-                              <Eye className="size-3.5" />
-                              查看
-                            </Link>
-                          </Button>
                           <Button variant="outline" size="sm" onClick={() => copySubscription(profile.subscriptionUrl)}>
                             <Copy className="size-3.5" />
                             复制链接

@@ -14,7 +14,6 @@ const NodesPage = lazyRouteComponent(() => import('@/features/nodes/page'), 'Nod
 const ProfilesPage = lazyRouteComponent(() => import('@/features/profiles/page'), 'ProfilesPage')
 const NewProfilePage = lazyRouteComponent(() => import('@/features/profiles/profile-editor'), 'NewProfilePage')
 const EditProfilePage = lazyRouteComponent(() => import('@/features/profiles/profile-editor'), 'EditProfilePage')
-const ProfileDetailPage = lazyRouteComponent(() => import('@/features/profiles/profile-detail'), 'ProfileDetailPage')
 const TemplatesPage = lazyRouteComponent(() => import('@/features/templates/page'), 'TemplatesPage')
 const NewTemplatePage = lazyRouteComponent(() => import('@/features/templates/editor'), 'NewTemplatePage')
 const EditTemplatePage = lazyRouteComponent(() => import('@/features/templates/editor'), 'EditTemplatePage')
@@ -59,11 +58,6 @@ const editTemplateRoute = createRoute({
   path: '/templates/$id/edit',
   component: EditTemplatePage,
 })
-const profileDetailRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/profiles/$id',
-  component: ProfileDetailPage,
-})
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
@@ -77,7 +71,6 @@ const routeTree = rootRoute.addChildren([
     nodesRoute,
     profilesRoute,
     newProfileRoute,
-    profileDetailRoute,
     editProfileRoute,
     templatesRoute,
     newTemplateRoute,
