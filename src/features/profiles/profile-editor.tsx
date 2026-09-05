@@ -738,23 +738,26 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             >
               <form.Subscribe
                 selector={(state) =>
-                  [state.values.nodeBinding, state.values.slotBindings, state.values.templateId] as const
+                  [
+                    state.values.templateId,
+                    state.values.nodeBinding,
+                    state.values.slotBindings,
+                    state.values.tags,
+                  ] as const
                 }
               >
-                {([nodeBinding, slotBindings, templateId]) => {
-                  const currentTemplate = templates.find((t) => t.id === templateId)
-                  return (
-                    <LivePreviewWrapper
-                      templateDetail={templateDetail}
-                      templateDetailLoading={templateDetailLoading}
-                      templateName={currentTemplate?.name}
-                      nodeBinding={nodeBinding}
-                      slotBindings={slotBindings}
-                      nodes={nodes}
-                      onToggleCollapse={() => setPreviewCollapsed((prev) => !prev)}
-                    />
-                  )
-                }}
+                {([templateId, nodeBinding, slotBindings, tags]) => (
+                  <LivePreviewWrapper
+                    templateDetail={templateDetail}
+                    templateDetailLoading={templateDetailLoading}
+                    templateId={templateId}
+                    nodeBinding={nodeBinding}
+                    slotBindings={slotBindings}
+                    tags={tags}
+                    nodes={nodes}
+                    onToggleCollapse={() => setPreviewCollapsed((prev) => !prev)}
+                  />
+                )}
               </form.Subscribe>
             </aside>
           </div>
@@ -852,17 +855,19 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 function LivePreviewWrapper({
   templateDetail,
   templateDetailLoading,
-  templateName,
+  templateId,
   nodeBinding,
   slotBindings,
+  tags,
   nodes,
   onToggleCollapse,
 }: {
   templateDetail: TemplateDetail | undefined
   templateDetailLoading: boolean
-  templateName: string | undefined
+  templateId: TemplateId
   nodeBinding: ProfileNodeBinding
   slotBindings: ProfileSlotBinding[]
+  tags: string[]
   nodes: NodeOption[]
   onToggleCollapse?: () => void
 }) {
@@ -880,7 +885,7 @@ function LivePreviewWrapper({
         <div className="collapsed-bar-header">
           <PanelRightOpen className="size-4 text-primary" />
         </div>
-        <div className="collapsed-bar-title">实时预览</div>
+        <div className="collapsed-bar-title">配置预览</div>
         {preview.groups.length > 0 && (
           <div className="collapsed-bar-badge" title={`${preview.groups.length} 个策略组`}>
             {preview.groups.length}
@@ -892,7 +897,10 @@ function LivePreviewWrapper({
         <ProfilePreviewPanel
           preview={preview}
           loading={templateDetailLoading}
-          templateName={templateName}
+          templateId={templateId}
+          nodeBinding={nodeBinding}
+          slotBindings={slotBindings}
+          tags={tags}
           onToggleCollapse={onToggleCollapse}
         />
       </div>

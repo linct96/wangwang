@@ -158,3 +158,9 @@ export type Profile = {
   slotBindings: ProfileSlotBinding[]
   subscriptionUrl: string
 }
+
+export type ProfileYamlPreview = {
+  yaml: string
+  error?: string | null
+  nodeCount: number
+}
