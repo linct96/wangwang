@@ -111,6 +111,10 @@ export type ProfileNodeBinding =
       nodeIds: string[]
       missingNodeIds: string[]
     }
+  | {
+      mode: 'tag'
+      tags: string[]
+    }
 export type ProfileSlotBinding = ProfileNodeBinding & { slotKey: string }
 
 export type NodeOption = {
@@ -120,6 +124,7 @@ export type NodeOption = {
   sourceName: string
   enabled: boolean
   sourceEnabled: boolean
+  tags: string[]
 }
 
 export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})

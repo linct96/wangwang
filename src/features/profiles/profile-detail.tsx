@@ -212,6 +212,12 @@ export function ProfileDetailPage() {
                           {sourceMap.get(sourceId) || sourceId}
                         </span>
                       ))
+                    ) : profile.nodeBinding.mode === 'tag' ? (
+                      profile.nodeBinding.tags.map((tag) => (
+                        <span key={tag} className="profile-pill">
+                          标签：{tag}
+                        </span>
+                      ))
                     ) : (
                       <span className="profile-pill">
                         指定 {profile.nodeBinding.nodeIds.length} 个节点
@@ -239,6 +245,12 @@ export function ProfileDetailPage() {
                             binding.sourceIds.map((sourceId) => (
                               <span key={sourceId} className="profile-pill">
                                 {sourceMap.get(sourceId) || sourceId}
+                              </span>
+                            ))
+                          ) : binding.mode === 'tag' ? (
+                            binding.tags.map((tag) => (
+                              <span key={tag} className="profile-pill">
+                                标签：{tag}
                               </span>
                             ))
                           ) : (

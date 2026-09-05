@@ -69,9 +69,9 @@ function emptyBindings(template: TemplateSummary | undefined): ProfileSlotBindin
 }
 
 function hasConfiguration(binding: ProfileNodeBinding) {
-  return binding.mode === 'node'
-    ? binding.nodeIds.length > 0
-    : binding.sourceIds.length > 0 || Boolean(binding.includeRegex || binding.excludeRegex)
+  if (binding.mode === 'node') return binding.nodeIds.length > 0
+  if (binding.mode === 'tag') return binding.tags.length > 0
+  return binding.sourceIds.length > 0 || Boolean(binding.includeRegex || binding.excludeRegex)
 }
 
 export function NewProfilePage() {
@@ -144,6 +144,10 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
             missingNodeIds: z.array(z.string()),
           }),
+          z.object({
+            mode: z.literal('tag'),
+            tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
+          }),
         ]),
         slotBindings: z.array(
           z.discriminatedUnion('mode', [
@@ -159,6 +163,11 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               mode: z.literal('node'),
               nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
               missingNodeIds: z.array(z.string()),
+            }),
+            z.object({
+              slotKey: z.string(),
+              mode: z.literal('tag'),
+              tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
             }),
           ]),
         ),
@@ -179,13 +188,13 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             tags: value.tags,
             templateId: value.templateId,
             nodeBinding:
-              value.nodeBinding.mode === 'source'
-                ? value.nodeBinding
-                : { mode: value.nodeBinding.mode, nodeIds: value.nodeBinding.nodeIds },
+              value.nodeBinding.mode === 'node'
+                ? { mode: value.nodeBinding.mode, nodeIds: value.nodeBinding.nodeIds }
+                : value.nodeBinding,
             slotBindings: value.slotBindings.map((binding) =>
-              binding.mode === 'source'
-                ? binding
-                : { slotKey: binding.slotKey, mode: binding.mode, nodeIds: binding.nodeIds },
+              binding.mode === 'node'
+                ? { slotKey: binding.slotKey, mode: binding.mode, nodeIds: binding.nodeIds }
+                : binding,
             ),
             enabled: profile?.enabled ?? true,
           }),
@@ -315,7 +324,13 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       if (nextKeys.has(binding.slotKey) || !hasConfiguration(binding)) return []
       const name = currentTemplate?.sourceSlots.find(({ key }) => key === binding.slotKey)?.name || binding.slotKey
       return [
-        `${name}：${binding.mode === 'node' ? `已指定 ${binding.nodeIds.length} 个节点` : `已选择 ${binding.sourceIds.length} 个节点源`}`,
+        `${name}：${
+          binding.mode === 'node'
+            ? `已指定 ${binding.nodeIds.length} 个节点`
+            : binding.mode === 'tag'
+              ? `已选择 ${binding.tags.length} 个节点标签`
+              : `已选择 ${binding.sourceIds.length} 个节点源`
+        }`,
       ]
     })
     if (lost.length) setPendingTemplate({ id: templateId, lost })
@@ -565,6 +580,10 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                     </Badge>
                                   )}
                                 </>
+                              ) : binding.mode === 'tag' ? (
+                                <Badge variant={binding.tags.length > 0 ? 'default' : 'secondary'} className="text-xs">
+                                  {binding.tags.length > 0 ? `${binding.tags.length} 个节点标签` : '未选节点标签'}
+                                </Badge>
                               ) : (
                                 <Badge
                                   variant={binding.nodeIds.length > 0 ? 'default' : 'secondary'}
@@ -588,6 +607,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                               value={field.state.value}
                               sources={sources}
                               nodes={nodes}
+                              tags={tagOptions}
                               onChange={field.handleChange}
                             />
                             {!field.state.meta.isValid && (
@@ -675,6 +695,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                       value={binding}
                                       sources={sources}
                                       nodes={nodes}
+                                      tags={tagOptions}
                                       onChange={(next) =>
                                         field.handleChange(
                                           field.state.value.map((item) =>

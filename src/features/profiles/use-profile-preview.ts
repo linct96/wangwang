@@ -65,6 +65,13 @@ export function useProfilePreview(
         return binding.nodeIds
           .map((id) => nodesById.get(id))
           .filter((node): node is NodeOption => Boolean(node?.enabled && node.sourceEnabled))
+      if (binding.mode === 'tag') {
+        const selectedTags = new Set(binding.tags.map((tag) => tag.toLocaleLowerCase()))
+        return allNodes.filter(
+          (node) =>
+            node.enabled && node.sourceEnabled && node.tags.some((tag) => selectedTags.has(tag.toLocaleLowerCase())),
+        )
+      }
       const selectedSourceIds = new Set(binding.sourceIds)
       let filtered = allNodes.filter(
         (node) => node.enabled && node.sourceEnabled && selectedSourceIds.has(node.sourceId),

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { CheckSquare, X } from 'lucide-react'
-import type { NodeOption, ProfileNodeBinding, Source, TemplateSourceSlot } from '@/api/types'
+import type { NodeOption, ProfileNodeBinding, Source, TagOption, TemplateSourceSlot } from '@/api/types'
+import { TagCombobox } from '@/components/tag-combobox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -25,24 +26,24 @@ export function SlotBindingEditor({
   value,
   sources,
   nodes,
+  tags,
   onChange,
 }: {
   slot: TemplateSourceSlot
   value: ProfileNodeBinding
   sources: Source[]
   nodes: NodeOption[]
+  tags: TagOption[]
   onChange: (value: ProfileNodeBinding) => void
 }) {
   const includeInvalid = value.mode === 'source' && regexError(value.includeRegex)
   const excludeInvalid = value.mode === 'source' && regexError(value.excludeRegex)
 
-  function setMode(mode: 'source' | 'node') {
+  function setMode(mode: ProfileNodeBinding['mode']) {
     if (mode === value.mode) return
-    onChange(
-      mode === 'source'
-        ? { mode, sourceIds: [], includeRegex: null, excludeRegex: null }
-        : { mode, nodeIds: [], missingNodeIds: [] },
-    )
+    if (mode === 'source') onChange({ mode, sourceIds: [], includeRegex: null, excludeRegex: null })
+    else if (mode === 'node') onChange({ mode, nodeIds: [], missingNodeIds: [] })
+    else onChange({ mode, tags: [] })
   }
 
   // 统计已选源的覆盖节点数
@@ -72,10 +73,11 @@ export function SlotBindingEditor({
         <FieldLabel className="mb-0 text-sm font-semibold text-foreground">节点来源方式</FieldLabel>
         <Segmented
           value={value.mode}
-          onChange={(val) => setMode(val as 'source' | 'node')}
+          onChange={(val) => setMode(val as ProfileNodeBinding['mode'])}
           options={[
-            { value: 'source', label: '按节点源动态分流' },
-            { value: 'node', label: '指定固定节点列表' },
+            { value: 'source', label: '按节点源' },
+            { value: 'tag', label: '按节点标签' },
+            { value: 'node', label: '指定节点' },
           ]}
           className="w-full sm:w-auto shrink-0"
         />
@@ -215,6 +217,22 @@ export function SlotBindingEditor({
             </Field>
           </div>
         </div>
+      ) : value.mode === 'tag' ? (
+        <Field>
+          <div className="flex flex-col gap-1">
+            <FieldLabel htmlFor={`tags-${slot.key}`}>选择节点标签</FieldLabel>
+            <span className="text-xs text-muted-foreground">匹配任一标签的可用节点都会自动加入</span>
+          </div>
+          <TagCombobox
+            id={`tags-${slot.key}`}
+            value={value.tags}
+            options={tags}
+            max={20}
+            allowCreate={false}
+            placeholder="选择一个或多个节点标签"
+            onChange={(selected) => onChange({ ...value, tags: selected })}
+          />
+        </Field>
       ) : (
         <DirectNodeBindingEditor slot={slot} value={value} nodes={nodes} onChange={onChange} />
       )}

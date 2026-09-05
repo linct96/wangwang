@@ -211,6 +211,12 @@ export function ProfilesPage() {
                                 </span>
                               ),
                             )}
+                            {profile.nodeBinding.mode === 'tag' &&
+                              profile.nodeBinding.tags.map((tag) => (
+                                <span key={tag} className="profile-pill">
+                                  标签：{tag}
+                                </span>
+                              ))}
                             {profile.nodeBinding.mode === 'node' && (
                               <span className="profile-pill">指定 {profile.nodeBinding.nodeIds.length} 个节点</span>
                             )}
