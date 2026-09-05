@@ -17,7 +17,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format'
-import { useMinimumLoading } from '@/lib/use-minimum-loading'
 import { cn } from '@/lib/utils'
 import '@/styles/profiles.css'
 
@@ -52,7 +51,7 @@ export function ProfilesPage() {
   const [deleting, setDeleting] = useState<Profile>()
   const [compileStatus, setCompileStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [busyId, setBusyId] = useState('')
-  const initialLoading = useMinimumLoading(loading && !profiles)
+  const initialLoading = loading && !profiles
 
   const items = profiles || []
   const enabledCount = items.filter((p) => p.enabled).length

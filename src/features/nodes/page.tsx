@@ -13,7 +13,6 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMinimumLoading } from '@/lib/use-minimum-loading'
 
 export function NodesPage() {
   const [protocol, setProtocol] = useState('')
@@ -30,7 +29,7 @@ export function NodesPage() {
   const [deleting, setDeleting] = useState<NodeItem>()
   const [deletingBatch, setDeletingBatch] = useState<NodeItem[]>()
   const [deletingBusy, setDeletingBusy] = useState(false)
-  const initialLoading = useMinimumLoading(loading && !data)
+  const initialLoading = loading && !data
   const selectedNodes = data?.items.filter((item) => selected.includes(item.id)) || []
   const deletableSelected = selectedNodes.filter((item) => item.canDelete)
   const deletingBatchCount = deletingBatch?.filter((item) => item.canDelete).length || 0

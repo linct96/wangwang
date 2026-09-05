@@ -1,14 +1,17 @@
-import dayjs from 'dayjs'
+const pad = (value: number) => String(value).padStart(2, '0')
 
 export function formatDate(value: string | number | null) {
-  return value == null ? '-' : dayjs(value).format('YYYY/M/D HH:mm')
+  if (value == null) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 export function formatRelativeTime(value: string | number | null) {
   if (value == null) return '-'
-  const date = dayjs(value)
-  if (!date.isValid()) return '-'
-  const seconds = dayjs().diff(date, 'second')
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
   if (seconds < 0) return '即将'
   if (seconds < 60) return '刚刚'
   if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟前`

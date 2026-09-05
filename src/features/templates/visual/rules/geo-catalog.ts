@@ -38,12 +38,6 @@ function inferProvider(source: string, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
   if (owner === 'loyalsoldier' && repo === 'v2ray-rules-dat') return 'loyalsoldier'
   return 'custom'
 }
-export function detectGeoProvider(yaml: string, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
-  return detectGeoSource(yaml, type).provider
-}
-export function inferGeoProvider(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): GeoProvider {
-  return inferGeoSource(geo, type).provider
-}
 export function inferGeoSource(geo: GeoSettingsDraft, type: 'GEOSITE' | 'GEOIP'): { provider: GeoProvider } {
   const mode = geo.geodataMode === true
   const source = type === 'GEOSITE' ? geo.geoxUrl.geosite : geo.geoxUrl[mode ? 'geoip' : 'mmdb']
