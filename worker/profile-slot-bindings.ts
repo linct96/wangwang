@@ -14,7 +14,13 @@ export type ProfileSlotBindingInput =
       excludeRegex: string | null
     }
   | { slotKey: string; mode: 'node'; nodeIds: string[] }
-  | { slotKey: string; mode: 'tag'; tags: string[] }
+  | {
+      slotKey: string
+      mode: 'tag'
+      tags: string[]
+      includeRegex: string | null
+      excludeRegex: string | null
+    }
 
 export type ProfileSlotBinding =
   | Extract<ProfileSlotBindingInput, { mode: 'source' | 'tag' }>
@@ -23,7 +29,7 @@ export type ProfileSlotBinding =
 export type ProfileNodeBindingInput =
   | { mode: 'source'; sourceIds: string[]; includeRegex: string | null; excludeRegex: string | null }
   | { mode: 'node'; nodeIds: string[] }
-  | { mode: 'tag'; tags: string[] }
+  | { mode: 'tag'; tags: string[]; includeRegex: string | null; excludeRegex: string | null }
 
 export type ProfileNodeBinding =
   | Extract<ProfileNodeBindingInput, { mode: 'source' | 'tag' }>
@@ -90,7 +96,12 @@ export async function validateProfileNodeBinding(env: Env, binding: ProfileNodeB
   }
   const tagNames = normalizeTagInputs(binding.tags, 20)
   if (!tagNames.length) throw new Error('节点选择至少需要一个节点标签')
-  return { mode: 'tag' as const, tags: tagNames }
+  return {
+    mode: 'tag' as const,
+    tags: tagNames,
+    includeRegex: normalizeRegex(binding.includeRegex, '节点选择', '包含'),
+    excludeRegex: normalizeRegex(binding.excludeRegex, '节点选择', '排除'),
+  }
 }
 
 export async function validateProfileSlotBindings(
@@ -124,7 +135,13 @@ export async function validateProfileSlotBindings(
     }
     const tagNames = normalizeTagInputs(binding.tags, 20)
     if (!tagNames.length) throw new Error(`槽位“${name}”至少需要一个节点标签`)
-    return { slotKey: key, mode: 'tag', tags: tagNames }
+    return {
+      slotKey: key,
+      mode: 'tag',
+      tags: tagNames,
+      includeRegex: normalizeRegex(binding.includeRegex, `槽位“${name}”`, '包含'),
+      excludeRegex: normalizeRegex(binding.excludeRegex, `槽位“${name}”`, '排除'),
+    }
   })
 
   const sourceIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])))]
@@ -174,7 +191,13 @@ export async function readProfileSlotBindings(env: Env, profileId: string): Prom
         excludeRegex: binding.excludeRegex,
       }
     if (binding.mode === 'tag')
-      return { slotKey: binding.slotKey, mode: 'tag' as const, tags: tagNames.get(binding.slotKey) || [] }
+      return {
+        slotKey: binding.slotKey,
+        mode: 'tag' as const,
+        tags: tagNames.get(binding.slotKey) || [],
+        includeRegex: binding.includeRegex,
+        excludeRegex: binding.excludeRegex,
+      }
     return {
       slotKey: binding.slotKey,
       mode: 'node' as const,
@@ -197,8 +220,8 @@ export async function replaceProfileSlotBindings(env: Env, profileId: string, bi
         profileId,
         binding.slotKey,
         binding.mode,
-        binding.mode === 'source' ? binding.includeRegex : null,
-        binding.mode === 'source' ? binding.excludeRegex : null,
+        binding.mode === 'source' || binding.mode === 'tag' ? binding.includeRegex : null,
+        binding.mode === 'source' || binding.mode === 'tag' ? binding.excludeRegex : null,
       ),
     ),
     ...bindings.flatMap((binding) =>

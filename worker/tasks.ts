@@ -548,14 +548,18 @@ async function selectTagSlotNodes(
   const rows = await enabledNodes(env)
   const result: SelectedSlotNode[] = []
   for (const binding of bindings)
-    for (const node of await filterNodesByTags(env, rows, binding.tags))
+    for (const node of await filterNodesByTags(env, rows, binding.tags)) {
+      const name = node.alias || node.originalName
+      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) continue
+      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) continue
       result.push({
         slotKey: binding.slotKey,
         nodeId: node.nodeId,
         physicalNodeId: node.physicalNodeId,
         config: node.config,
-        name: node.alias || node.originalName,
+        name,
       })
+    }
   return result
 }
 
@@ -585,7 +589,12 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
 
   if (binding.mode === 'tag') {
     const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
-    return rows.map((node) => ({ ...node, name: node.alias || node.originalName }))
+    return rows.flatMap((node) => {
+      const name = node.alias || node.originalName
+      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
+      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      return [{ ...node, name }]
+    })
   }
 
   const rows = await db(env)
@@ -684,7 +693,12 @@ async function selectDraftGlobalNodes(env: Env, binding: ProfileNodeBindingInput
 
   if (binding.mode === 'tag') {
     const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
-    return rows.map((node) => ({ ...node, name: node.alias || node.originalName }))
+    return rows.flatMap((node) => {
+      const name = node.alias || node.originalName
+      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
+      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      return [{ ...node, name }]
+    })
   }
 
   if (!binding.nodeIds.length) return []

@@ -201,7 +201,7 @@ export const profileNodeBinding = sqliteTable(
     check('profile_node_binding_mode_check', sql`${table.mode} IN ('source', 'node', 'tag')`),
     check(
       'profile_node_binding_node_regex_check',
-      sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
+      sql`${table.mode} IN ('source', 'tag') OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
     ),
   ],
 )
@@ -270,7 +270,7 @@ export const profileSlotBindings = sqliteTable(
     check('profile_slot_bindings_mode_check', sql`${table.mode} IN ('source', 'node', 'tag')`),
     check(
       'profile_slot_bindings_node_regex_check',
-      sql`${table.mode} = 'source' OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
+      sql`${table.mode} IN ('source', 'tag') OR (${table.includeRegex} IS NULL AND ${table.excludeRegex} IS NULL)`,
     ),
   ],
 )

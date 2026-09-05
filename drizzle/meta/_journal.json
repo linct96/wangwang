@@ -15,6 +15,13 @@
       "when": 1788606842835,
       "tag": "0001_clammy_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788615749455,
+      "tag": "0002_silent_george_stacy",
+      "breakpoints": true
     }
   ]
 }

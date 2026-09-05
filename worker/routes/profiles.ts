@@ -46,6 +46,8 @@ const nodeBindingSchema = z.discriminatedUnion('mode', [
     .object({
       mode: z.literal('tag'),
       tags: z.array(z.string().trim().min(1).max(24)).min(1).max(20),
+      includeRegex: regexSchema.default(null),
+      excludeRegex: regexSchema.default(null),
     })
     .strict(),
 ])
@@ -73,6 +75,8 @@ const slotBindingsSchema = z
           slotKey: z.string().min(1),
           mode: z.literal('tag'),
           tags: z.array(z.string().trim().min(1).max(24)).min(1).max(20),
+          includeRegex: regexSchema.default(null),
+          excludeRegex: regexSchema.default(null),
         })
         .strict(),
     ]),

@@ -29,7 +29,13 @@ export async function readProfileNodeBinding(env: Env, profileId: string): Promi
       excludeRegex: binding.excludeRegex,
     }
 
-  if (binding.mode === 'tag') return { mode: 'tag', tags: tagRows.map(({ name }) => name) }
+  if (binding.mode === 'tag')
+    return {
+      mode: 'tag',
+      tags: tagRows.map(({ name }) => name),
+      includeRegex: binding.includeRegex,
+      excludeRegex: binding.excludeRegex,
+    }
 
   const nodeIds = nodeRows.map(({ nodeId }) => nodeId)
   const existing = new Set<string>()
@@ -52,8 +58,8 @@ export async function replaceProfileNodeBinding(env: Env, profileId: string, bin
     ).bind(
       profileId,
       binding.mode,
-      binding.mode === 'source' ? binding.includeRegex : null,
-      binding.mode === 'source' ? binding.excludeRegex : null,
+      binding.mode === 'source' || binding.mode === 'tag' ? binding.includeRegex : null,
+      binding.mode === 'source' || binding.mode === 'tag' ? binding.excludeRegex : null,
     ),
     ...bindingTags.map((tag) =>
       env.DB.prepare('INSERT INTO profile_node_tags (profile_id, tag_id) VALUES (?, ?)').bind(profileId, tag.id),
