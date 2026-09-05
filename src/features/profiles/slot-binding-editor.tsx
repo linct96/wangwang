@@ -1,15 +1,13 @@
 import { useMemo } from 'react'
-import { CheckSquare, X } from 'lucide-react'
 import type { NodeOption, ProfileNodeBinding, Source, TagOption, TemplateSourceSlot } from '@/api/types'
-import { TagCombobox } from '@/components/tag-combobox'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { cn } from '@/lib/utils'
 import { DirectNodeBindingEditor } from './direct-node-binding-editor'
+import { SelectionActionButton } from './selection-action-button'
 
 function regexError(value: string | null) {
   if (!value) return false
@@ -19,6 +17,52 @@ function regexError(value: string | null) {
   } catch {
     return true
   }
+}
+
+function RegexFilterInputs({
+  slotKey,
+  includeRegex,
+  excludeRegex,
+  includeInvalid,
+  excludeInvalid,
+  onChange,
+}: {
+  slotKey: string
+  includeRegex: string | null
+  excludeRegex: string | null
+  includeInvalid: boolean
+  excludeInvalid: boolean
+  onChange: (patch: { includeRegex: string | null; excludeRegex: string | null }) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Field data-invalid={includeInvalid}>
+        <FieldLabel htmlFor={`include-${slotKey}`}>节点筛选</FieldLabel>
+        <Input
+          id={`include-${slotKey}`}
+          value={includeRegex || ''}
+          maxLength={200}
+          placeholder="例如：香港|HK|日本|JP"
+          aria-invalid={includeInvalid}
+          onChange={(event) => onChange({ includeRegex: event.target.value || null, excludeRegex })}
+        />
+        {includeInvalid && <FieldError>正则表达式语法无效</FieldError>}
+      </Field>
+
+      <Field data-invalid={excludeInvalid}>
+        <FieldLabel htmlFor={`exclude-${slotKey}`}>节点过滤</FieldLabel>
+        <Input
+          id={`exclude-${slotKey}`}
+          value={excludeRegex || ''}
+          maxLength={200}
+          placeholder="例如：剩余|到期|官网|倍率"
+          aria-invalid={excludeInvalid}
+          onChange={(event) => onChange({ includeRegex, excludeRegex: event.target.value || null })}
+        />
+        {excludeInvalid && <FieldError>正则表达式语法无效</FieldError>}
+      </Field>
+    </div>
+  )
 }
 
 export function SlotBindingEditor({
@@ -36,14 +80,14 @@ export function SlotBindingEditor({
   tags: TagOption[]
   onChange: (value: ProfileNodeBinding) => void
 }) {
-  const includeInvalid = value.mode === 'source' && regexError(value.includeRegex)
-  const excludeInvalid = value.mode === 'source' && regexError(value.excludeRegex)
+  const includeInvalid = (value.mode === 'source' || value.mode === 'tag') && regexError(value.includeRegex)
+  const excludeInvalid = (value.mode === 'source' || value.mode === 'tag') && regexError(value.excludeRegex)
 
   function setMode(mode: ProfileNodeBinding['mode']) {
     if (mode === value.mode) return
     if (mode === 'source') onChange({ mode, sourceIds: [], includeRegex: null, excludeRegex: null })
     else if (mode === 'node') onChange({ mode, nodeIds: [], missingNodeIds: [] })
-    else onChange({ mode, tags: [] })
+    else onChange({ mode, tags: [], includeRegex: null, excludeRegex: null })
   }
 
   // 统计已选源的覆盖节点数
@@ -64,6 +108,43 @@ export function SlotBindingEditor({
   function clearSources() {
     if (value.mode !== 'source') return
     onChange({ ...value, sourceIds: [] })
+  }
+
+  // 统计每个标签覆盖的可用节点数
+  const tagNodeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const tag of tags) counts.set(tag.name, 0)
+    for (const node of nodes) {
+      if (!node.enabled || !node.sourceEnabled) continue
+      for (const t of node.tags) {
+        counts.set(t, (counts.get(t) || 0) + 1)
+      }
+    }
+    return counts
+  }, [tags, nodes])
+
+  // 统计已选标签覆盖的可用节点数
+  const totalNodesInSelectedTags = useMemo(() => {
+    if (value.mode !== 'tag') return 0
+    const selectedTags = new Set(value.tags)
+    let count = 0
+    for (const node of nodes) {
+      if (!node.enabled || !node.sourceEnabled) continue
+      if (node.tags.some((t) => selectedTags.has(t))) count++
+    }
+    return count
+  }, [value, nodes])
+
+  // 全选标签（最多20个）
+  function selectAllTags() {
+    if (value.mode !== 'tag') return
+    onChange({ ...value, tags: tags.slice(0, 20).map((t) => t.name) })
+  }
+
+  // 清空标签
+  function clearTags() {
+    if (value.mode !== 'tag') return
+    onChange({ ...value, tags: [] })
   }
 
   return (
@@ -92,39 +173,19 @@ export function SlotBindingEditor({
             <div className="flex flex-wrap items-center justify-between gap-2 min-h-8">
               <div className="flex items-center gap-2 flex-wrap">
                 <FieldLabel className="mb-0 text-sm font-medium">选择接入节点源</FieldLabel>
-                <Badge variant={value.sourceIds.length > 0 ? 'default' : 'secondary'} className="text-xs">
+                <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
                   已选 {value.sourceIds.length} / {sources.length} 个源
+                  {value.sourceIds.length > 0 ? `，共 ${totalNodesInSelectedSources} 个节点` : ''}
                 </Badge>
-                {value.sourceIds.length > 0 && (
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    (覆盖约 {totalNodesInSelectedSources} 个节点)
-                  </span>
-                )}
               </div>
 
               <div className="flex items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={selectAllSources}
-                  className="h-7 px-2.5 gap-1 text-xs font-medium border-border/80 hover:bg-accent/60"
-                >
-                  <CheckSquare className="size-3.5" />
-                  全选可用源
-                </Button>
-                {value.sourceIds.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={clearSources}
-                    className="h-7 px-2.5 gap-1 text-xs font-medium border-border/80 hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <X className="size-3.5" />
-                    清空
-                  </Button>
-                )}
+                <SelectionActionButton
+                  count={value.sourceIds.length}
+                  disabled={!sources.some((s) => s.enabled)}
+                  onSelectAll={selectAllSources}
+                  onClear={clearSources}
+                />
               </div>
             </div>
 
@@ -189,50 +250,96 @@ export function SlotBindingEditor({
           <div className="h-px bg-border/60" />
 
           {/* 正则表达式过滤表单 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field data-invalid={includeInvalid}>
-              <FieldLabel htmlFor={`include-${slot.key}`}>节点筛选</FieldLabel>
-              <Input
-                id={`include-${slot.key}`}
-                value={value.includeRegex || ''}
-                maxLength={200}
-                placeholder="例如：香港|HK|日本|JP"
-                aria-invalid={includeInvalid}
-                onChange={(event) => onChange({ ...value, includeRegex: event.target.value || null })}
-              />
-              {includeInvalid && <FieldError>正则表达式语法无效</FieldError>}
-            </Field>
-
-            <Field data-invalid={excludeInvalid}>
-              <FieldLabel htmlFor={`exclude-${slot.key}`}>节点过滤</FieldLabel>
-              <Input
-                id={`exclude-${slot.key}`}
-                value={value.excludeRegex || ''}
-                maxLength={200}
-                placeholder="例如：剩余|到期|官网|倍率"
-                aria-invalid={excludeInvalid}
-                onChange={(event) => onChange({ ...value, excludeRegex: event.target.value || null })}
-              />
-              {excludeInvalid && <FieldError>正则表达式语法无效</FieldError>}
-            </Field>
-          </div>
+          <RegexFilterInputs
+            slotKey={slot.key}
+            includeRegex={value.includeRegex}
+            excludeRegex={value.excludeRegex}
+            includeInvalid={includeInvalid}
+            excludeInvalid={excludeInvalid}
+            onChange={({ includeRegex, excludeRegex }) => onChange({ ...value, includeRegex, excludeRegex })}
+          />
         </div>
       ) : value.mode === 'tag' ? (
-        <Field>
-          <div className="flex flex-col gap-1">
-            <FieldLabel htmlFor={`tags-${slot.key}`}>选择节点标签</FieldLabel>
-            <span className="text-xs text-muted-foreground">匹配任一标签的可用节点都会自动加入</span>
+        <div className="slot-source-form">
+          {/* 节点标签选择 */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 min-h-8">
+              <div className="flex items-center gap-2 flex-wrap">
+                <FieldLabel className="mb-0 text-sm font-medium">选择节点标签</FieldLabel>
+                <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
+                  已选 {value.tags.length} / {tags.length} 个标签
+                  {value.tags.length > 0 ? `，共 ${totalNodesInSelectedTags} 个节点` : ''}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <SelectionActionButton
+                  count={value.tags.length}
+                  disabled={tags.length === 0}
+                  onSelectAll={selectAllTags}
+                  onClear={clearTags}
+                />
+              </div>
+            </div>
+
+            <div className="source-picker-grid">
+              {tags.map((tag) => {
+                const checked = value.tags.includes(tag.name)
+                const count = tagNodeCounts.get(tag.name) || 0
+                return (
+                  <label
+                    key={tag.id}
+                    htmlFor={`tag-${slot.key}-${tag.id}`}
+                    className={cn('source-picker-item', checked && 'source-picker-item-selected')}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Checkbox
+                        id={`tag-${slot.key}-${tag.id}`}
+                        checked={checked}
+                        onCheckedChange={() =>
+                          onChange({
+                            ...value,
+                            tags: checked ? value.tags.filter((t) => t !== tag.name) : [...value.tags, tag.name],
+                          })
+                        }
+                        className="size-4"
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-medium text-xs truncate" title={tag.name}>
+                          {tag.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="secondary" className="text-[11px] h-5 px-1.5 font-mono">
+                        {count} 节点
+                      </Badge>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+
+            {!tags.length && (
+              <p className="text-xs text-muted-foreground py-3 text-center border rounded-md border-dashed">
+                系统中暂无节点标签，可在「节点管理」或「节点源」中为节点添加标签。
+              </p>
+            )}
           </div>
-          <TagCombobox
-            id={`tags-${slot.key}`}
-            value={value.tags}
-            options={tags}
-            max={20}
-            allowCreate={false}
-            placeholder="选择一个或多个节点标签"
-            onChange={(selected) => onChange({ ...value, tags: selected })}
+
+          <div className="h-px bg-border/60" />
+
+          {/* 正则表达式过滤表单 */}
+          <RegexFilterInputs
+            slotKey={slot.key}
+            includeRegex={value.includeRegex}
+            excludeRegex={value.excludeRegex}
+            includeInvalid={includeInvalid}
+            excludeInvalid={excludeInvalid}
+            onChange={({ includeRegex, excludeRegex }) => onChange({ ...value, includeRegex, excludeRegex })}
           />
-        </Field>
+        </div>
       ) : (
         <DirectNodeBindingEditor slot={slot} value={value} nodes={nodes} onChange={onChange} />
       )}

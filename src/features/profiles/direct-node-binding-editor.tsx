@@ -1,17 +1,17 @@
 import { useMemo, useState } from 'react'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation } from '@dnd-kit/react/sortable'
-import { AlertCircle, CheckSquare, Search, Trash2, XCircle } from 'lucide-react'
+import { AlertCircle, Search, X } from 'lucide-react'
 import type { NodeOption, ProfileNodeBinding, TemplateSourceSlot } from '@/api/types'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { SelectionActionButton } from './selection-action-button'
 import { SortableSelectedNode } from './sortable-selected-node'
 
 type DirectNodeBindingEditorProps = {
@@ -83,8 +83,10 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
     onChange({ ...value, nodeIds: [] })
   }
 
-  const allVisibleSelected =
-    visible.length > 0 && visible.filter((n) => n.enabled && n.sourceEnabled).every((n) => value.nodeIds.includes(n.id))
+  const selectedVisibleCount = useMemo(
+    () => visible.filter((n) => value.nodeIds.includes(n.id)).length,
+    [visible, value.nodeIds],
+  )
 
   return (
     <div className="direct-node-container">
@@ -125,7 +127,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
       />
 
       <div className="direct-node-workbench">
-        {/* 左栏：可选节点库 */}
+        {/* 左栏：节点库 */}
         <section
           className={cn(
             'direct-node-pane direct-node-available',
@@ -134,23 +136,15 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
         >
           <div className="direct-node-pane-header">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">可选节点库</span>
-              <Badge variant="secondary" className="text-xs">
-                {visible.length} 个
-              </Badge>
+              <span className="font-semibold text-sm">节点库</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={allVisibleSelected ? unselectVisible : selectAllVisible}
-                disabled={!visible.length}
-                className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
-              >
-                <CheckSquare className="size-3.5 mr-1" />
-                {allVisibleSelected ? '取消全选' : '全选可见'}
-              </Button>
+              <SelectionActionButton
+                count={selectedVisibleCount}
+                disabled={!visible.some((n) => n.enabled && n.sourceEnabled)}
+                onSelectAll={selectAllVisible}
+                onClear={unselectVisible}
+              />
             </div>
           </div>
 
@@ -263,25 +257,25 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
           <div className="direct-node-pane-header">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">输出排序</span>
-              <Badge variant={value.nodeIds.length > 0 ? 'default' : 'secondary'} className="text-xs">
+              <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
                 已选 {value.nodeIds.length}
               </Badge>
             </div>
             {value.nodeIds.length > 0 && (
               <Button
                 type="button"
-                variant="ghost"
-                size="xs"
+                variant="outline"
+                size="sm"
                 onClick={clearAll}
-                className="text-xs text-muted-foreground hover:text-destructive h-7 px-2"
+                className="h-7 px-2.5 gap-1.5 text-xs text-muted-foreground hover:text-destructive border-border/70 hover:border-destructive/30 hover:bg-destructive/10 rounded-md font-medium shadow-none transition-all"
               >
-                <Trash2 className="size-3.5 mr-1" />
-                清空全部
+                <X className="size-3.5" />
+                清空
               </Button>
             )}
           </div>
 
-          <Field data-invalid={!value.nodeIds.length} className="flex-1 min-h-0 flex flex-col gap-0">
+          <div className="flex-1 min-h-0 flex flex-col gap-0">
             <div className="direct-node-sort-hint">
               <span>上下拖拽手柄或点击箭头调整节点在订阅中的先后顺序</span>
             </div>
@@ -304,18 +298,15 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
                     />
                   ))}
                   {!value.nodeIds.length && (
-                    <div className="direct-node-empty">
-                      <XCircle className="size-8 text-muted-foreground/40 mb-1" />
-                      <p className="font-medium">尚未选择任何节点</p>
-                      <span className="text-xs text-muted-foreground">
-                        在左侧勾选需要包含的节点，勾选顺序即输出顺序
-                      </span>
+                    <div className="rounded-md border border-dashed px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-foreground">尚未选择任何节点</p>
+                      <p className="mt-1 text-xs text-muted-foreground">在左侧勾选需要包含的节点，勾选顺序即输出顺序</p>
                     </div>
                   )}
                 </div>
               </DragDropProvider>
             </div>
-          </Field>
+          </div>
         </section>
       </div>
     </div>

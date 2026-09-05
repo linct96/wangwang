@@ -67,10 +67,23 @@ export function useProfilePreview(
           .filter((node): node is NodeOption => Boolean(node?.enabled && node.sourceEnabled))
       if (binding.mode === 'tag') {
         const selectedTags = new Set(binding.tags.map((tag) => tag.toLocaleLowerCase()))
-        return allNodes.filter(
+        let filtered = allNodes.filter(
           (node) =>
             node.enabled && node.sourceEnabled && node.tags.some((tag) => selectedTags.has(tag.toLocaleLowerCase())),
         )
+        try {
+          if (binding.includeRegex) {
+            const include = new RegExp(binding.includeRegex)
+            filtered = filtered.filter((node) => include.test(node.name))
+          }
+          if (binding.excludeRegex) {
+            const exclude = new RegExp(binding.excludeRegex)
+            filtered = filtered.filter((node) => !exclude.test(node.name))
+          }
+        } catch {
+          // 表单校验会显示无效正则，预览暂时忽略它。
+        }
+        return filtered
       }
       const selectedSourceIds = new Set(binding.sourceIds)
       let filtered = allNodes.filter(

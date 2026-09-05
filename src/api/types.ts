@@ -114,6 +114,8 @@ export type ProfileNodeBinding =
   | {
       mode: 'tag'
       tags: string[]
+      includeRegex: string | null
+      excludeRegex: string | null
     }
 export type ProfileSlotBinding = ProfileNodeBinding & { slotKey: string }
 

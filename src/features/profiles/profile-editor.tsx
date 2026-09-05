@@ -70,7 +70,7 @@ function emptyBindings(template: TemplateSummary | undefined): ProfileSlotBindin
 
 function hasConfiguration(binding: ProfileNodeBinding) {
   if (binding.mode === 'node') return binding.nodeIds.length > 0
-  if (binding.mode === 'tag') return binding.tags.length > 0
+  if (binding.mode === 'tag') return binding.tags.length > 0 || Boolean(binding.includeRegex || binding.excludeRegex)
   return binding.sourceIds.length > 0 || Boolean(binding.includeRegex || binding.excludeRegex)
 }
 
@@ -147,6 +147,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           z.object({
             mode: z.literal('tag'),
             tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
+            includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+            excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
           }),
         ]),
         slotBindings: z.array(
@@ -168,6 +170,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               slotKey: z.string(),
               mode: z.literal('tag'),
               tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
+              includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+              excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
             }),
           ]),
         ),
@@ -206,7 +210,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
         } catch (reason) {
           toast.error(`配置已保存，但生成过程遇到异常：${reason instanceof Error ? reason.message : '未知错误'}`)
         }
-        await navigate({ to: '/profiles/$id', params: { id: result.profile.id } })
+        await navigate({ to: '/profiles' })
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : '保存失败')
         setPhase('idle')
@@ -291,7 +295,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const custom = useMemo(() => templates.filter((template) => template.kind === 'custom'), [templates])
   const loading = profileLoading || templatesLoading || sourcesLoading || tagsLoading || nodesLoading
   const loadError = profileError || templateError || sourceError || tagError || nodesError
-  const backTo = id ? '/profiles/$id' : '/profiles'
 
   function applyTemplate(templateId: TemplateId) {
     const previous = new Map(form.state.values.slotBindings.map((binding) => [binding.slotKey, binding]))
@@ -346,7 +349,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     <div className="profile-editor-page">
       <div className="page-heading">
         <div className="title-with-back">
-          <IconButton label="返回" onClick={() => void navigate({ to: backTo, params: id ? { id } : undefined })}>
+          <IconButton label="返回" onClick={() => void navigate({ to: '/profiles' })}>
             <ArrowLeft className="size-4" />
           </IconButton>
           <div>
@@ -563,40 +566,50 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                               <strong className="text-sm font-semibold text-foreground">全部节点</strong>
                             </div>
 
-                            <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
-                              {binding.mode === 'source' ? (
-                                <>
+                            {!nodesExpanded && (
+                              <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
+                                {binding.mode === 'source' ? (
+                                  <>
+                                    <Badge
+                                      variant={binding.sourceIds.length > 0 ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {binding.sourceIds.length > 0
+                                        ? `${binding.sourceIds.length} 个节点源`
+                                        : '未选节点源'}
+                                    </Badge>
+                                    {(binding.includeRegex || binding.excludeRegex) && (
+                                      <Badge variant="outline" className="text-xs">
+                                        正则已启用
+                                      </Badge>
+                                    )}
+                                  </>
+                                ) : binding.mode === 'tag' ? (
+                                  <>
+                                    <Badge
+                                      variant={binding.tags.length > 0 ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {binding.tags.length > 0 ? `${binding.tags.length} 个节点标签` : '未选节点标签'}
+                                    </Badge>
+                                    {(binding.includeRegex || binding.excludeRegex) && (
+                                      <Badge variant="outline" className="text-xs">
+                                        正则已启用
+                                      </Badge>
+                                    )}
+                                  </>
+                                ) : (
                                   <Badge
-                                    variant={binding.sourceIds.length > 0 ? 'default' : 'secondary'}
+                                    variant={binding.nodeIds.length > 0 ? 'default' : 'secondary'}
                                     className="text-xs"
                                   >
-                                    {binding.sourceIds.length > 0
-                                      ? `${binding.sourceIds.length} 个节点源`
-                                      : '未选节点源'}
+                                    {binding.nodeIds.length > 0
+                                      ? `${binding.nodeIds.length} 个指定节点`
+                                      : '未选指定节点'}
                                   </Badge>
-                                  {(binding.includeRegex || binding.excludeRegex) && (
-                                    <Badge variant="outline" className="text-xs">
-                                      正则已启用
-                                    </Badge>
-                                  )}
-                                </>
-                              ) : binding.mode === 'tag' ? (
-                                <Badge variant={binding.tags.length > 0 ? 'default' : 'secondary'} className="text-xs">
-                                  {binding.tags.length > 0 ? `${binding.tags.length} 个节点标签` : '未选节点标签'}
-                                </Badge>
-                              ) : (
-                                <Badge
-                                  variant={binding.nodeIds.length > 0 ? 'default' : 'secondary'}
-                                  className="text-xs"
-                                >
-                                  {binding.nodeIds.length > 0 ? `${binding.nodeIds.length} 个指定节点` : '未选指定节点'}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="profile-section-actions" onClick={(e) => e.stopPropagation()}>
-                            <span className="text-xs text-muted-foreground hidden sm:inline">全局默认分流</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -667,13 +680,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                       </strong>
                                     </div>
 
-                                    {binding.mode === 'source' && (binding.includeRegex || binding.excludeRegex) && (
-                                      <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
-                                        <Badge variant="outline" className="text-xs hidden md:inline-flex">
-                                          正则已启用
-                                        </Badge>
-                                      </div>
-                                    )}
+                                    {(binding.mode === 'source' || binding.mode === 'tag') &&
+                                      (binding.includeRegex || binding.excludeRegex) && (
+                                        <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
+                                          <Badge variant="outline" className="text-xs hidden md:inline-flex">
+                                            正则已启用
+                                          </Badge>
+                                        </div>
+                                      )}
                                   </div>
 
                                   <div className="profile-section-actions" onClick={(e) => e.stopPropagation()}>
@@ -802,7 +816,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                           type="button"
                           variant="ghost"
                           disabled={phase !== 'idle'}
-                          onClick={() => void navigate({ to: backTo, params: id ? { id } : undefined })}
+                          onClick={() => void navigate({ to: '/profiles' })}
                           className="h-9 px-4"
                         >
                           取消
