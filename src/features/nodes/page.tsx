@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
@@ -9,7 +9,7 @@ import { AddNodeDialog, NodeDialog } from './node-dialogs'
 import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 export function NodesPage() {
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const [protocol, setProtocol] = useState('')
   const [enabled, setEnabled] = useState('')
   const [tagId, setTagId] = useState('')
@@ -116,19 +117,38 @@ export function NodesPage() {
         </Button>
       </div>
       <div className="toolbar">
-        <Input
-          type="search"
-          aria-label="搜索节点"
-          placeholder="搜索名称、服务器或协议"
-          className="w-full md:w-64 md:shrink-0"
-          maxLength={100}
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            setPage(1)
-            setSelected([])
-          }}
-        />
+        <InputGroup className="w-full md:w-64 md:shrink-0">
+          <InputGroupInput
+            ref={searchRef}
+            type="search"
+            aria-label="搜索节点"
+            placeholder="搜索名称、服务器或协议"
+            className="[&::-webkit-search-cancel-button]:appearance-none"
+            maxLength={100}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setPage(1)
+              setSelected([])
+            }}
+          />
+          {query && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                aria-label="清除搜索"
+                onClick={() => {
+                  setQuery('')
+                  setPage(1)
+                  setSelected([])
+                  searchRef.current?.focus()
+                }}
+              >
+                <X aria-hidden="true" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
         <Select
           value={tagId || 'all'}
           onValueChange={(value) => {
