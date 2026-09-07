@@ -4,7 +4,7 @@ import { Copy, Eye, FileCode2, FilePlus2, Globe, Layers, Pencil, Plus, Trash2, U
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
-import type { Profile, TemplateDetail, TemplateSummary } from '@/api/types'
+import type { TemplateDetail, TemplateSummary } from '@/api/types'
 import { AppConfirmDialog, AppDialog, PageState } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,7 +58,6 @@ const builtinFallback: TemplateSummary[] = [
 export function TemplatesPage() {
   const navigate = useNavigate()
   const { data: templates, error, loading, reload } = useApi<TemplateSummary[]>('/templates')
-  const { data: profiles = [] } = useApi<Profile[]>('/profiles')
   const [previewing, setPreviewing] = useState<TemplateSummary>()
   const [deleting, setDeleting] = useState<TemplateSummary>()
   const [choosingSource, setChoosingSource] = useState(false)
@@ -347,7 +346,7 @@ export function TemplatesPage() {
           onClose={() => setPreviewing(undefined)}
           contentClassName="template-preview-dialog sm:max-w-4xl"
         >
-          <TemplatePreview templateId={previewing.id} profiles={profiles} auto />
+          <TemplatePreview className="h-[560px]" templateId={previewing.id} auto />
         </AppDialog>
       )}
       {deleting && (
