@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Dog } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { toast } from 'sonner'
@@ -47,7 +48,10 @@ export function LoginPage({ initialized, onAuthenticated }: { initialized: boole
   return (
     <main className="auth-page auth-login-page">
       <form className="form auth-form" onSubmit={submit} noValidate>
-        <h1>{loginMode ? 'Wangwang 登录' : '设置管理员密码'}</h1>
+        <h1 className="flex items-center gap-2">
+          <Dog className="size-6 shrink-0" aria-hidden="true" />
+          {loginMode ? 'Wangwang 登录' : '设置管理员密码'}
+        </h1>
         <FieldGroup>
           <form.Field name="password">
             {(field) => {

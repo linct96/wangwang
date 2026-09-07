@@ -42,19 +42,6 @@
   color: var(--foreground);
 }
 
-.brand-icon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  color: var(--primary-foreground);
-  background: var(--primary);
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--primary) 25%, transparent);
-}
-
 .brand-title {
   font-size: 16px;
   font-weight: 700;

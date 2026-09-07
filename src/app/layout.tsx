@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, CircleGauge, Database, FileCode2, Library, Menu, Network, X } from 'lucide-react'
+import { Activity, CircleGauge, Database, Dog, FileCode2, Library, Menu, Network, X } from 'lucide-react'
 import { Link, Outlet } from '@tanstack/react-router'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { IconButton } from '@/components/app-primitives'
@@ -20,7 +20,7 @@ export function Layout() {
         <div className="header-inner">
           <div className="header-brand">
             <Link to="/dashboard" className="brand-link" onClick={() => setMobileMenuOpen(false)}>
-              <span className="brand-icon">W</span>
+              <Dog className="size-6 shrink-0" aria-hidden="true" />
               <strong className="brand-title">Wangwang</strong>
             </Link>
           </div>
