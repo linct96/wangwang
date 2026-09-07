@@ -1,12 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { ArrowLeft, Check, Save, Upload, WandSparkles } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Upload, WandSparkles } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
-import { useApi } from '@/api/use-api'
-import type { Profile, TemplateDetail } from '@/api/types'
+import type { TemplateDetail } from '@/api/types'
 import { IconButton, PageState } from '@/components/app-primitives'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -49,7 +48,6 @@ export function EditTemplatePage() {
 function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSource }) {
   const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
-  const { data: profiles = [] } = useApi<Profile[]>('/profiles')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [yaml, setYaml] = useState(source === 'blank' ? blankTemplate : '')
@@ -111,6 +109,16 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         ? { type: 'idle', id: window.requestIdleCallback(run, { timeout: 500 }) }
         : { type: 'timeout', id: window.setTimeout(run, 50) }
   }
+
+  const previewYaml = useMemo(() => {
+    if (mode !== 'visual' || !visualDraft) return yaml
+    if (visualDraft === materializedDraftRef.current) return yaml
+    try {
+      return applyVisualTemplate(yaml, visualDraft, materializedDraftRef.current || undefined)
+    } catch {
+      return yaml
+    }
+  }, [mode, visualDraft, yaml])
 
   function materializeVisualYaml() {
     const draft = visualDraftRef.current
@@ -424,34 +432,49 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
-            <footer className="template-editor-actions">
-              <Button type="button" variant="outline" disabled={Boolean(busy)} onClick={() => void validate()}>
-                <Check data-icon="inline-start" />
-                校验语法
-              </Button>
-              <Button
-                disabled={
-                  Boolean(busy) ||
-                  !name.trim() ||
-                  !yaml.trim() ||
-                  (mode === 'visual' && visualIssues.some((issue) => issue.level === 'error'))
-                }
-              >
-                <Save data-icon="inline-start" />
-                保存模板
-              </Button>
-            </footer>
           </section>
           <aside className="template-editor-preview">
-            <h2>配置预览</h2>
-            <TemplatePreview
-              yaml={yaml}
-              getYaml={mode === 'visual' ? materializeVisualYaml : undefined}
-              profiles={profiles}
-              sourceSlots={sourceSlots}
-            />
+            <TemplatePreview className="h-full" yaml={previewYaml} sourceSlots={sourceSlots} />
           </aside>
+
+          <div className="template-sticky-footer">
+            <div className="template-sticky-footer-inner">
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={Boolean(busy)}
+                  onClick={() => void navigate({ to: '/templates' })}
+                  className="h-9 px-4"
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={Boolean(busy)}
+                  onClick={() => void validate()}
+                  className="h-9 px-4"
+                >
+                  {busy === 'validate' && <RefreshCw data-icon="inline-start" className="spin size-4" />}
+                  {busy === 'validate' ? '正在校验...' : '校验语法'}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    Boolean(busy) ||
+                    !name.trim() ||
+                    !yaml.trim() ||
+                    (mode === 'visual' && visualIssues.some((issue) => issue.level === 'error'))
+                  }
+                  className="h-9 px-5 font-medium shadow-sm"
+                >
+                  {busy === 'save' && <RefreshCw data-icon="inline-start" className="spin size-4" />}
+                  {busy === 'save' ? '正在保存...' : id ? '保存模板' : '创建模板'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </form>
       )}
     </div>

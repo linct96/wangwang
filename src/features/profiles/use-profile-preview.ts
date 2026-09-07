@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { parse } from 'yaml'
 import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
+import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
 
 export type ResolvedProxyGroup = {
   name: string
@@ -10,6 +11,8 @@ export type ResolvedProxyGroup = {
   excludeFilter?: string
   nodes: NodeOption[]
   staticProxies: string[]
+  includeAllProxies?: boolean
+  includeAllProviders?: boolean
 }
 
 export type ProfilePreviewResult = {
@@ -126,8 +129,7 @@ export function useProfilePreview(
         if (slotMap.has(itemKey)) resolvedNodes.push(...(slotMap.get(itemKey) || []).filter(matchesGroup))
         else staticProxies.push(itemKey)
       }
-      const includeAllProxies =
-        typeof g['include-all-proxies'] === 'boolean' ? g['include-all-proxies'] : g['include-all'] === true
+      const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
       if (includeAllProxies)
         resolvedNodes.push(
           ...selectedNodes
@@ -143,10 +145,14 @@ export function useProfilePreview(
         excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
         nodes: resolvedNodes,
         staticProxies,
+        includeAllProxies,
+        includeAllProviders,
       }
     })
 
-    const emptyGroupCount = groups.filter((g) => g.nodes.length === 0 && g.staticProxies.length === 0).length
+    const emptyGroupCount = groups.filter(
+      (g) => g.nodes.length === 0 && g.staticProxies.length === 0 && !g.includeAllProxies && !g.includeAllProviders,
+    ).length
 
     return {
       groups,
