@@ -1,5 +1,6 @@
 import { isAlias, isMap, isPair, isScalar, isSeq, parseDocument } from 'yaml'
 import type { Document, Node, Pair, YAMLMap } from 'yaml'
+import { resolveIncludeAllFlag } from '@/lib/mihomo'
 import type {
   ProxyGroupDraft,
   ProxyGroupMemberDraft,
@@ -319,18 +320,8 @@ export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDra
       type: type as SupportedProxyGroupType,
       members: ((value.proxies as string[] | undefined) || []).map((member) => parseMember(member, groupIds, slotKeys)),
       defaultSelected: typeof value['default-selected'] === 'string' ? value['default-selected'] : undefined,
-      includeAllProxies:
-        typeof value['include-all-proxies'] === 'boolean'
-          ? value['include-all-proxies']
-          : typeof value['include-all'] === 'boolean'
-            ? value['include-all']
-            : undefined,
-      includeAllProviders:
-        typeof value['include-all-providers'] === 'boolean'
-          ? value['include-all-providers']
-          : typeof value['include-all'] === 'boolean'
-            ? value['include-all']
-            : undefined,
+      includeAllProxies: resolveIncludeAllFlag(value['include-all'], value['include-all-proxies']),
+      includeAllProviders: resolveIncludeAllFlag(value['include-all'], value['include-all-providers']),
       filter: typeof value.filter === 'string' ? value.filter : undefined,
       excludeFilter: typeof value['exclude-filter'] === 'string' ? value['exclude-filter'] : undefined,
       excludeType: typeof value['exclude-type'] === 'string' ? value['exclude-type'] : undefined,
