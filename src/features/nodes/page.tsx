@@ -9,19 +9,21 @@ import { AddNodeDialog, NodeDialog } from './node-dialogs'
 import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export function NodesPage() {
+  const [query, setQuery] = useState('')
   const [protocol, setProtocol] = useState('')
   const [enabled, setEnabled] = useState('')
   const [tagId, setTagId] = useState('')
   const [page, setPage] = useState(1)
   const { data: tagOptions = [], reload: reloadTags } = useApi<TagOption[]>('/tags')
   const { data, error, loading, reload } = useApi<{ items: NodeItem[]; total: number; page: number; pageSize: number }>(
-    `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}`,
+    `/nodes?page=${page}&pageSize=50&protocol=${protocol}&enabled=${enabled}&tagId=${tagId}&q=${encodeURIComponent(query.trim())}`,
   )
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
@@ -114,6 +116,19 @@ export function NodesPage() {
         </Button>
       </div>
       <div className="toolbar">
+        <Input
+          type="search"
+          aria-label="搜索节点"
+          placeholder="搜索名称、服务器或协议"
+          className="w-full md:w-64 md:shrink-0"
+          maxLength={100}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setPage(1)
+            setSelected([])
+          }}
+        />
         <Select
           value={tagId || 'all'}
           onValueChange={(value) => {
@@ -283,7 +298,7 @@ export function NodesPage() {
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="empty">
-                  暂无节点
+                  {query.trim() ? '未找到匹配的节点，请更换关键词或调整筛选条件' : '暂无节点'}
                 </TableCell>
               </TableRow>
             )}

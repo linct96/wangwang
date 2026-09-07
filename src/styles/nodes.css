@@ -16,6 +16,7 @@
   .toolbar {
     margin-bottom: 14px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
   }
@@ -74,9 +75,6 @@
     font-size: 12px;
   }
   @media (max-width: 800px) {
-    .toolbar {
-      flex-wrap: wrap;
-    }
     .batch-actions {
       width: 100%;
       margin-left: 0;
