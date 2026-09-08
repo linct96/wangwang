@@ -211,12 +211,13 @@ export const ruleSetPresetsRouter = new Hono<{ Bindings: Env }>()
 
 ruleSetPresetsRouter.get('/catalog', async (c) => ok(c, await ruleSetPresetCatalog(c.env)))
 ruleSetPresetsRouter.post('/sync', async (c) => {
+  const force = c.req.query('force') === 'true'
   const now = Date.now()
   const last = Number(await c.env.KV.get(SYNC_COOLDOWN_KEY))
-  if (last && now - last < SYNC_COOLDOWN) return ok(c, await ruleSetPresetCatalog(c.env))
+  if (!force && last && now - last < SYNC_COOLDOWN) return ok(c, await ruleSetPresetCatalog(c.env))
   try {
     await c.env.KV.put(SYNC_COOLDOWN_KEY, String(now), { expirationTtl: Math.ceil(SYNC_COOLDOWN / 1000) })
-    return ok(c, { ...(await syncRuleSetPresetCatalog(c.env)), stale: false })
+    return ok(c, await syncRuleSetPresetCatalog(c.env))
   } catch {
     return fail(c, 503, 'RULE_SET_PRESETS_UNAVAILABLE', '社区规则集同步失败')
   }

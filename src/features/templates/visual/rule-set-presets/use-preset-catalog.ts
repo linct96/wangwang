@@ -11,7 +11,7 @@ function loadCatalog(force = false) {
   if (!force && cachedCatalog && Date.now() - cachedAt < CACHE_TTL) return Promise.resolve(cachedCatalog)
   if (inFlightRequest) return inFlightRequest
   inFlightRequest = api<RuleSetPresetCatalogResponse>(
-    force ? '/rule-set-presets/sync' : '/rule-set-presets/catalog',
+    force ? '/rule-set-presets/sync?force=true' : '/rule-set-presets/catalog',
     force ? { method: 'POST' } : undefined,
   )
     .then((data) => {
