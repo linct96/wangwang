@@ -320,10 +320,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
           <IconButton label="返回" onClick={() => void navigate({ to: '/templates' })}>
             <ArrowLeft />
           </IconButton>
-          <div>
-            <h1>{id ? '编辑模板' : '新建模板'}</h1>
-            <p>{id ? '保存后自动重新生成关联配置' : '使用 Mihomo YAML 定义订阅输出'}</p>
-          </div>
+          <h1>{id ? '编辑模板' : '新建模板'}</h1>
         </div>
       </div>
       <PageState loading={loading} error={error && loading ? error : ''} />

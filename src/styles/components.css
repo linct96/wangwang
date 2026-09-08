@@ -1,14 +1,13 @@
 /* 跨页面复用的业务组件样式 */
 .page-heading {
-  min-height: 64px;
   margin-bottom: 24px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 18px;
 }
 .page-heading h1 {
-  margin: 0 0 5px;
+  margin: 0;
   font-size: 24px;
   line-height: 1.25;
   font-weight: 700;

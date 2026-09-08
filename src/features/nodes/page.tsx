@@ -107,10 +107,7 @@ export function NodesPage() {
   return (
     <div className="nodes-page">
       <div className="page-heading">
-        <div>
-          <h1>节点</h1>
-          <p>{data?.total || 0}/2000 个节点</p>
-        </div>
+        <h1>节点</h1>
         <Button onClick={() => setAdding(true)}>
           <Plus data-icon="inline-start" />
           添加节点

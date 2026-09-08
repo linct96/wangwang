@@ -54,7 +54,6 @@ export function ProfilesPage() {
   const initialLoading = loading && !profiles
 
   const items = profiles || []
-  const enabledCount = items.filter((p) => p.enabled).length
   const templateMap = new Map(templates.map((t) => [t.id, t.name]))
   const sourceMap = new Map(sources.map((s) => [s.id, s.name]))
 
@@ -114,12 +113,7 @@ export function ProfilesPage() {
   return (
     <div className="profiles-page">
       <div className="page-heading">
-        <div>
-          <h1>配置</h1>
-          <p>
-            {items.length}/20 个订阅配置 · {enabledCount} 个启用中
-          </p>
-        </div>
+        <h1>配置</h1>
         <Button disabled={!sources.length} asChild>
           <Link to="/profiles/new">
             <Plus data-icon="inline-start" />

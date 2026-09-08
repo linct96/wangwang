@@ -14,10 +14,7 @@ export function DashboardPage() {
   return (
     <div className="dashboard-page">
       <div className="page-heading">
-        <div>
-          <h1>概览</h1>
-          <p>节点池与配置运行状态</p>
-        </div>
+        <h1>概览</h1>
       </div>
       <PageState loading={loading} error={error} />
       {data && (

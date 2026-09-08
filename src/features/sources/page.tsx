@@ -83,10 +83,7 @@ export function SourcesPage() {
   return (
     <div className="sources-page">
       <div className="page-heading">
-        <div>
-          <h1>节点源</h1>
-          <p>{data.length}/20 个外部订阅</p>
-        </div>
+        <h1>节点源</h1>
         <Button onClick={() => setAdding(true)}>
           <Plus data-icon="inline-start" />
           添加订阅

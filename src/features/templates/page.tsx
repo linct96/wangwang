@@ -102,12 +102,7 @@ export function TemplatesPage() {
   return (
     <div className="templates-page">
       <div className="page-heading">
-        <div>
-          <h1>模板库</h1>
-          <p>
-            {custom.length}/20 个自定义模板 · {builtin.length} 个内置模板
-          </p>
-        </div>
+        <h1>模板库</h1>
         <Button onClick={() => setChoosingSource(true)}>
           <Plus data-icon="inline-start" />
           新建模板

@@ -347,10 +347,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           <IconButton label="返回" onClick={() => void navigate({ to: '/profiles' })}>
             <ArrowLeft className="size-4" />
           </IconButton>
-          <div>
-            <h1>{id ? '编辑配置' : '新建订阅配置'}</h1>
-            <p>组合节点源与模板规则，右侧实时预览代理组拓扑与节点分流结果</p>
-          </div>
+          <h1>{id ? '编辑配置' : '新建订阅配置'}</h1>
         </div>
       </div>
 

@@ -7,11 +7,6 @@
     padding: 20px 16px 44px;
   }
 
-  .page-heading {
-    min-height: 54px;
-    align-items: center;
-  }
-
   .page-heading h1 {
     font-size: 21px;
   }
