@@ -246,38 +246,34 @@ export function RuleSetPresetDialog({
                 : catalog.data?.stale
                   ? '社区目录暂时使用上次同步的数据'
                   : null}
-            <div className="ml-auto flex shrink-0 flex-col items-end gap-0.5">
-              <div className="flex items-center gap-1">
-                {catalog.data?.updatedAt && !catalog.loading && (
-                  <span>
-                    更新于{' '}
-                    {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2"
-                  onClick={catalog.reload}
-                  disabled={catalog.loading}
-                >
-                  {catalog.loading ? (
-                    <LoaderCircle className="size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-3.5" />
-                  )}
-                  {catalog.loading ? '刷新中' : '刷新'}
-                </Button>
-              </div>
-              {staleSources.map((source) => (
-                <span key={source} className="text-right">
-                  {source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 数据暂时使用上次同步结果
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {catalog.data?.updatedAt && !catalog.loading && (
+                <span>
+                  更新于{' '}
+                  {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </span>
+              )}
+              {staleSources.map((source) => (
+                <span key={source}>({source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 暂用缓存)</span>
               ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2"
+                onClick={catalog.reload}
+                disabled={catalog.loading}
+              >
+                {catalog.loading ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                {catalog.loading ? '刷新中' : '刷新'}
+              </Button>
             </div>
           </div>
 
