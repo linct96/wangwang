@@ -28,6 +28,17 @@
   gap: 16px;
 }
 
+@media (min-width: 768px) {
+  .header-inner {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .header-actions {
+    justify-self: end;
+  }
+}
+
 .header-brand {
   display: flex;
   align-items: center;
@@ -153,43 +164,11 @@
   gap: 12px;
 }
 
-.worker-status {
-  display: none;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--muted-foreground);
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: color-mix(in oklch, var(--muted) 40%, transparent);
-  border: 1px solid var(--border);
-}
-
-@media (min-width: 900px) {
-  .worker-status {
-    display: flex;
-  }
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-
-.status-icon {
-  width: 13px;
-  height: 13px;
-  color: var(--muted-foreground);
-}
-
 /* 移动端菜单与遮罩 */
 .mobile-nav {
   display: flex;
   flex-direction: column;
-  padding: 10px 16px 14px;
+  padding: 8px 12px;
   background: var(--background);
   border-top: 1px solid var(--border);
   animation: slideDown 0.18s ease-out;
@@ -240,25 +219,6 @@
 
 .mobile-nav-link.active {
   color: var(--primary);
-}
-
-.mobile-nav-foot {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted-foreground);
-  padding-left: 4px;
-}
-
-.mobile-nav-foot-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .mobile-mask {

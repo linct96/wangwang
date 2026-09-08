@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, CircleGauge, Database, Dog, FileCode2, Library, Menu, Network, X } from 'lucide-react'
+import { CircleGauge, Database, Dog, FileCode2, Library, Menu, Network, X } from 'lucide-react'
 import { Link, Outlet } from '@tanstack/react-router'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { IconButton } from '@/components/app-primitives'
@@ -41,11 +41,6 @@ export function Layout() {
           </nav>
 
           <div className="header-actions">
-            <div className="worker-status">
-              <span className="status-dot" />
-              <Activity className="status-icon" />
-              <span className="status-text">Cloudflare Worker</span>
-            </div>
             <ThemeToggle className="theme-toggle-btn" />
             <IconButton
               className="md:hidden"
@@ -73,14 +68,6 @@ export function Layout() {
                   <span>{label}</span>
                 </Link>
               ))}
-            </div>
-            <div className="mobile-nav-foot">
-              <div className="mobile-nav-foot-status">
-                <span className="status-dot" />
-                <Activity className="status-icon" />
-                <span>Cloudflare Worker</span>
-              </div>
-              <ThemeToggle className="theme-toggle-btn" />
             </div>
           </div>
         )}
