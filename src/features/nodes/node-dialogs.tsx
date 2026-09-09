@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { RefreshCw, WandSparkles } from 'lucide-react'
+import { Check, Copy, RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
 import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 import { z } from 'zod'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
@@ -11,6 +12,7 @@ import { AppDialog, PageState } from '@/components/app-primitives'
 import { TagCombobox } from '@/components/tag-combobox'
 import YamlCodeEditor from '@/components/yaml-code-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -653,5 +655,85 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
         </form.Subscribe>
       </footer>
     </form>
+  )
+}
+
+export function NodePreviewDialog({ node, onClose }: { node: NodeItem; onClose: () => void }) {
+  const { data, error, loading } = useApi<NodeDetail>(`/nodes/${node.id}`)
+  const { resolvedTheme } = useTheme()
+  const [copied, setCopied] = useState(false)
+
+  const yaml = data?.previewYaml || data?.yaml || ''
+
+  async function copyYaml() {
+    if (!yaml) return
+    try {
+      await navigator.clipboard.writeText(yaml)
+      setCopied(true)
+      toast.success('节点 YAML 已复制')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('复制失败')
+    }
+  }
+
+  return (
+    <AppDialog title="节点预览" onClose={onClose} contentClassName="overflow-hidden sm:max-w-2xl">
+      <PageState loading={loading} error={error} />
+      {data && (
+        <div className="flex w-full min-w-0 flex-col gap-4">
+          <div className="flex items-center justify-between gap-2 border-b pb-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-semibold text-sm" title={node.name}>
+                {node.name}
+              </span>
+              <Badge variant="outline" className="shrink-0 font-mono">
+                {node.protocol}
+              </Badge>
+              {node.management === 'manual' && (
+                <Badge variant="secondary" className="shrink-0">
+                  手动
+                </Badge>
+              )}
+            </div>
+            {yaml && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => void copyYaml()}
+              >
+                {copied ? (
+                  <Check data-icon="inline-start" className="text-emerald-500" />
+                ) : (
+                  <Copy data-icon="inline-start" />
+                )}
+                {copied ? '已复制' : '复制 YAML'}
+              </Button>
+            )}
+          </div>
+
+          <div className="relative h-[360px] w-full min-w-0 overflow-hidden rounded-md border">
+            <YamlCodeEditor
+              id="node-preview-yaml"
+              className="h-full w-full min-w-0"
+              value={yaml}
+              height="100%"
+              maxWidth="100%"
+              theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+              readOnly
+              editable={false}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="button" onClick={onClose}>
+              关闭
+            </Button>
+          </div>
+        </div>
+      )}
+    </AppDialog>
   )
 }

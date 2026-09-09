@@ -90,7 +90,11 @@ export type ManualNodeConnection = {
   udpRelayMode?: string
 }
 
-export type NodeDetail = NodeItem & { connection: ManualNodeConnection | null; yaml: string | null }
+export type NodeDetail = NodeItem & {
+  connection: ManualNodeConnection | null
+  yaml: string | null
+  previewYaml?: string | null
+}
 
 export type NodeImportResult = {
   created: number

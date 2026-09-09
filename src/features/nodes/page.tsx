@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Copy, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { NodeItem, TagOption } from '@/api/types'
 import { AppConfirmDialog, IconButton, PageState, Status } from '@/components/app-primitives'
-import { AddNodeDialog, NodeDialog } from './node-dialogs'
+import { AddNodeDialog, NodeDialog, NodePreviewDialog } from './node-dialogs'
 import '@/styles/nodes.css'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ export function NodesPage() {
   )
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
+  const [previewing, setPreviewing] = useState<NodeItem>()
   const [editing, setEditing] = useState<NodeItem>()
   const [deleting, setDeleting] = useState<NodeItem>()
   const [deletingBatch, setDeletingBatch] = useState<NodeItem[]>()
@@ -296,6 +297,9 @@ export function NodesPage() {
                     <Status value={node.enabled ? 'ready' : 'idle'} />
                   </TableCell>
                   <TableCell className="actions">
+                    <IconButton label="预览" onClick={() => setPreviewing(node)}>
+                      <Eye />
+                    </IconButton>
                     {node.url && (
                       <IconButton label="复制链接" onClick={() => copyUrl(node)}>
                         <Copy />
@@ -351,6 +355,7 @@ export function NodesPage() {
           <ChevronRight />
         </Button>
       </div>
+      {previewing && <NodePreviewDialog node={previewing} onClose={() => setPreviewing(undefined)} />}
       {editing && (
         <NodeDialog
           node={editing}

@@ -456,10 +456,12 @@ nodesRouter.get('/:id', async (c) => {
     .where(eq(nodes.id, id))
     .get()
   const named = namedProxyConfig(current!.config, current!.originalName)
+  const previewNamed = namedProxyConfig(current!.config, view.name)
   return ok(c, {
     ...view,
     connection: current!.sourceKind === 'manual' ? connectionView(named) : null,
     yaml: current!.sourceKind === 'manual' ? editableProxyYaml(named) : null,
+    previewYaml: editableProxyYaml(previewNamed),
   })
 })
 
