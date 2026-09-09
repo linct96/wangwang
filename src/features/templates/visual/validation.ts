@@ -195,23 +195,57 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   }
   const sniffer = draft.sniffer
   if (sniffer.enable) {
-    const ports = sniffer.sniff.TLS?.ports
-    if (!ports || ports.length === 0) {
+    const protocols = [
+      { name: 'HTTP', draft: sniffer.sniff.HTTP, field: 'http-ports' as const },
+      { name: 'TLS', draft: sniffer.sniff.TLS, field: 'tls-ports' as const },
+      { name: 'QUIC', draft: sniffer.sniff.QUIC, field: 'quic-ports' as const },
+    ]
+    const activeProtocols = protocols.filter((p) => p.draft && p.draft.ports && p.draft.ports.length > 0)
+    if (activeProtocols.length === 0) {
       add({
         level: 'error',
-        code: 'SNIFFER_TLS_PORTS_EMPTY',
-        message: '启用流量嗅探时必须指定至少一个 TLS 端口',
+        code: 'SNIFFER_PORTS_EMPTY',
+        message: '启用流量嗅探时必须指定至少一个协议的嗅探端口',
         snifferField: 'ports',
       })
     } else {
-      for (const p of ports) {
-        if (!Number.isInteger(p) || p < 1 || p > 65535) {
-          add({
-            level: 'error',
-            code: 'SNIFFER_TLS_PORT_RANGE',
-            message: `TLS 嗅探端口 ${p} 无效，必须在 1-65535 范围内`,
-            snifferField: 'ports',
-          })
+      for (const { name, draft: protoDraft, field } of protocols) {
+        if (!protoDraft?.ports) continue
+        for (const p of protoDraft.ports) {
+          if (typeof p === 'number') {
+            if (!Number.isInteger(p) || p < 1 || p > 65535) {
+              add({
+                level: 'error',
+                code: `SNIFFER_${name}_PORT_RANGE`,
+                message: `${name} 嗅探端口 ${p} 无效，必须在 1-65535 范围内`,
+                snifferField: field,
+              })
+            }
+          } else if (typeof p === 'string') {
+            const rangeMatch = p.match(/^(\d+)-(\d+)$/)
+            if (rangeMatch) {
+              const start = parseInt(rangeMatch[1], 10)
+              const end = parseInt(rangeMatch[2], 10)
+              if (start < 1 || end > 65535 || start > end) {
+                add({
+                  level: 'error',
+                  code: `SNIFFER_${name}_PORT_RANGE`,
+                  message: `${name} 嗅探端口范围 ${p} 无效，必须在 1-65535 且起始端口不大于结束端口`,
+                  snifferField: field,
+                })
+              }
+            } else {
+              const num = Number(p)
+              if (!Number.isInteger(num) || num < 1 || num > 65535) {
+                add({
+                  level: 'error',
+                  code: `SNIFFER_${name}_PORT_FORMAT`,
+                  message: `${name} 嗅探端口 "${p}" 格式无效，应为单个端口（如 80）或端口范围（如 8080-8880）`,
+                  snifferField: field,
+                })
+              }
+            }
+          }
         }
       }
     }

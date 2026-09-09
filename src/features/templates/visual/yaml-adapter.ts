@@ -19,6 +19,7 @@ import type {
   VisualTemplateDraft,
   GeoSettingsDraft,
   SnifferSettingsDraft,
+  SniffProtocolDraft,
 } from './model'
 
 const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback', 'load-balance'])
@@ -128,6 +129,75 @@ export function parseGeoSettings(root: Record<string, unknown>): { draft: GeoSet
   }
 }
 
+function parsePortItem(item: unknown): number | string | null {
+  if (typeof item === 'number' && Number.isInteger(item) && item >= 1 && item <= 65535) {
+    return item
+  }
+  if (typeof item === 'string') {
+    const trimmed = item.trim()
+    if (/^\d+$/.test(trimmed)) {
+      const num = parseInt(trimmed, 10)
+      if (num >= 1 && num <= 65535) return num
+    }
+    const match = trimmed.match(/^(\d+)-(\d+)$/)
+    if (match) {
+      const start = parseInt(match[1], 10)
+      const end = parseInt(match[2], 10)
+      if (start >= 1 && end <= 65535 && start <= end) {
+        return `${start}-${end}`
+      }
+    }
+  }
+  return null
+}
+
+function parseProtocolDraft(
+  protoObj: unknown,
+  protoName: 'HTTP' | 'TLS' | 'QUIC',
+  warnings: VisualIssue[],
+): SniffProtocolDraft | undefined {
+  if (!object(protoObj)) return undefined
+  const portsRaw = protoObj.ports
+  const parsedPorts: (number | string)[] = []
+  const field = (protoName.toLowerCase() + '-ports') as 'http-ports' | 'tls-ports' | 'quic-ports'
+
+  if (Array.isArray(portsRaw)) {
+    for (const p of portsRaw) {
+      const parsed = parsePortItem(p)
+      if (parsed !== null) {
+        if (!parsedPorts.includes(parsed)) {
+          parsedPorts.push(parsed)
+        }
+      } else {
+        warnings.push({
+          level: 'warning',
+          code: `SNIFFER_${protoName}_PORT_INVALID`,
+          message: `sniffer.sniff.${protoName} 端口格式无效：${p}`,
+          snifferField: field,
+        })
+      }
+    }
+  }
+
+  let overrideDestination: boolean | null | undefined = undefined
+  if (protoObj['override-destination'] !== undefined) {
+    if (typeof protoObj['override-destination'] === 'boolean') {
+      overrideDestination = protoObj['override-destination']
+    } else {
+      warnings.push({
+        level: 'warning',
+        code: `SNIFFER_${protoName}_OVERRIDE_DESTINATION_INVALID`,
+        message: `sniffer.sniff.${protoName}.override-destination 必须是布尔值`,
+      })
+    }
+  }
+
+  return {
+    ports: parsedPorts,
+    ...(overrideDestination !== undefined ? { overrideDestination } : {}),
+  }
+}
+
 export function parseSnifferSettings(root: Record<string, unknown>): {
   draft: SnifferSettingsDraft
   warnings: VisualIssue[]
@@ -166,26 +236,21 @@ export function parseSnifferSettings(root: Record<string, unknown>): {
   }
 
   const sniff = object(sniffer.sniff) ? (sniffer.sniff as Record<string, unknown>) : undefined
-  const tls = sniff && object(sniff.TLS) ? (sniff.TLS as Record<string, unknown>) : undefined
-  let ports: number[] = [443, 8443]
+  const httpDraft = parseProtocolDraft(sniff?.HTTP, 'HTTP', warnings)
+  const tlsDraft = parseProtocolDraft(sniff?.TLS, 'TLS', warnings)
+  const quicDraft = parseProtocolDraft(sniff?.QUIC, 'QUIC', warnings)
 
-  if (tls && Array.isArray(tls.ports)) {
-    const parsedPorts: number[] = []
-    for (const p of tls.ports) {
-      const num = Number(p)
-      if (Number.isInteger(num) && num >= 1 && num <= 65535) {
-        if (!parsedPorts.includes(num)) parsedPorts.push(num)
-      } else {
-        warnings.push({
-          level: 'warning',
-          code: 'SNIFFER_TLS_PORT_INVALID',
-          message: `sniffer.sniff.TLS 端口无效：${p}`,
-          snifferField: 'ports',
-        })
-      }
-    }
-    if (parsedPorts.length > 0) {
-      ports = parsedPorts
+  let skipDomain: string[] | undefined = undefined
+  if (sniffer['skip-domain'] !== undefined) {
+    if (Array.isArray(sniffer['skip-domain'])) {
+      skipDomain = sniffer['skip-domain'].map(String)
+    } else {
+      warnings.push({
+        level: 'warning',
+        code: 'SNIFFER_SKIP_DOMAIN_INVALID',
+        message: 'sniffer.skip-domain 必须是字符串列表',
+        snifferField: 'skip-domain',
+      })
     }
   }
 
@@ -196,10 +261,11 @@ export function parseSnifferSettings(root: Record<string, unknown>): {
       parsePureIp: bool('parse-pure-ip', 'parse-pure-ip'),
       overrideDestination: bool('override-destination', 'override-destination'),
       sniff: {
-        TLS: {
-          ports,
-        },
+        ...(httpDraft ? { HTTP: httpDraft } : {}),
+        ...(tlsDraft ? { TLS: tlsDraft } : { TLS: { ports: [443, 8443] } }),
+        ...(quicDraft ? { QUIC: quicDraft } : {}),
       },
+      ...(skipDomain ? { skipDomain } : {}),
     },
     warnings,
   }
@@ -485,7 +551,10 @@ export function applySnifferSettings(doc: Document, sniffer: SnifferSettingsDraf
     if (isMap(node)) {
       const keys = (node as YAMLMap).items.map((item) => scalarValue(item.key))
       const hasOtherKeys = keys.some(
-        (k) => !['enable', 'force-dns-mapping', 'parse-pure-ip', 'override-destination', 'sniff'].includes(String(k)),
+        (k) =>
+          !['enable', 'force-dns-mapping', 'parse-pure-ip', 'override-destination', 'sniff', 'skip-domain'].includes(
+            String(k),
+          ),
       )
       if (hasOtherKeys) {
         ;(node as YAMLMap).set('enable', false)
@@ -513,19 +582,45 @@ export function applySnifferSettings(doc: Document, sniffer: SnifferSettingsDraf
     map.set('override-destination', sniffer.overrideDestination)
   }
 
+  // sniff 协议配置
   let sniffNode = map.get('sniff', true) as unknown
   if (!isMap(sniffNode)) {
     sniffNode = doc.createNode({}) as YAMLMap
     map.set('sniff', sniffNode)
   }
   const sniffMap = sniffNode as YAMLMap
-  let tlsNode = sniffMap.get('TLS', true) as unknown
-  if (!isMap(tlsNode)) {
-    tlsNode = doc.createNode({}) as YAMLMap
-    sniffMap.set('TLS', tlsNode)
+
+  const supportedProtocols = ['HTTP', 'TLS', 'QUIC'] as const
+  for (const proto of supportedProtocols) {
+    const protoDraft = sniffer.sniff[proto]
+    if (protoDraft && protoDraft.ports && protoDraft.ports.length > 0) {
+      let protoNode = sniffMap.get(proto, true) as unknown
+      if (!isMap(protoNode)) {
+        protoNode = doc.createNode({}) as YAMLMap
+        sniffMap.set(proto, protoNode)
+      }
+      const protoMap = protoNode as YAMLMap
+      protoMap.set('ports', protoDraft.ports)
+      if (protoDraft.overrideDestination !== undefined && protoDraft.overrideDestination !== null) {
+        protoMap.set('override-destination', protoDraft.overrideDestination)
+      } else {
+        protoMap.delete('override-destination')
+      }
+    } else {
+      sniffMap.delete(proto)
+    }
   }
-  const tlsMap = tlsNode as YAMLMap
-  tlsMap.set('ports', sniffer.sniff.TLS?.ports ?? [443, 8443])
+
+  if (sniffMap.items.length === 0) {
+    map.delete('sniff')
+  }
+
+  // skip-domain 配置
+  if (sniffer.skipDomain && sniffer.skipDomain.length > 0) {
+    map.set('skip-domain', sniffer.skipDomain)
+  } else {
+    map.delete('skip-domain')
+  }
 }
 
 function targetValue(target: RuleTargetDraft, names: Map<string, string>) {

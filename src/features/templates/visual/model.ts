@@ -20,16 +20,22 @@ export type GeoSettingsDraft = {
   geoxUrl: { geoip?: string | null; geosite?: string | null; mmdb?: string | null; asn?: string | null }
 }
 
+export type SniffProtocolDraft = {
+  ports: (number | string)[]
+  overrideDestination?: boolean | null
+}
+
 export type SnifferSettingsDraft = {
   enable?: boolean | null
   forceDnsMapping?: boolean | null
   parsePureIp?: boolean | null
   overrideDestination?: boolean | null
   sniff: {
-    TLS?: {
-      ports: number[]
-    }
+    HTTP?: SniffProtocolDraft
+    TLS?: SniffProtocolDraft
+    QUIC?: SniffProtocolDraft
   }
+  skipDomain?: string[]
 }
 
 export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback' | 'load-balance'
@@ -168,7 +174,16 @@ export type VisualIssue = {
   providerId?: string
   ruleId?: string
   geoField?: 'geodata-mode' | 'geo-auto-update' | 'geo-update-interval' | 'geoip' | 'geosite' | 'mmdb' | 'asn'
-  snifferField?: 'enable' | 'force-dns-mapping' | 'parse-pure-ip' | 'override-destination' | 'ports'
+  snifferField?:
+    | 'enable'
+    | 'force-dns-mapping'
+    | 'parse-pure-ip'
+    | 'override-destination'
+    | 'ports'
+    | 'http-ports'
+    | 'tls-ports'
+    | 'quic-ports'
+    | 'skip-domain'
 }
 
 export function memberLabel(
