@@ -21,6 +21,7 @@ import {
 } from './model'
 import type { GeoProvider } from './rules/geo-catalog'
 import { GeoSettingsPanel } from './geo/geo-settings-panel'
+import { SnifferSettingsPanel } from './sniffer/sniffer-settings-panel'
 import { ProviderDialog, ProviderList } from './rule-providers'
 import { applyRuleSetPresets, insertRulesBeforeMatch, RuleSetPresetDialog } from './rule-set-presets'
 
@@ -170,6 +171,11 @@ export function VisualTemplateEditor({
         </Alert>
       )}
       <GeoSettingsPanel value={draft.geo} issues={issues} onChange={(geo) => update({ ...draft, geo })} />
+      <SnifferSettingsPanel
+        value={draft.sniffer}
+        issues={issues}
+        onChange={(sniffer) => update({ ...draft, sniffer })}
+      />
       <section className="template-visual-section">
         <header className="template-visual-toolbar">
           <div className="template-rule-header-left">

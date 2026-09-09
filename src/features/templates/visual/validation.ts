@@ -121,7 +121,15 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
   const issues = [...initial]
   const issueKeys = new Set(
     initial.map((issue) =>
-      JSON.stringify([issue.code, issue.groupId, issue.providerId, issue.ruleId, issue.geoField, issue.message]),
+      JSON.stringify([
+        issue.code,
+        issue.groupId,
+        issue.providerId,
+        issue.ruleId,
+        issue.geoField,
+        issue.snifferField,
+        issue.message,
+      ]),
     ),
   )
   const add = (issue: VisualIssue) => {
@@ -131,6 +139,7 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       issue.providerId,
       issue.ruleId,
       issue.geoField,
+      issue.snifferField,
       issue.message,
     ])
     if (issueKeys.has(key)) return
@@ -182,6 +191,29 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
         message: `${field} 必须是 http 或 https URL`,
         geoField: field as VisualIssue['geoField'],
       })
+    }
+  }
+  const sniffer = draft.sniffer
+  if (sniffer.enable) {
+    const ports = sniffer.sniff.TLS?.ports
+    if (!ports || ports.length === 0) {
+      add({
+        level: 'error',
+        code: 'SNIFFER_TLS_PORTS_EMPTY',
+        message: '启用流量嗅探时必须指定至少一个 TLS 端口',
+        snifferField: 'ports',
+      })
+    } else {
+      for (const p of ports) {
+        if (!Number.isInteger(p) || p < 1 || p > 65535) {
+          add({
+            level: 'error',
+            code: 'SNIFFER_TLS_PORT_RANGE',
+            message: `TLS 嗅探端口 ${p} 无效，必须在 1-65535 范围内`,
+            snifferField: 'ports',
+          })
+        }
+      }
     }
   }
   draft.groups.forEach((group) => {

@@ -18,6 +18,7 @@ import type {
   VisualIssue,
   VisualTemplateDraft,
   GeoSettingsDraft,
+  SnifferSettingsDraft,
 } from './model'
 
 const GROUP_TYPES = new Set<SupportedProxyGroupType>(['select', 'url-test', 'fallback', 'load-balance'])
@@ -122,6 +123,83 @@ export function parseGeoSettings(root: Record<string, unknown>): { draft: GeoSet
           .filter((key) => typeof geox[key] === 'string')
           .map((key) => [key, geox[key]]),
       ),
+    },
+    warnings,
+  }
+}
+
+export function parseSnifferSettings(root: Record<string, unknown>): {
+  draft: SnifferSettingsDraft
+  warnings: VisualIssue[]
+} {
+  const warnings: VisualIssue[] = []
+  const sniffer = object(root.sniffer) ? (root.sniffer as Record<string, unknown>) : undefined
+
+  if (!sniffer) {
+    return {
+      draft: {
+        enable: false,
+        forceDnsMapping: true,
+        parsePureIp: true,
+        overrideDestination: true,
+        sniff: {
+          TLS: {
+            ports: [443, 8443],
+          },
+        },
+      },
+      warnings,
+    }
+  }
+
+  const bool = (key: string, field: 'enable' | 'force-dns-mapping' | 'parse-pure-ip' | 'override-destination') => {
+    const value = sniffer[key]
+    if (value === undefined) return field === 'enable' ? false : true
+    if (typeof value === 'boolean') return value
+    warnings.push({
+      level: 'warning',
+      code: `SNIFFER_${key.toUpperCase().replace(/-/g, '_')}_INVALID`,
+      message: `sniffer.${key} 必须是布尔值`,
+      snifferField: field,
+    })
+    return field === 'enable' ? false : true
+  }
+
+  const sniff = object(sniffer.sniff) ? (sniffer.sniff as Record<string, unknown>) : undefined
+  const tls = sniff && object(sniff.TLS) ? (sniff.TLS as Record<string, unknown>) : undefined
+  let ports: number[] = [443, 8443]
+
+  if (tls && Array.isArray(tls.ports)) {
+    const parsedPorts: number[] = []
+    for (const p of tls.ports) {
+      const num = Number(p)
+      if (Number.isInteger(num) && num >= 1 && num <= 65535) {
+        if (!parsedPorts.includes(num)) parsedPorts.push(num)
+      } else {
+        warnings.push({
+          level: 'warning',
+          code: 'SNIFFER_TLS_PORT_INVALID',
+          message: `sniffer.sniff.TLS 端口无效：${p}`,
+          snifferField: 'ports',
+        })
+      }
+    }
+    if (parsedPorts.length > 0) {
+      ports = parsedPorts
+    }
+  }
+
+  return {
+    draft: {
+      enable: bool('enable', 'enable'),
+      forceDnsMapping: bool('force-dns-mapping', 'force-dns-mapping'),
+      parsePureIp: bool('parse-pure-ip', 'parse-pure-ip'),
+      overrideDestination: bool('override-destination', 'override-destination'),
+      sniff: {
+        TLS: {
+          ports,
+        },
+      },
     },
     warnings,
   }
@@ -291,6 +369,7 @@ export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDra
   if (Object.hasOwn(root, 'x-wangwang')) throw new Error('模板 YAML 不能包含 x-wangwang')
   const rows = root['proxy-groups']
   const geo = parseGeoSettings(root)
+  const sniffer = parseSnifferSettings(root)
   const slotKeys = new Set(sourceSlots.map(({ key }) => key))
   const groupIds = new Map<string, string>()
   rows.forEach((row, index) => {
@@ -343,6 +422,7 @@ export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDra
   )
   const warnings: VisualIssue[] = [
     ...geo.warnings,
+    ...sniffer.warnings,
     ...groups
       .filter((group) => group.kind === 'raw')
       .map((group) => ({
@@ -368,7 +448,7 @@ export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDra
         providerId: provider.id,
       })),
   ]
-  return { draft: { geo: geo.draft, sourceSlots, groups, ruleProviders, rules }, warnings }
+  return { draft: { geo: geo.draft, sniffer: sniffer.draft, sourceSlots, groups, ruleProviders, rules }, warnings }
 }
 
 function applyOptionalRootField(doc: Document, key: string, value: unknown) {
@@ -397,6 +477,55 @@ export function applyGeoSettings(doc: Document, geo: GeoSettingsDraft) {
   const map = node as YAMLMap
   ;(['geoip', 'geosite', 'mmdb', 'asn'] as const).forEach((key) => applyMapField(map, key, value[key]))
   if (!map.items.length) doc.delete('geox-url')
+}
+
+export function applySnifferSettings(doc: Document, sniffer: SnifferSettingsDraft) {
+  if (!sniffer.enable) {
+    const node = doc.get('sniffer', true) as unknown
+    if (isMap(node)) {
+      const keys = (node as YAMLMap).items.map((item) => scalarValue(item.key))
+      const hasOtherKeys = keys.some(
+        (k) => !['enable', 'force-dns-mapping', 'parse-pure-ip', 'override-destination', 'sniff'].includes(String(k)),
+      )
+      if (hasOtherKeys) {
+        ;(node as YAMLMap).set('enable', false)
+        return
+      }
+    }
+    doc.delete('sniffer')
+    return
+  }
+
+  let node = doc.get('sniffer', true) as unknown
+  if (!isMap(node)) {
+    node = doc.createNode({}) as YAMLMap
+    doc.set('sniffer', node)
+  }
+  const map = node as YAMLMap
+  map.set('enable', true)
+  if (sniffer.forceDnsMapping !== undefined && sniffer.forceDnsMapping !== null) {
+    map.set('force-dns-mapping', sniffer.forceDnsMapping)
+  }
+  if (sniffer.parsePureIp !== undefined && sniffer.parsePureIp !== null) {
+    map.set('parse-pure-ip', sniffer.parsePureIp)
+  }
+  if (sniffer.overrideDestination !== undefined && sniffer.overrideDestination !== null) {
+    map.set('override-destination', sniffer.overrideDestination)
+  }
+
+  let sniffNode = map.get('sniff', true) as unknown
+  if (!isMap(sniffNode)) {
+    sniffNode = doc.createNode({}) as YAMLMap
+    map.set('sniff', sniffNode)
+  }
+  const sniffMap = sniffNode as YAMLMap
+  let tlsNode = sniffMap.get('TLS', true) as unknown
+  if (!isMap(tlsNode)) {
+    tlsNode = doc.createNode({}) as YAMLMap
+    sniffMap.set('TLS', tlsNode)
+  }
+  const tlsMap = tlsNode as YAMLMap
+  tlsMap.set('ports', sniffer.sniff.TLS?.ports ?? [443, 8443])
 }
 
 function targetValue(target: RuleTargetDraft, names: Map<string, string>) {
@@ -544,6 +673,7 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   if (doc.errors.length) throw new Error(`YAML 解析失败：${doc.errors[0].message}`)
   if (!isMap(doc.contents)) throw new Error('模板根节点必须是对象')
   applyGeoSettings(doc, draft.geo)
+  applySnifferSettings(doc, draft.sniffer)
   const names = new Map(draft.groups.map((group) => [group.id, group.name]))
   const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
   doc.set(

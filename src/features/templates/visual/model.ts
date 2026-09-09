@@ -2,6 +2,7 @@ export type SourceSlotDraft = { key: string; name: string }
 
 export type VisualTemplateDraft = {
   geo: GeoSettingsDraft
+  sniffer: SnifferSettingsDraft
   sourceSlots: SourceSlotDraft[]
   groups: ProxyGroupDraft[]
   ruleProviders: RuleProviderDraft[]
@@ -17,6 +18,18 @@ export type GeoSettingsDraft = {
   geoAutoUpdate?: boolean | null
   geoUpdateInterval?: number | null
   geoxUrl: { geoip?: string | null; geosite?: string | null; mmdb?: string | null; asn?: string | null }
+}
+
+export type SnifferSettingsDraft = {
+  enable?: boolean | null
+  forceDnsMapping?: boolean | null
+  parsePureIp?: boolean | null
+  overrideDestination?: boolean | null
+  sniff: {
+    TLS?: {
+      ports: number[]
+    }
+  }
 }
 
 export type SupportedProxyGroupType = 'select' | 'url-test' | 'fallback' | 'load-balance'
@@ -155,6 +168,7 @@ export type VisualIssue = {
   providerId?: string
   ruleId?: string
   geoField?: 'geodata-mode' | 'geo-auto-update' | 'geo-update-interval' | 'geoip' | 'geosite' | 'mmdb' | 'asn'
+  snifferField?: 'enable' | 'force-dns-mapping' | 'parse-pure-ip' | 'override-destination' | 'ports'
 }
 
 export function memberLabel(
