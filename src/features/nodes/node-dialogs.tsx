@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatYaml } from '@/lib/yaml-editor'
+import { cn } from '@/lib/utils'
 import { defaultConnection, ManualConnectionFields } from './node-form'
 import { parsePreferredEndpoint } from '../../../shared/preferred-node'
 
@@ -260,7 +261,7 @@ export function AddNodeDialog({
     await form.handleSubmit()
   }
   return (
-    <AppDialog title="添加节点" onClose={onClose} contentClassName="overflow-hidden">
+    <AppDialog title="添加节点" onClose={onClose} contentClassName="overflow-hidden sm:max-w-2xl">
       <form className="form" onSubmit={submit} noValidate>
         <Tabs
           value={mode}
@@ -453,8 +454,13 @@ export function AddNodeDialog({
 
 export function NodeDialog({ node, onClose, onSaved }: { node: NodeItem; onClose: () => void; onSaved: () => void }) {
   const { data, error, loading } = useApi<NodeDetail>(`/nodes/${node.id}`)
+  const isManual = data ? data.management === 'manual' : node.management === 'manual'
   return (
-    <AppDialog title="编辑节点" onClose={onClose} contentClassName="overflow-hidden">
+    <AppDialog
+      title="编辑节点"
+      onClose={onClose}
+      contentClassName={cn('overflow-hidden', isManual ? 'sm:max-w-2xl' : 'sm:max-w-lg')}
+    >
       <PageState loading={loading} error={error} />
       {data && <NodeEditor key={data.updatedAt} node={data} onClose={onClose} onSaved={onSaved} />}
     </AppDialog>
@@ -678,7 +684,7 @@ export function NodePreviewDialog({ node, onClose }: { node: NodeItem; onClose: 
   }
 
   return (
-    <AppDialog title="节点预览" onClose={onClose} contentClassName="overflow-hidden sm:max-w-2xl">
+    <AppDialog title="节点预览" onClose={onClose} contentClassName="overflow-hidden sm:max-w-lg">
       <PageState loading={loading} error={error} />
       {data && (
         <div className="flex w-full min-w-0 flex-col gap-4">
@@ -714,7 +720,7 @@ export function NodePreviewDialog({ node, onClose }: { node: NodeItem; onClose: 
             )}
           </div>
 
-          <div className="relative h-[360px] w-full min-w-0 overflow-hidden rounded-md border">
+          <div className="relative h-[300px] w-full min-w-0 overflow-hidden rounded-md border">
             <YamlCodeEditor
               id="node-preview-yaml"
               className="h-full w-full min-w-0"
