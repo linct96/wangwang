@@ -106,7 +106,7 @@ rules:
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn-domain,DIRECT
-  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - RULE-SET,cn-ip,DIRECT
   - MATCH,🚀 节点选择
 `
 
@@ -294,7 +294,7 @@ rules:
   - RULE-SET,spotify-domain,🎬 流媒体
   - RULE-SET,tiktok-domain,🎬 流媒体
   - RULE-SET,cn-domain,DIRECT
-  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - RULE-SET,cn-ip,DIRECT
   - MATCH,🐟 漏网之鱼
 `
 
@@ -662,7 +662,7 @@ rules:
   - RULE-SET,tiktok-domain,🎬 流媒体
 
   - RULE-SET,cn-domain,DIRECT
-  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - RULE-SET,cn-ip,DIRECT
 
   - MATCH,🐟 漏网之鱼
 `
