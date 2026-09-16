@@ -103,6 +103,7 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
+  - DOMAIN,services.googleapis.cn,🚀 节点选择
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn-domain,DIRECT
@@ -285,6 +286,7 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
+  - DOMAIN,services.googleapis.cn,🚀 节点选择
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
@@ -582,6 +584,13 @@ rule-providers:
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"
     path: ./ruleset/apple-domain.mrs
     interval: 86400
+  gfw-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"
+    path: ./ruleset/gfw.mrs
+    interval: 86400
   games-cn-domain:
     type: http
     behavior: domain
@@ -625,45 +634,32 @@ rule-providers:
     path: ./ruleset/cn-ip.mrs
     interval: 86400
 rules:
+  - DOMAIN,services.googleapis.cn,🚀 节点选择
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
-
   - RULE-SET,category-ads-all-domain,🛑 广告拦截
-
   - RULE-SET,category-ai-!cn-domain,🤖 AI 服务
-
   - RULE-SET,github-domain,🐱 GitHub
-
-  # YouTube 必须优先于 Google
   - RULE-SET,youtube-domain,🎬 流媒体
-
   - RULE-SET,google-domain,🔍 Google
   - RULE-SET,google-ip,🔍 Google,no-resolve
-
   - RULE-SET,telegram-domain,✈️ Telegram
   - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
-
   - RULE-SET,microsoft@cn-domain,DIRECT
   - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
-
   - RULE-SET,apple-cn-domain,DIRECT
   - RULE-SET,apple-domain,🍎 Apple
-
-  # 中国大陆游戏 CDN / 服务优先直连
   - RULE-SET,steam-cn-domain,DIRECT
+  - RULE-SET,gfw-domain,🚀 节点选择
   - RULE-SET,games-cn-domain,DIRECT
-  # 其余游戏服务进入游戏平台策略组
   - RULE-SET,steam-domain,🎮 游戏平台
   - RULE-SET,games-domain,🎮 游戏平台
-
   - RULE-SET,netflix-domain,🎬 流媒体
   - RULE-SET,netflix-ip,🎬 流媒体,no-resolve
   - RULE-SET,spotify-domain,🎬 流媒体
   - RULE-SET,tiktok-domain,🎬 流媒体
-
   - RULE-SET,cn-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT
-
   - MATCH,🐟 漏网之鱼
 `
 
