@@ -29,22 +29,24 @@ export function RuleProviderCombobox({
   }, [providers, query])
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="min-w-0 flex-1 justify-between font-normal"
-        >
-          <span className={cn('flex min-w-0 items-center gap-2 text-left', !selected && 'text-muted-foreground')}>
-            <span className="min-w-0 truncate">{selected?.name || rawValue || '选择规则集数据源'}</span>
-            {selected && <small className="shrink-0 text-muted-foreground">{ruleProviderLabel(selected, false)}</small>}
-          </span>
-          <ChevronsUpDown data-icon="inline-end" />
-        </Button>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="min-w-0 flex-1 justify-between font-normal"
+          />
+        }
+      >
+        <span className={cn('flex min-w-0 items-center gap-2 text-left', !selected && 'text-muted-foreground')}>
+          <span className="min-w-0 truncate">{selected?.name || rawValue || '选择规则集数据源'}</span>
+          {selected && <small className="shrink-0 text-muted-foreground">{ruleProviderLabel(selected, false)}</small>}
+        </span>
+        <ChevronsUpDown data-icon="inline-end" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
+      <PopoverContent align="start" className="w-(--anchor-width) p-2">
         <Input
           value={query}
           autoFocus

@@ -39,7 +39,7 @@ export function IconButton({
   label,
   children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; children: ReactNode }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; children?: ReactNode }) {
   return (
     <Button variant="ghost" size="icon" type="button" title={label} aria-label={label} {...props}>
       {children}

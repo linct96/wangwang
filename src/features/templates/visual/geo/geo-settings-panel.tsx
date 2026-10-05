@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -266,44 +267,48 @@ export function GeoSettingsPanel({
                     <span>使用 gh-proxy</span>
                   </Button>
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-2.5 gap-1.5 text-xs font-medium border-border/80 hover:bg-accent/60"
-                      >
-                        <Sparkles className="size-3.5 text-amber-500 shrink-0" />
-                        <span>填入预设</span>
-                        <ChevronDown className="size-3 text-muted-foreground/70 -mr-0.5" />
-                      </Button>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2.5 gap-1.5 text-xs font-medium border-border/80 hover:bg-accent/60"
+                        />
+                      }
+                    >
+                      <Sparkles className="size-3.5 text-amber-500 shrink-0" />
+                      <span>填入预设</span>
+                      <ChevronDown className="size-3 text-muted-foreground/70 -mr-0.5" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-60">
-                      <DropdownMenuLabel>推荐下载地址</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => applyUrlPreset(createRecommendedGeoSettings, 'MetaCubeX 全量推荐')}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">MetaCubeX 全量 (推荐)</span>
-                          <span className="text-xs text-muted-foreground">完整域名/IP 数据库</span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => applyUrlPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">MetaCubeX 精简 (Lite)</span>
-                          <span className="text-xs text-muted-foreground">精简体积 · 内存占用更低</span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => applyUrlPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">Loyalsoldier 规则集</span>
-                          <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
-                        </div>
-                      </DropdownMenuItem>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>推荐下载地址</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={() => applyUrlPreset(createRecommendedGeoSettings, 'MetaCubeX 全量推荐')}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-sm">MetaCubeX 全量 (推荐)</span>
+                            <span className="text-xs text-muted-foreground">完整域名/IP 数据库</span>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => applyUrlPreset(createLiteGeoSettings, 'MetaCubeX 精简版 (Lite)')}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-sm">MetaCubeX 精简 (Lite)</span>
+                            <span className="text-xs text-muted-foreground">精简体积 · 内存占用更低</span>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => applyUrlPreset(createLoyalsoldierGeoSettings, 'Loyalsoldier 规则集')}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-sm">Loyalsoldier 规则集</span>
+                            <span className="text-xs text-muted-foreground">经典社区 V2Ray 规则库</span>
+                          </div>
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

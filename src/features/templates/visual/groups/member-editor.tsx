@@ -1,7 +1,13 @@
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable'
 import { CircleHelp, GripVertical, Plus, X } from 'lucide-react'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -101,18 +107,21 @@ export function MemberEditor({
       <FieldLabel className="items-center gap-1.5">
         <span>包含节点与子组</span>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              role="button"
-              tabIndex={-1}
-              className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-            >
-              <CircleHelp className="size-3.5" />
-            </span>
+          <TooltipTrigger
+            render={
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="proxies"
+                className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+              />
+            }
+          >
+            <CircleHelp className="size-3.5" />
           </TooltipTrigger>
           <TooltipContent className="font-mono text-xs">proxies</TooltipContent>
         </Tooltip>
@@ -142,20 +151,28 @@ export function MemberEditor({
             />
           ))}
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className="template-member-add-trigger" onPointerDown={(e) => e.stopPropagation()}>
-                <Plus className="template-add-tag-icon" />
-                <span>添加节点/组</span>
-              </button>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="template-member-add-trigger"
+                  onPointerDown={(e) => e.stopPropagation()}
+                />
+              }
+            >
+              <Plus className="template-add-tag-icon" />
+              <span>添加节点/组</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-56 overflow-y-auto">
-              {choices.map((choice) => {
-                return (
-                  <DropdownMenuItem key={choice.value} onClick={() => addMember(choice.value)}>
-                    <span>{choice.label}</span>
-                  </DropdownMenuItem>
-                )
-              })}
+              <DropdownMenuGroup>
+                {choices.map((choice) => {
+                  return (
+                    <DropdownMenuItem key={choice.value} onClick={() => addMember(choice.value)}>
+                      <span>{choice.label}</span>
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -97,16 +97,18 @@ export function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) =>
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="default"
-          className="px-2.5 shrink-0 text-muted-foreground hover:text-foreground"
-          title="选择图标"
-        >
-          <Smile className="size-4" />
-        </Button>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            className="px-2.5 shrink-0 text-muted-foreground hover:text-foreground"
+            title="选择图标"
+          />
+        }
+      >
+        <Smile className="size-4" />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-2.5">
         <div className="flex items-center justify-between gap-1 mb-2 border-b border-border pb-1.5">
@@ -157,18 +159,21 @@ export function ProxyGroupIconPicker({ onSelect }: { onSelect: (icon: string) =>
 function FieldHelp({ name }: { name: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          role="button"
-          tabIndex={-1}
-          className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-          }}
-        >
-          <CircleHelp className="size-3.5" />
-        </span>
+      <TooltipTrigger
+        render={
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={name}
+            className="inline-flex items-center text-muted-foreground/70 hover:text-foreground transition-colors cursor-help"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+          />
+        }
+      >
+        <CircleHelp className="size-3.5" />
       </TooltipTrigger>
       <TooltipContent className="font-mono text-xs">{name}</TooltipContent>
     </Tooltip>
@@ -257,8 +262,15 @@ export function GroupDialog({
                   <FieldHelp name="type" />
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: 'select', label: 'select (手动选择)' },
+                    { value: 'url-test', label: 'url-test (自动测速)' },
+                    { value: 'fallback', label: 'fallback (故障转移)' },
+                    { value: 'load-balance', label: 'load-balance (负载均衡)' },
+                  ]}
                   value={form.type}
-                  onValueChange={(type: SupportedProxyGroupType) =>
+                  onValueChange={(type: SupportedProxyGroupType | null) =>
+                    type !== null &&
                     setForm({
                       ...form,
                       type,
@@ -280,10 +292,12 @@ export function GroupDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="select">select (手动选择)</SelectItem>
-                    <SelectItem value="url-test">url-test (自动测速)</SelectItem>
-                    <SelectItem value="fallback">fallback (故障转移)</SelectItem>
-                    <SelectItem value="load-balance">load-balance (负载均衡)</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="select">select (手动选择)</SelectItem>
+                      <SelectItem value="url-test">url-test (自动测速)</SelectItem>
+                      <SelectItem value="fallback">fallback (故障转移)</SelectItem>
+                      <SelectItem value="load-balance">load-balance (负载均衡)</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -295,8 +309,18 @@ export function GroupDialog({
                   <FieldHelp name="default-selected" />
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: '__first__', label: '第一个节点（默认）' },
+                    ...form.members
+                      .filter((member) => member.kind !== 'source-slot')
+                      .map((member) => {
+                        const label = memberLabel(member, groups, sourceSlots)
+                        return { value: label, label }
+                      }),
+                  ]}
                   value={form.defaultSelected || '__first__'}
                   onValueChange={(defaultSelected) =>
+                    defaultSelected !== null &&
                     setForm({
                       ...form,
                       defaultSelected: defaultSelected === '__first__' ? undefined : defaultSelected,
@@ -307,8 +331,8 @@ export function GroupDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__first__">第一个节点（默认）</SelectItem>
                     <SelectGroup>
+                      <SelectItem value="__first__">第一个节点（默认）</SelectItem>
                       {form.members.map((member, index) => {
                         if (member.kind === 'source-slot') return null
                         const label = memberLabel(member, groups, sourceSlots)
@@ -330,15 +354,21 @@ export function GroupDialog({
                   <FieldHelp name="include-all-proxies" />
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: 'false', label: '关闭' },
+                    { value: 'true', label: '开启' },
+                  ]}
                   value={form.includeAllProxies ? 'true' : 'false'}
-                  onValueChange={(val) => setForm({ ...form, includeAllProxies: val === 'true' })}
+                  onValueChange={(val) => val !== null && setForm({ ...form, includeAllProxies: val === 'true' })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="false">关闭</SelectItem>
-                    <SelectItem value="true">开启</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="false">关闭</SelectItem>
+                      <SelectItem value="true">开启</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -348,15 +378,21 @@ export function GroupDialog({
                   <FieldHelp name="include-all-providers" />
                 </FieldLabel>
                 <Select
+                  items={[
+                    { value: 'false', label: '关闭' },
+                    { value: 'true', label: '开启' },
+                  ]}
                   value={form.includeAllProviders ? 'true' : 'false'}
-                  onValueChange={(val) => setForm({ ...form, includeAllProviders: val === 'true' })}
+                  onValueChange={(val) => val !== null && setForm({ ...form, includeAllProviders: val === 'true' })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="false">关闭</SelectItem>
-                    <SelectItem value="true">开启</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="false">关闭</SelectItem>
+                      <SelectItem value="true">开启</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -442,16 +478,25 @@ export function GroupDialog({
                       <FieldHelp name="strategy" />
                     </FieldLabel>
                     <Select
+                      items={[
+                        { value: 'consistent-hashing', label: 'consistent-hashing (一致性哈希)' },
+                        { value: 'round-robin', label: 'round-robin (轮询)' },
+                        { value: 'sticky-sessions', label: 'sticky-sessions (会话保持)' },
+                      ]}
                       value={form.strategy || 'consistent-hashing'}
-                      onValueChange={(strategy: SupportedLoadBalanceStrategy) => setForm({ ...form, strategy })}
+                      onValueChange={(strategy: SupportedLoadBalanceStrategy | null) =>
+                        strategy !== null && setForm({ ...form, strategy })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="consistent-hashing">consistent-hashing (一致性哈希)</SelectItem>
-                        <SelectItem value="round-robin">round-robin (轮询)</SelectItem>
-                        <SelectItem value="sticky-sessions">sticky-sessions (会话保持)</SelectItem>
+                        <SelectGroup>
+                          <SelectItem value="consistent-hashing">consistent-hashing (一致性哈希)</SelectItem>
+                          <SelectItem value="round-robin">round-robin (轮询)</SelectItem>
+                          <SelectItem value="sticky-sessions">sticky-sessions (会话保持)</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </Field>

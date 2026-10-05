@@ -28,9 +28,9 @@ export function Segmented<Value extends SegmentedValue>({
 
   return (
     <ToggleGroup
-      type="single"
-      value={String(selectedIndex)}
-      onValueChange={(index) => {
+      value={[String(selectedIndex)]}
+      onValueChange={([index]) => {
+        if (index === undefined) return
         const next = options[Number(index)]?.value
         if (next !== undefined && !Object.is(next, value)) onChange(next)
       }}
@@ -41,7 +41,7 @@ export function Segmented<Value extends SegmentedValue>({
         <ToggleGroupItem
           key={`${typeof option.value}:${String(option.value)}`}
           value={String(index)}
-          className="h-7 min-w-7 gap-1 bg-transparent px-2.5 shadow-none hover:bg-background/60 data-[state=on]:bg-background data-[state=on]:shadow-xs"
+          className="h-7 min-w-7 gap-1 bg-transparent px-2.5 shadow-none hover:bg-background/60 data-pressed:bg-background data-pressed:shadow-xs"
         >
           {option.label}
         </ToggleGroupItem>

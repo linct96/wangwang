@@ -155,13 +155,11 @@ export function SourcesPage() {
                           '-'
                         ) : (
                           <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex min-w-0 max-w-32 flex-col gap-1">
-                                <div className="flex items-center justify-between gap-2 text-xs font-semibold">
-                                  <span>{usagePercent.toFixed(1)}%</span>
-                                </div>
-                                <Progress value={usagePercent} aria-label={`流量使用 ${usagePercent.toFixed(1)}%`} />
+                            <TooltipTrigger render={<div className="flex min-w-0 max-w-32 flex-col gap-1" />}>
+                              <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                                <span>{usagePercent.toFixed(1)}%</span>
                               </div>
+                              <Progress value={usagePercent} aria-label={`流量使用 ${usagePercent.toFixed(1)}%`} />
                             </TooltipTrigger>
                             <TooltipContent>
                               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
@@ -436,8 +434,10 @@ function SourceDialog({
                   <FieldLabel htmlFor="source-user-agent">User-Agent</FieldLabel>
                   <div className="flex gap-2">
                     <Select
+                      items={[...userAgentPresets, { value: customUserAgent, label: '手动输入' }]}
                       value={userAgentOption}
                       onValueChange={(value) => {
+                        if (value === null) return
                         setUserAgentOption(value)
                         form.setFieldValue('userAgent', value === customUserAgent ? '' : value)
                       }}
@@ -497,7 +497,14 @@ function SourceDialog({
             <FieldLabel>刷新间隔</FieldLabel>
             <form.Field name="interval">
               {(field) => (
-                <Select value={String(field.state.value)} onValueChange={(value) => field.handleChange(Number(value))}>
+                <Select
+                  items={[0, 1, 6, 12, 24].map((hours) => ({
+                    value: String(hours),
+                    label: hours === 0 ? '关闭' : `${hours} 小时`,
+                  }))}
+                  value={String(field.state.value)}
+                  onValueChange={(value) => value !== null && field.handleChange(Number(value))}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -526,7 +533,7 @@ function SourceDialog({
           </Button>
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => (
-              <Button disabled={Boolean(isSubmitting)}>
+              <Button type="submit" disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
                 {source ? '保存' : '完成'}
               </Button>

@@ -440,7 +440,7 @@ export function AddNodeDialog({
           </Button>
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => (
-              <Button disabled={Boolean(isSubmitting)}>
+              <Button type="submit" disabled={Boolean(isSubmitting)}>
                 {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}
                 {mode === 'import' ? '导入节点' : mode === 'preferred' ? '生成节点' : '添加节点'}
               </Button>
@@ -654,7 +654,7 @@ function NodeEditor({ node, onClose, onSaved }: { node: NodeDetail; onClose: () 
         </Button>
         <form.Subscribe selector={(state) => [state.isSubmitting]}>
           {([isSubmitting]) => (
-            <Button disabled={Boolean(isSubmitting)}>
+            <Button type="submit" disabled={Boolean(isSubmitting)}>
               {isSubmitting && <RefreshCw data-icon="inline-start" className="spin" />}保存
             </Button>
           )}

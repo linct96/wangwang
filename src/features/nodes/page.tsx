@@ -148,8 +148,13 @@ export function NodesPage() {
           )}
         </InputGroup>
         <Select
+          items={[
+            { value: 'all', label: '全部标签' },
+            ...tagOptions.map((tag) => ({ value: tag.id, label: tag.name })),
+          ]}
           value={tagId || 'all'}
           onValueChange={(value) => {
+            if (value === null) return
             setTagId(value === 'all' ? '' : value)
             setPage(1)
             setSelected([])
@@ -170,8 +175,13 @@ export function NodesPage() {
           </SelectContent>
         </Select>
         <Select
+          items={[
+            { value: 'all', label: '全部协议' },
+            ...['ss', 'vmess', 'vless', 'trojan', 'hysteria2', 'tuic'].map((value) => ({ value, label: value })),
+          ]}
           value={protocol || 'all'}
           onValueChange={(value) => {
+            if (value === null) return
             setProtocol(value === 'all' ? '' : value)
             setPage(1)
             setSelected([])
@@ -192,8 +202,14 @@ export function NodesPage() {
           </SelectContent>
         </Select>
         <Select
+          items={[
+            { value: 'all', label: '全部状态' },
+            { value: 'true', label: '已启用' },
+            { value: 'false', label: '已停用' },
+          ]}
           value={enabled || 'all'}
           onValueChange={(value) => {
+            if (value === null) return
             setEnabled(value === 'all' ? '' : value)
             setPage(1)
             setSelected([])

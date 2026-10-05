@@ -160,7 +160,14 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
                 className="pl-8 h-8 text-xs"
               />
             </div>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <Select
+              items={[
+                { value: 'all', label: '全部节点源' },
+                ...sourceOptions.map(([value, label]) => ({ value, label })),
+              ]}
+              value={sourceFilter}
+              onValueChange={(value) => value !== null && setSourceFilter(value)}
+            >
               <SelectTrigger id={`node-source-${slot.key}`} className="w-[140px] h-8 text-xs shrink-0">
                 <SelectValue placeholder="筛选节点源" />
               </SelectTrigger>

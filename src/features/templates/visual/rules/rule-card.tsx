@@ -284,9 +284,10 @@ export function RuleMatcher({
     return (
       <div className="template-matcher-form-group" onClick={(e) => e.stopPropagation()}>
         <Select
+          items={ruleTypes.map((value) => ({ value, label: value }))}
           value={type}
-          onValueChange={(nextType: SupportedRuleType) =>
-            onChange?.(nextType, valueAfterTypeChange(type, nextType, value))
+          onValueChange={(nextType: SupportedRuleType | null) =>
+            nextType !== null && onChange?.(nextType, valueAfterTypeChange(type, nextType, value))
           }
         >
           <SelectTrigger className="w-[155px] font-mono">
@@ -346,8 +347,10 @@ export function RuleMatcher({
   return (
     <div className="template-matcher-inline-container" onClick={(e) => e.stopPropagation()}>
       <Select
+        items={ruleTypes.map((value) => ({ value, label: value }))}
         value={type}
-        onValueChange={(nextType: SupportedRuleType) => {
+        onValueChange={(nextType: SupportedRuleType | null) => {
+          if (nextType === null) return
           onSave?.(nextType, valueAfterTypeChange(type, nextType, value))
         }}
       >
@@ -502,14 +505,16 @@ export const RuleCard = memo(function RuleCard({
 
               {rule.kind === 'structured' && canUseNoResolve(rule, { ruleProviders }) && (
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                      <Checkbox
-                        checked={rule.noResolve}
-                        onCheckedChange={(checked) => onSave(rule.id, setRuleNoResolve(rule, checked === true))}
-                      />
-                      <span>no-resolve</span>
-                    </label>
+                  <TooltipTrigger
+                    render={
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground" />
+                    }
+                  >
+                    <Checkbox
+                      checked={rule.noResolve}
+                      onCheckedChange={(checked) => onSave(rule.id, setRuleNoResolve(rule, checked === true))}
+                    />
+                    <span>no-resolve</span>
                   </TooltipTrigger>
                   <TooltipContent>不解析域名，避免额外 DNS 查询</TooltipContent>
                 </Tooltip>

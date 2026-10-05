@@ -66,8 +66,10 @@ export function ManualConnectionFields({
       <Field>
         <FieldLabel>协议</FieldLabel>
         <Select
+          items={protocols.map((protocol) => ({ value: protocol, label: protocol }))}
           value={value.protocol}
           onValueChange={(protocol) => {
+            if (protocol === null) return
             const next = defaultConnection(protocol as ManualNodeConnection['protocol'])
             onChange({ ...next, name: value.name, server: value.server, port: value.port })
           }}
@@ -204,10 +206,9 @@ export function ManualConnectionFields({
         <Field>
           <FieldLabel>传输方式</FieldLabel>
           <ToggleGroup
-            type="single"
             variant="outline"
-            value={value.network || 'tcp'}
-            onValueChange={(network) => network && update({ network: network as 'tcp' | 'ws' | 'grpc' })}
+            value={[value.network || 'tcp']}
+            onValueChange={([network]) => network && update({ network: network as 'tcp' | 'ws' | 'grpc' })}
           >
             <ToggleGroupItem value="tcp">TCP</ToggleGroupItem>
             <ToggleGroupItem value="ws">WebSocket</ToggleGroupItem>
@@ -244,10 +245,11 @@ export function ManualConnectionFields({
         <Field>
           <FieldLabel>传输安全</FieldLabel>
           <ToggleGroup
-            type="single"
             variant="outline"
-            value={value.security || 'none'}
-            onValueChange={(security) => security && update({ security: security as ManualNodeConnection['security'] })}
+            value={[value.security || 'none']}
+            onValueChange={([security]) =>
+              security && update({ security: security as ManualNodeConnection['security'] })
+            }
           >
             <ToggleGroupItem value="none">无</ToggleGroupItem>
             <ToggleGroupItem value="tls">TLS</ToggleGroupItem>

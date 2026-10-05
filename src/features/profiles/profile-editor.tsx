@@ -451,8 +451,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                       规则模板 <span className="text-destructive">*</span>
                                     </FieldLabel>
                                     <Select
+                                      items={templates.map((template) => ({
+                                        value: template.id,
+                                        label: template.name,
+                                      }))}
                                       value={field.state.value}
-                                      onValueChange={(value) => requestTemplateChange(value as TemplateId)}
+                                      onValueChange={(value) =>
+                                        value !== null && requestTemplateChange(value as TemplateId)
+                                      }
                                     >
                                       <SelectTrigger id="profile-template" className="w-full">
                                         <SelectValue placeholder="选择规则模板" />
@@ -746,6 +752,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                       </Button>
 
                       <Button
+                        type="submit"
                         disabled={Boolean(isSubmitting) || !canSubmit || unavailable || phase !== 'idle'}
                         className="h-9 px-5 font-medium shadow-sm"
                       >

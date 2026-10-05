@@ -367,12 +367,15 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
               </div>
               <div className="flex items-center gap-1.5">
                 {source === 'import' && (
-                  <Button type="button" variant="outline" size="sm" asChild>
-                    <label className="cursor-pointer">
-                      <Upload data-icon="inline-start" />
-                      导入文件
-                      <input className="sr-only" type="file" accept=".yaml,.yml,text/yaml" onChange={importFile} />
-                    </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<label className="cursor-pointer" />}
+                  >
+                    <Upload data-icon="inline-start" />
+                    导入文件
+                    <input className="sr-only" type="file" accept=".yaml,.yml,text/yaml" onChange={importFile} />
                   </Button>
                 )}
                 {mode === 'yaml' && (

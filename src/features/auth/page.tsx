@@ -93,7 +93,11 @@ export function LoginPage({ initialized, onAuthenticated }: { initialized: boole
           )}
         </FieldGroup>
         <form.Subscribe selector={(state) => [state.isSubmitting]}>
-          {([isSubmitting]) => <Button disabled={Boolean(isSubmitting)}>{loginMode ? '登录' : '设置并登录'}</Button>}
+          {([isSubmitting]) => (
+            <Button type="submit" disabled={Boolean(isSubmitting)}>
+              {loginMode ? '登录' : '设置并登录'}
+            </Button>
+          )}
         </form.Subscribe>
       </form>
     </main>

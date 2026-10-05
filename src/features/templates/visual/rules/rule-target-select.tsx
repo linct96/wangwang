@@ -22,8 +22,15 @@ export function RuleTargetSelect({
 
   return (
     <Select
-      value={selected}
+      items={[
+        ...groups.filter((group) => group.name).map((group) => ({ value: `group:${group.id}`, label: group.name })),
+        { value: 'DIRECT', label: 'DIRECT' },
+        { value: 'REJECT', label: 'REJECT' },
+        ...(value?.kind === 'raw' ? [{ value: `raw:${value.value}`, label: `${value.value}（高级）` }] : []),
+      ]}
+      value={selected ?? null}
       onValueChange={(next) =>
+        next !== null &&
         onChange(
           next.startsWith('group:')
             ? { kind: 'group', groupId: next.slice(6) }

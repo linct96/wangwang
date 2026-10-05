@@ -5,7 +5,7 @@ import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { applyGhProxyToGithubUrl } from '../geo/presets'
 import { newRuleProvider } from '../yaml-adapter'
 import type {
@@ -117,27 +117,47 @@ export function ProviderDialog({
               </Field>
               <Field>
                 <FieldLabel>类型</FieldLabel>
-                <Select value={form.type} onValueChange={(next: RuleProviderType) => setType(next)}>
+                <Select
+                  items={[
+                    { value: 'http', label: 'HTTP' },
+                    { value: 'file', label: 'FILE' },
+                    { value: 'inline', label: 'INLINE' },
+                  ]}
+                  value={form.type}
+                  onValueChange={(next: RuleProviderType | null) => next !== null && setType(next)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="http">HTTP</SelectItem>
-                    <SelectItem value="file">FILE</SelectItem>
-                    <SelectItem value="inline">INLINE</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="http">HTTP</SelectItem>
+                      <SelectItem value="file">FILE</SelectItem>
+                      <SelectItem value="inline">INLINE</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
               <Field>
                 <FieldLabel>规则行为</FieldLabel>
-                <Select value={form.behavior} onValueChange={(next: RuleProviderBehavior) => setBehavior(next)}>
+                <Select
+                  items={[
+                    { value: 'domain', label: 'DOMAIN' },
+                    { value: 'ipcidr', label: 'IPCIDR' },
+                    { value: 'classical', label: 'CLASSICAL' },
+                  ]}
+                  value={form.behavior}
+                  onValueChange={(next: RuleProviderBehavior | null) => next !== null && setBehavior(next)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="domain">DOMAIN</SelectItem>
-                    <SelectItem value="ipcidr">IPCIDR</SelectItem>
-                    <SelectItem value="classical">CLASSICAL</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="domain">DOMAIN</SelectItem>
+                      <SelectItem value="ipcidr">IPCIDR</SelectItem>
+                      <SelectItem value="classical">CLASSICAL</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
@@ -145,18 +165,27 @@ export function ProviderDialog({
                 <Field>
                   <FieldLabel>文件格式</FieldLabel>
                   <Select
+                    items={[
+                      { value: 'mrs', label: 'MRS' },
+                      { value: 'yaml', label: 'YAML' },
+                      { value: 'text', label: 'TEXT' },
+                    ]}
                     value={form.format || 'yaml'}
-                    onValueChange={(format: RuleProviderFormat) => setForm({ ...form, format })}
+                    onValueChange={(format: RuleProviderFormat | null) =>
+                      format !== null && setForm({ ...form, format })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="mrs" disabled={form.behavior === 'classical'}>
-                        MRS
-                      </SelectItem>
-                      <SelectItem value="yaml">YAML</SelectItem>
-                      <SelectItem value="text">TEXT</SelectItem>
+                      <SelectGroup>
+                        <SelectItem value="mrs" disabled={form.behavior === 'classical'}>
+                          MRS
+                        </SelectItem>
+                        <SelectItem value="yaml">YAML</SelectItem>
+                        <SelectItem value="text">TEXT</SelectItem>
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -198,8 +227,17 @@ export function ProviderDialog({
                 <Field className="sm:col-span-2">
                   <FieldLabel>下载代理（可选）</FieldLabel>
                   <Select
+                    items={[
+                      { value: 'none', label: '不指定' },
+                      { value: 'DIRECT', label: 'DIRECT' },
+                      ...groups.map((group) => ({ value: `group:${group.id}`, label: group.name })),
+                      ...(form.proxy?.kind === 'raw'
+                        ? [{ value: `raw:${form.proxy.value}`, label: `${form.proxy.value}（高级）` }]
+                        : []),
+                    ]}
                     value={proxyValue}
                     onValueChange={(next) =>
+                      next !== null &&
                       setForm({
                         ...form,
                         proxy:
@@ -217,16 +255,18 @@ export function ProviderDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">不指定</SelectItem>
-                      <SelectItem value="DIRECT">DIRECT</SelectItem>
-                      {groups.map((group) => (
-                        <SelectItem key={group.id} value={`group:${group.id}`}>
-                          {group.name}
-                        </SelectItem>
-                      ))}
-                      {form.proxy?.kind === 'raw' && (
-                        <SelectItem value={`raw:${form.proxy.value}`}>{form.proxy.value}（高级）</SelectItem>
-                      )}
+                      <SelectGroup>
+                        <SelectItem value="none">不指定</SelectItem>
+                        <SelectItem value="DIRECT">DIRECT</SelectItem>
+                        {groups.map((group) => (
+                          <SelectItem key={group.id} value={`group:${group.id}`}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                        {form.proxy?.kind === 'raw' && (
+                          <SelectItem value={`raw:${form.proxy.value}`}>{form.proxy.value}（高级）</SelectItem>
+                        )}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Field>

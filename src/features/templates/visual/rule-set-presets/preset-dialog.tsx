@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { newRule, newRuleProvider } from '../yaml-adapter'
 import { targetLabel, type RuleTargetDraft, type VisualTemplateDraft } from '../model'
 import { applyGhProxyToGithubUrl } from '../geo/presets'
@@ -160,29 +160,49 @@ export function RuleSetPresetDialog({
           onClose={() => setOpen(false)}
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[10rem_10rem_minmax(0,1fr)]">
-            <Select value={source} onValueChange={(value: RuleSetPresetSource | 'all') => setSource(value)}>
+            <Select
+              items={[
+                { value: 'all', label: '全部来源' },
+                ...Object.entries(sourceLabels).map(([value, label]) => ({ value, label })),
+              ]}
+              value={source}
+              onValueChange={(value: RuleSetPresetSource | 'all' | null) => value !== null && setSource(value)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部来源</SelectItem>
-                <SelectItem value="metacubex">MetaCubeX</SelectItem>
-                <SelectItem value="loyalsoldier">Loyalsoldier</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  <SelectItem value="metacubex">MetaCubeX</SelectItem>
+                  <SelectItem value="loyalsoldier">Loyalsoldier</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
-            <Select value={category} onValueChange={(value: RuleSetPresetCategory | 'all') => setCategory(value)}>
+            <Select
+              items={[
+                { value: 'all', label: '全部分类' },
+                ...Object.entries(categoryLabels)
+                  .filter(([value]) => presets.some((preset) => preset.category === value))
+                  .map(([value, label]) => ({ value, label })),
+              ]}
+              value={category}
+              onValueChange={(value: RuleSetPresetCategory | 'all' | null) => value !== null && setCategory(value)}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部分类</SelectItem>
-                {Object.entries(categoryLabels)
-                  .filter(([value]) => presets.some((preset) => preset.category === value))
-                  .map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
+                <SelectGroup>
+                  <SelectItem value="all">全部分类</SelectItem>
+                  {Object.entries(categoryLabels)
+                    .filter(([value]) => presets.some((preset) => preset.category === value))
+                    .map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <div className="relative">
@@ -200,7 +220,8 @@ export function RuleSetPresetDialog({
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
               <Checkbox
                 aria-label="全选"
-                checked={someFilteredSelected ? 'indeterminate' : allFilteredSelected}
+                checked={allFilteredSelected}
+                indeterminate={someFilteredSelected}
                 onCheckedChange={(checked) =>
                   setSelections((current) => {
                     const next = { ...current }
@@ -367,8 +388,16 @@ export function RuleSetPresetDialog({
                   <>
                     <span>，应用于</span>
                     <Select
+                      items={[
+                        ...draft.groups
+                          .filter((group) => group.name)
+                          .map((group) => ({ value: `group:${group.id}`, label: group.name })),
+                        { value: 'DIRECT', label: 'DIRECT' },
+                        { value: 'REJECT', label: 'REJECT' },
+                      ]}
                       value={bulkTargetValue}
                       onValueChange={(value) =>
+                        value !== null &&
                         setBulkTarget(
                           value.startsWith('group:')
                             ? { kind: 'group', groupId: value.slice(6) }
@@ -380,15 +409,17 @@ export function RuleSetPresetDialog({
                         <SelectValue placeholder="请选择目标策略" />
                       </SelectTrigger>
                       <SelectContent>
-                        {draft.groups
-                          .filter((group) => group.name)
-                          .map((group) => (
-                            <SelectItem key={group.id} value={`group:${group.id}`}>
-                              {group.name}
-                            </SelectItem>
-                          ))}
-                        <SelectItem value="DIRECT">DIRECT</SelectItem>
-                        <SelectItem value="REJECT">REJECT</SelectItem>
+                        <SelectGroup>
+                          {draft.groups
+                            .filter((group) => group.name)
+                            .map((group) => (
+                              <SelectItem key={group.id} value={`group:${group.id}`}>
+                                {group.name}
+                              </SelectItem>
+                            ))}
+                          <SelectItem value="DIRECT">DIRECT</SelectItem>
+                          <SelectItem value="REJECT">REJECT</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                     <span>规则</span>

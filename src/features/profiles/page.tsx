@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -114,11 +115,9 @@ export function ProfilesPage() {
     <div className="profiles-page">
       <div className="page-heading">
         <h1>配置</h1>
-        <Button disabled={!sources.length} asChild>
-          <Link to="/profiles/new">
-            <Plus data-icon="inline-start" />
-            新建配置
-          </Link>
+        <Button disabled={!sources.length} nativeButton={false} render={<Link to="/profiles/new" />}>
+          <Plus data-icon="inline-start" />
+          新建配置
         </Button>
       </div>
 
@@ -159,28 +158,26 @@ export function ProfilesPage() {
                             aria-label={profile.enabled ? '停用配置' : '启用配置'}
                           />
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <IconButton label="更多操作">
-                                <MoreHorizontal className="size-4" />
-                              </IconButton>
+                            <DropdownMenuTrigger render={<IconButton label="更多操作" />}>
+                              <MoreHorizontal className="size-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem disabled={isCompiling} onClick={() => void triggerCompile(profile.id)}>
-                                <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
-                                {isCompiling ? '正在生成...' : '重新生成'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link to="/profiles/$id/edit" params={{ id: profile.id }}>
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                  disabled={isCompiling}
+                                  onClick={() => void triggerCompile(profile.id)}
+                                >
+                                  <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
+                                  {isCompiling ? '正在生成...' : '重新生成'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem render={<Link to="/profiles/$id/edit" params={{ id: profile.id }} />}>
                                   <Pencil className="size-4 mr-2" /> 编辑设置
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleting(profile)}
-                              >
-                                <Trash2 className="size-4 mr-2" /> 删除配置
-                              </DropdownMenuItem>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onClick={() => setDeleting(profile)}>
+                                  <Trash2 className="size-4 mr-2" /> 删除配置
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, Radar } from 'lucide-react'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -387,16 +387,23 @@ export function SnifferSettingsPanel({
                             <FieldLabel htmlFor={`template-sniffer-override-${key}`}>目标覆盖</FieldLabel>
                             <Select
                               disabled={!isSnifferEnabled || !isEnabled}
+                              items={[
+                                { value: 'default', label: '跟随全局' },
+                                { value: 'true', label: '开启' },
+                                { value: 'false', label: '关闭' },
+                              ]}
                               value={overrideVal}
-                              onValueChange={(v) => handleOverrideChange(key, v)}
+                              onValueChange={(v) => v !== null && handleOverrideChange(key, v)}
                             >
                               <SelectTrigger id={`template-sniffer-override-${key}`} className="w-full">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="default">跟随全局</SelectItem>
-                                <SelectItem value="true">开启</SelectItem>
-                                <SelectItem value="false">关闭</SelectItem>
+                                <SelectGroup>
+                                  <SelectItem value="default">跟随全局</SelectItem>
+                                  <SelectItem value="true">开启</SelectItem>
+                                  <SelectItem value="false">关闭</SelectItem>
+                                </SelectGroup>
                               </SelectContent>
                             </Select>
                           </Field>
