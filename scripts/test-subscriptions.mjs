@@ -14,7 +14,10 @@ registerHooks({
 
 const { app } = await import('../worker/app.ts')
 const { subscriptionToken, subscriptionTokenHash, sessionHash } = await import('../worker/security.ts')
-const { compileProfile } = await import('../worker/tasks.ts')
+const { compileProfile, selectProfileNodes, selectDraftProfileNodes } = await import('../worker/tasks.ts')
+const { replaceProfileNodeBinding } = await import('../worker/profile-node-binding.ts')
+const { replaceProfileSlotBindings } = await import('../worker/profile-slot-bindings.ts')
+const { replaceSourceTags } = await import('../worker/tag-store.ts')
 const sqlite = new DatabaseSync(':memory:')
 let queries = []
 let signs = 0
@@ -274,6 +277,95 @@ try {
   )
   assert.equal((await admin('/legacy', 'DELETE')).status, 200)
   await subscription(indexedToken, 404, 0)
+  // 正则复用覆盖已保存/草稿的全局源、标签以及源/标签槽位；复用仅限单个绑定和本次选择。
+  fixture('regex-test')
+  sqlite.prepare('UPDATE nodes SET alias = ? WHERE id = ?').run('regex-keep', 'node-test')
+  for (const [id, originalName, alias] of [
+    ['regex-alias', 'other-name', 'regex-keep-2'],
+    ['regex-drop', 'regex-drop', null],
+  ]) {
+    sqlite
+      .prepare(
+        'INSERT INTO physical_nodes SELECT ?, ?, protocol, server, port, config, created_at, updated_at FROM physical_nodes WHERE id = ?',
+      )
+      .run(id, id, 'physical-test')
+    sqlite
+      .prepare(
+        "INSERT INTO nodes (id,source_id,physical_node_id,original_name,alias,position,created_at,updated_at) VALUES (?,'system-manual',?,?,?,1,1,1)",
+      )
+      .run(id, id, originalName, alias)
+  }
+  await replaceSourceTags(env, 'system-manual', ['regex-test'])
+  const OriginalRegExp = globalThis.RegExp
+  const constructions = []
+  globalThis.RegExp = new Proxy(OriginalRegExp, {
+    construct(target, args) {
+      constructions.push(args[0])
+      return Reflect.construct(target, args)
+    },
+  })
+  try {
+    for (const mode of ['source', 'tag']) {
+      const nodeBinding = {
+        mode,
+        ...(mode === 'source' ? { sourceIds: ['system-manual'] } : { tags: ['regex-test'] }),
+        includeRegex: '^regex-',
+        excludeRegex: 'drop$',
+      }
+      const slotBindings = ['slot-a', 'slot-b'].map((slotKey) => ({ ...nodeBinding, slotKey }))
+      await replaceProfileNodeBinding(env, 'regex-test', nodeBinding)
+      await replaceProfileSlotBindings(env, 'regex-test', slotBindings)
+      for (const saved of [true, false]) {
+        constructions.length = 0
+        const result = saved
+          ? await selectProfileNodes(env, { id: 'regex-test' })
+          : await selectDraftProfileNodes(env, { nodeBinding, slotBindings })
+        assert.deepEqual(
+          result.globalNodes.map(({ name }) => name),
+          ['regex-keep', 'regex-keep-2'],
+        )
+        for (const slotKey of ['slot-a', 'slot-b'])
+          assert.deepEqual(
+            result.slotNodes.filter((node) => node.slotKey === slotKey).map(({ name }) => name),
+            ['regex-keep', 'regex-keep-2'],
+          )
+        assert.equal(
+          constructions.filter((pattern) => pattern === '^regex-').length,
+          3,
+          `${mode}/${saved}: 每个绑定只构造一次包含正则`,
+        )
+        assert.equal(
+          constructions.filter((pattern) => pattern === 'drop$').length,
+          3,
+          `${mode}/${saved}: 每个绑定只构造一次排除正则`,
+        )
+      }
+    }
+    const draft = {
+      nodeBinding: { mode: 'source', sourceIds: ['system-manual'], includeRegex: null, excludeRegex: null },
+      slotBindings: [],
+    }
+    constructions.length = 0
+    assert.equal((await selectDraftProfileNodes(env, draft)).globalNodes.length, 3)
+    assert.equal(constructions.length, 0, '未启用正则时不构造对象')
+    draft.nodeBinding.includeRegex = '['
+    await assert.rejects(selectDraftProfileNodes(env, draft), SyntaxError)
+    draft.nodeBinding.sourceIds = ['missing-source']
+    assert.equal((await selectDraftProfileNodes(env, draft)).globalNodes.length, 0, '没有节点时仍不触发无效正则')
+    draft.nodeBinding.sourceIds = ['system-manual']
+    draft.nodeBinding.includeRegex = '^absent$'
+    draft.nodeBinding.excludeRegex = '['
+    assert.equal(
+      (await selectDraftProfileNodes(env, draft)).globalNodes.length,
+      0,
+      '包含规则拒绝全部节点时仍短路排除规则',
+    )
+    draft.nodeBinding.includeRegex = null
+    await assert.rejects(selectDraftProfileNodes(env, draft), SyntaxError)
+    console.log('节点筛选正则回归通过：7 个分支、每绑定一次构造、别名/顺序、空规则及无效正则短路。')
+  } finally {
+    globalThis.RegExp = OriginalRegExp
+  }
   console.log('订阅索引回归通过：迁移/回填、单行索引查询、一次 HMAC、创建/编译、禁用/删除/轮换、密钥变更及并发保护。')
 } finally {
   crypto.subtle.sign = originalSign

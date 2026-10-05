@@ -434,13 +434,22 @@ export async function refreshSource(env: Env, sourceId: string) {
   await enqueueProfileIds(env, affectedProfileIds)
 }
 
+function nodeNameMatcher({ includeRegex, excludeRegex }: { includeRegex: string | null; excludeRegex: string | null }) {
+  let include: RegExp | undefined
+  let exclude: RegExp | undefined
+  // 首次实际匹配时构造，保留空节点和包含规则短路时不触发无效正则的行为。
+  return (name: string) =>
+    (!includeRegex || (include ??= new RegExp(includeRegex)).test(name)) &&
+    (!excludeRegex || !(exclude ??= new RegExp(excludeRegex)).test(name))
+}
+
 export async function selectSourceSlotNodes(
   env: Env,
   profileId: string,
   bindings: Extract<ProfileSlotBinding, { mode: 'source' }>[],
 ): Promise<SelectedSlotNode[]> {
   if (!bindings.length) return []
-  const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding]))
+  const bySlot = new Map(bindings.map((binding) => [binding.slotKey, nodeNameMatcher(binding)]))
   const selected = await db(env)
     .select({
       slotKey: profileSlotSources.slotKey,
@@ -457,11 +466,9 @@ export async function selectSourceSlotNodes(
     .where(and(eq(profileSlotSources.profileId, profileId), eq(nodes.enabled, true), eq(sources.enabled, true)))
     .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
   return selected.flatMap((node) => {
-    const binding = bySlot.get(node.slotKey)
+    const matches = bySlot.get(node.slotKey)
     const name = node.alias || node.originalName
-    if (!binding) return []
-    if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
-    if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+    if (!matches?.(name)) return []
     return [{ slotKey: node.slotKey, nodeId: node.id, physicalNodeId: node.physicalNodeId, config: node.config, name }]
   })
 }
@@ -547,11 +554,11 @@ async function selectTagSlotNodes(
   if (!bindings.length) return []
   const rows = await enabledNodes(env)
   const result: SelectedSlotNode[] = []
-  for (const binding of bindings)
+  for (const binding of bindings) {
+    const matches = nodeNameMatcher(binding)
     for (const node of await filterNodesByTags(env, rows, binding.tags)) {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) continue
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) continue
+      if (!matches(name)) continue
       result.push({
         slotKey: binding.slotKey,
         nodeId: node.nodeId,
@@ -560,6 +567,7 @@ async function selectTagSlotNodes(
         name,
       })
     }
+  }
   return result
 }
 
@@ -579,20 +587,20 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
       .innerJoin(sources, eq(sources.id, nodes.sourceId))
       .where(and(eq(profileNodeSources.profileId, profileId), eq(nodes.enabled, true), eq(sources.enabled, true)))
       .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
+    const matches = nodeNameMatcher(binding)
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      if (!matches(name)) return []
       return [{ ...node, name }]
     })
   }
 
   if (binding.mode === 'tag') {
     const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
+    const matches = nodeNameMatcher(binding)
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      if (!matches(name)) return []
       return [{ ...node, name }]
     })
   }
@@ -683,20 +691,20 @@ async function selectDraftGlobalNodes(env: Env, binding: ProfileNodeBindingInput
       .innerJoin(sources, eq(sources.id, nodes.sourceId))
       .where(and(inArray(nodes.sourceId, binding.sourceIds), eq(nodes.enabled, true), eq(sources.enabled, true)))
       .orderBy(asc(sources.name), asc(nodes.position), asc(nodes.createdAt))
+    const matches = nodeNameMatcher(binding)
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      if (!matches(name)) return []
       return [{ ...node, name }]
     })
   }
 
   if (binding.mode === 'tag') {
     const rows = await filterNodesByTags(env, await enabledNodes(env), binding.tags)
+    const matches = nodeNameMatcher(binding)
     return rows.flatMap((node) => {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) return []
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) return []
+      if (!matches(name)) return []
       return [{ ...node, name }]
     })
   }
@@ -754,10 +762,10 @@ async function selectDraftSourceSlotNodes(
   for (const binding of bindings) {
     const sourceSet = new Set(binding.sourceIds)
     const slotNodes = rows.filter((node) => sourceSet.has(node.sourceId))
+    const matches = nodeNameMatcher(binding)
     for (const node of slotNodes) {
       const name = node.alias || node.originalName
-      if (binding.includeRegex && !new RegExp(binding.includeRegex).test(name)) continue
-      if (binding.excludeRegex && new RegExp(binding.excludeRegex).test(name)) continue
+      if (!matches(name)) continue
       result.push({
         slotKey: binding.slotKey,
         nodeId: node.id,
