@@ -114,6 +114,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail>()
   const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
+  const [templateDetailError, setTemplateDetailError] = useState<{ id: TemplateId; message: string }>()
+  const [templateDetailAttempt, setTemplateDetailAttempt] = useState(0)
   const templateDetailsCache = useRef(new Map<string, TemplateDetail>())
   const initialized = useRef(false)
 
@@ -265,6 +267,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
   useEffect(() => {
     if (!selectedTemplateId) return
+    setTemplateDetailError(undefined)
     if (templateDetailsCache.current.has(selectedTemplateId)) {
       setTemplateDetail(templateDetailsCache.current.get(selectedTemplateId))
       setTemplateDetailLoading(false)
@@ -279,12 +282,19 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           setTemplateDetail(detail)
         }
       })
-      .catch(() => {})
+      .catch((reason) => {
+        if (!controller.signal.aborted) {
+          setTemplateDetailError({
+            id: selectedTemplateId,
+            message: reason instanceof Error ? reason.message : '模板详情加载失败',
+          })
+        }
+      })
       .finally(() => {
         if (!controller.signal.aborted) setTemplateDetailLoading(false)
       })
     return () => controller.abort()
-  }, [selectedTemplateId])
+  }, [selectedTemplateId, templateDetailAttempt])
 
   const builtin = useMemo(() => templates.filter((template) => template.kind === 'builtin'), [templates])
   const custom = useMemo(() => templates.filter((template) => template.kind === 'custom'), [templates])
@@ -715,6 +725,12 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                   <LivePreviewWrapper
                     templateDetail={templateDetail}
                     templateDetailLoading={templateDetailLoading}
+                    templateDetailError={templateDetailError}
+                    onRetryTemplateDetail={() => {
+                      setTemplateDetailError(undefined)
+                      setTemplateDetailLoading(true)
+                      setTemplateDetailAttempt((value) => value + 1)
+                    }}
                     templateId={templateId}
                     nodeBinding={nodeBinding}
                     slotBindings={slotBindings}
@@ -798,6 +814,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 function LivePreviewWrapper({
   templateDetail,
   templateDetailLoading,
+  templateDetailError,
+  onRetryTemplateDetail,
   templateId,
   nodeBinding,
   slotBindings,
@@ -806,6 +824,8 @@ function LivePreviewWrapper({
 }: {
   templateDetail: TemplateDetail | undefined
   templateDetailLoading: boolean
+  templateDetailError: { id: TemplateId; message: string } | undefined
+  onRetryTemplateDetail: () => void
   templateId: TemplateId
   nodeBinding: ProfileNodeBinding
   slotBindings: ProfileSlotBinding[]
@@ -813,6 +833,7 @@ function LivePreviewWrapper({
   onToggleCollapse?: () => void
 }) {
   const currentTemplate = templateDetail?.id === templateId ? templateDetail : undefined
+  const currentError = templateDetailError?.id === templateId ? templateDetailError.message : ''
   const preview = useProfilePreview(currentTemplate, nodeBinding, slotBindings, nodes)
 
   return (
@@ -836,9 +857,19 @@ function LivePreviewWrapper({
       </button>
 
       <div className="profile-preview-expanded-wrap">
+        {currentError && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {currentError}
+              <Button type="button" variant="outline" size="sm" onClick={onRetryTemplateDetail}>
+                重试加载模板
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         <ProfilePreviewPanel
           preview={preview}
-          loading={templateDetailLoading || !currentTemplate}
+          loading={templateDetailLoading || (!currentTemplate && !currentError)}
           templateId={templateId}
           nodeBinding={nodeBinding}
           slotBindings={slotBindings}

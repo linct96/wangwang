@@ -1,34 +1,54 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from './client'
 import type { Job } from './types'
 
 export function useApi<T>(path: string) {
-  const [data, setData] = useState<T>()
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      if (!signal) setLoading(true)
-      try {
-        const response = await api<T>(path, { signal })
-        if (!signal?.aborted) {
-          setData(response)
-          setError('')
-        }
-      } catch (reason) {
-        if (!signal?.aborted) setError(reason instanceof Error ? reason.message : '请求失败')
-      } finally {
-        if (!signal?.aborted) setLoading(false)
-      }
-    },
-    [path],
-  )
+  const [state, setState] = useState<{ path: string; data?: T; error: string; loading: boolean }>({
+    path,
+    error: '',
+    loading: true,
+  })
+  const request = useRef<{ path: string; load: () => Promise<void> } | null>(null)
+
   useEffect(() => {
-    const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [load])
-  return { data, error, loading, reload: () => load() }
+    let controller: AbortController | undefined
+    async function load() {
+      controller?.abort()
+      const next = new AbortController()
+      controller = next
+      setState((current) => ({
+        path,
+        data: current.path === path ? current.data : undefined,
+        error: '',
+        loading: true,
+      }))
+      try {
+        const data = await api<T>(path, { signal: next.signal })
+        if (!next.signal.aborted) setState({ path, data, error: '', loading: false })
+      } catch (reason) {
+        if (!next.signal.aborted) {
+          setState((current) => ({
+            ...current,
+            error: reason instanceof Error ? reason.message : '请求失败',
+            loading: false,
+          }))
+        }
+      }
+    }
+    request.current = { path, load }
+    void load()
+    return () => {
+      controller?.abort()
+      request.current = null
+    }
+  }, [path])
+
+  function reload() {
+    const active = request.current
+    return active?.path === path ? active.load() : Promise.resolve()
+  }
+  const current = state.path === path ? state : { data: undefined, error: '', loading: true }
+  return { data: current.data, error: current.error, loading: current.loading, reload }
 }
 
 export async function waitForJob(jobId: string) {

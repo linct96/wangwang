@@ -37,12 +37,12 @@ rules:
 
 export function NewTemplatePage() {
   const { source } = useSearch({ from: '/app/templates/new' })
-  return <TemplateEditor source={source} />
+  return <TemplateEditor key={source} source={source} />
 }
 
 export function EditTemplatePage() {
   const { id } = useParams({ from: '/app/templates/$id/edit' })
-  return <TemplateEditor id={id} />
+  return <TemplateEditor key={id} id={id} />
 }
 
 function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSource }) {
@@ -52,6 +52,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [description, setDescription] = useState('')
   const [yaml, setYaml] = useState(source === 'blank' ? blankTemplate : '')
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const initialMode = source === 'import' ? 'yaml' : 'visual'
@@ -82,7 +83,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const [sourceSlots, setSourceSlots] = useState(initialSourceSlots)
   const sourceSlotsRef = useRef(initialSourceSlots)
   const visualDraftRef = useRef(visualDraft)
-  const materializedDraftRef = useRef(visualDraft)
+  const [materializedDraft, setMaterializedDraft] = useState(visualDraft)
   const pendingValidationRef = useRef<{ type: 'idle' | 'timeout'; id: number } | null>(null)
   const validationVersionRef = useRef(0)
 
@@ -112,20 +113,20 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   const previewYaml = useMemo(() => {
     if (mode !== 'visual' || !visualDraft) return yaml
-    if (visualDraft === materializedDraftRef.current) return yaml
+    if (visualDraft === materializedDraft) return yaml
     try {
-      return applyVisualTemplate(yaml, visualDraft, materializedDraftRef.current || undefined)
+      return applyVisualTemplate(yaml, visualDraft, materializedDraft || undefined)
     } catch {
       return yaml
     }
-  }, [mode, visualDraft, yaml])
+  }, [mode, visualDraft, yaml, materializedDraft])
 
   function materializeVisualYaml() {
     const draft = visualDraftRef.current
-    if (!draft || draft === materializedDraftRef.current) return yamlRef.current
-    const nextYaml = applyVisualTemplate(yamlRef.current, draft, materializedDraftRef.current || undefined)
+    if (!draft || draft === materializedDraft) return yamlRef.current
+    const nextYaml = applyVisualTemplate(yamlRef.current, draft, materializedDraft || undefined)
     yamlRef.current = nextYaml
-    materializedDraftRef.current = draft
+    setMaterializedDraft(draft)
     setYaml(nextYaml)
     return nextYaml
   }
@@ -142,12 +143,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   useEffect(() => {
     const templateId = id || (source?.startsWith('builtin:') ? source : '')
-    if (!templateId) {
-      setLoading(false)
-      return
-    }
+    if (!templateId) return
     const controller = new AbortController()
-    setLoading(true)
     void api<TemplateDetail>(`/templates/${templateId}`, { signal: controller.signal })
       .then((template) => {
         if (controller.signal.aborted) return
@@ -160,20 +157,20 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
         try {
           const result = parseVisualTemplate(template.yaml, template.sourceSlots)
           visualDraftRef.current = result.draft
-          materializedDraftRef.current = result.draft
+          setMaterializedDraft(result.draft)
           setVisualDraft(result.draft)
           setVisualIssues(validateVisualDraft(result.draft, result.warnings))
           setMode('visual')
         } catch {
           visualDraftRef.current = null
-          materializedDraftRef.current = null
+          setMaterializedDraft(null)
           setVisualDraft(null)
           setMode('yaml')
         }
         setError('')
       })
       .catch((reason) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '模板加载失败')
+        if (!controller.signal.aborted) setLoadError(reason instanceof Error ? reason.message : '模板加载失败')
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -181,26 +178,11 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     return () => controller.abort()
   }, [id, source])
 
-  useEffect(() => {
-    if (source === 'blank' && yaml && !visualDraft) {
-      try {
-        const result = parseVisualTemplate(yaml, sourceSlotsRef.current)
-        visualDraftRef.current = result.draft
-        materializedDraftRef.current = result.draft
-        setVisualDraft(result.draft)
-        setVisualIssues(validateVisualDraft(result.draft, result.warnings))
-        setMode('visual')
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : '无法进入可视化编辑')
-      }
-    }
-  }, [source, yaml, visualDraft])
-
   function enterVisualMode() {
     try {
       const result = parseVisualTemplate(yamlRef.current, sourceSlotsRef.current)
       visualDraftRef.current = result.draft
-      materializedDraftRef.current = result.draft
+      setMaterializedDraft(result.draft)
       setVisualDraft(result.draft)
       setVisualIssues(validateVisualDraft(result.draft, result.warnings))
       setMode('visual')
@@ -233,12 +215,12 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
     cancelScheduledValidation()
     try {
-      const nextYaml = applyVisualTemplate(yamlRef.current, nextDraft, materializedDraftRef.current || undefined)
+      const nextYaml = applyVisualTemplate(yamlRef.current, nextDraft, materializedDraft || undefined)
       yamlRef.current = nextYaml
       sourceSlotsRef.current = nextDraft.sourceSlots
       setSourceSlots(nextDraft.sourceSlots)
       visualDraftRef.current = nextDraft
-      materializedDraftRef.current = nextDraft
+      setMaterializedDraft(nextDraft)
       setVisualDraft(nextDraft)
       setVisualIssues(validateVisualDraft(nextDraft))
       setYaml(nextYaml)
@@ -260,7 +242,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
     sourceSlotsRef.current = inferSourceSlots(nextYaml)
     setSourceSlots(sourceSlotsRef.current)
     visualDraftRef.current = null
-    materializedDraftRef.current = null
+    setMaterializedDraft(null)
     setYaml(nextYaml)
     setVisualDraft(null)
     setMode('yaml')
@@ -287,6 +269,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
 
   async function save(event: FormEvent) {
     event.preventDefault()
+    if (loading || loadError) return
     setBusy('save')
     setError('')
     try {
@@ -323,8 +306,8 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
           <h1>{id ? '编辑模板' : '新建模板'}</h1>
         </div>
       </div>
-      <PageState loading={loading} error={error && loading ? error : ''} />
-      {!loading && (
+      <PageState loading={loading} error={loadError} />
+      {!loading && !loadError && (
         <form className="template-editor-layout" onSubmit={save}>
           <section className="template-editor-main">
             <div className="template-info-card">
@@ -405,7 +388,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                   onChange={(next) => {
                     yamlRef.current = next
                     visualDraftRef.current = null
-                    materializedDraftRef.current = null
+                    setMaterializedDraft(null)
                     setYaml(next)
                     setVisualDraft(null)
                   }}

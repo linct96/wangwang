@@ -165,11 +165,15 @@ export function InlineValueEdit({
 
   useEffect(() => {
     if (editing) {
-      setDraft(value)
       inputRef.current?.focus()
       inputRef.current?.select()
     }
-  }, [editing, value])
+  }, [editing])
+
+  function startEditing() {
+    setDraft(value)
+    setEditing(true)
+  }
 
   function submit() {
     const trimmed = draft.trim()
@@ -239,17 +243,12 @@ export function InlineValueEdit({
       <code
         className="template-rule-value select-text cursor-text"
         title={value ? `匹配值：${value}` : '未填写匹配值'}
-        onDoubleClick={() => setEditing(true)}
+        onDoubleClick={startEditing}
       >
         {value || <span className="text-muted-foreground italic font-normal">(未填写)</span>}
       </code>
       <div className="template-inline-hover-actions">
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="template-inline-hover-btn"
-          title="就地编辑匹配值"
-        >
+        <button type="button" onClick={startEditing} className="template-inline-hover-btn" title="就地编辑匹配值">
           <Pencil className="size-3" />
         </button>
       </div>

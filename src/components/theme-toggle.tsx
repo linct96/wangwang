@@ -1,17 +1,10 @@
-import { useEffect, useState } from 'react'
 import { Laptop, Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
+  if (!theme) {
     return (
       <Button variant="ghost" size="icon" className={className} disabled aria-label="主题切换">
         <Sun className="h-4 w-4 opacity-50" />

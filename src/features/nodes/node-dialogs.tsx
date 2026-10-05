@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Check, Copy, RefreshCw, WandSparkles } from 'lucide-react'
 import { useForm } from '@tanstack/react-form'
@@ -92,9 +92,9 @@ function PreferredNodeSelect({
   const { data, error, loading } = useApi<{ items: NodeItem[] }>(
     `/nodes?page=1&pageSize=100&q=${encodeURIComponent(query)}`,
   )
-  const knownNodes = useRef(new Map<string, NodeItem>())
+  const [knownNodes, setKnownNodes] = useState(() => new Map<string, NodeItem>())
   const items = data?.items.map((node) => node.id) || []
-  const nodesById = new Map([...knownNodes.current, ...(data?.items.map((node) => [node.id, node] as const) || [])])
+  const nodesById = new Map([...knownNodes, ...(data?.items.map((node) => [node.id, node] as const) || [])])
 
   return (
     <Combobox
@@ -106,8 +106,17 @@ function PreferredNodeSelect({
       filter={null}
       onInputValueChange={setQuery}
       onValueChange={(nextValue) => {
-        data?.items.forEach((node) => knownNodes.current.set(node.id, node))
-        onChange(nextValue.slice(0, 20))
+        const selected = nextValue.slice(0, 20)
+        setKnownNodes((current) => {
+          const available = new Map([...current, ...(data?.items.map((node) => [node.id, node] as const) || [])])
+          return new Map(
+            selected.flatMap((id) => {
+              const node = available.get(id)
+              return node ? [[id, node] as const] : []
+            }),
+          )
+        })
+        onChange(selected)
       }}
     >
       <ComboboxChips ref={anchor}>
