@@ -68,8 +68,14 @@ export async function subscriptionToken(secret: string, profileId: string, token
   return base64Url(signature.slice(0, 16))
 }
 
+export const subscriptionTokenHash = sessionHash
+
+export function validSubscriptionToken(token: string) {
+  return /^[A-Za-z0-9_-]{22}$/.test(token)
+}
+
 export async function verifySubscriptionToken(secret: string, token: string, profileId: string, tokenVersion: number) {
-  if (!/^[A-Za-z0-9_-]{22}$/.test(token)) return false
+  if (!validSubscriptionToken(token)) return false
   return constantTimeEqual(await subscriptionToken(secret, profileId, tokenVersion), token)
 }
 

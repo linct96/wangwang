@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { count, desc, eq, sql } from 'drizzle-orm'
+import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { jobs, nodes, profiles, sources } from './db'
 import { db } from './tasks'
 import { fail, ok, RequestBodyError } from './http'
@@ -12,7 +12,7 @@ import { tagsRouter } from './routes/tags'
 import { templatesRouter } from './routes/templates'
 import { geoRouter } from './routes/geo'
 import { ruleSetPresetsRouter } from './routes/rule-set-presets'
-import { validOrigin, verifySubscriptionToken } from './security'
+import { subscriptionTokenHash, validOrigin, validSubscriptionToken, verifySubscriptionToken } from './security'
 
 export const app = new Hono<{ Bindings: Env }>()
 
@@ -61,25 +61,27 @@ app.get('/api/jobs/:id', async (c) => {
 
 app.get('/s/:token/config.yaml', async (c) => {
   const token = c.req.param('token')
-  const candidates = await db(c.env).select().from(profiles).where(eq(profiles.enabled, true))
-  const matches = await Promise.all(
-    candidates.map((profile) =>
-      verifySubscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, token, profile.id, profile.tokenVersion),
-    ),
+  if (!validSubscriptionToken(token)) return c.notFound()
+  const profile = await db(c.env)
+    .select({
+      id: profiles.id,
+      name: profiles.name,
+      tokenVersion: profiles.tokenVersion,
+      compiledYaml: profiles.compiledYaml,
+    })
+    .from(profiles)
+    .where(and(eq(profiles.subscriptionTokenHash, await subscriptionTokenHash(token)), eq(profiles.enabled, true)))
+    .get()
+  if (
+    !profile?.compiledYaml ||
+    !(await verifySubscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, token, profile.id, profile.tokenVersion))
   )
-  const profile = candidates[matches.findIndex(Boolean)]
-  if (!profile?.compiledYaml) return c.notFound()
-  const key = `profile:${profile.id}:revision:${profile.revision}`
-  let yaml = await c.env.KV.get(key)
-  if (!yaml) {
-    yaml = profile.compiledYaml
-    c.executionCtx.waitUntil(c.env.KV.put(key, yaml))
-  }
+    return c.notFound()
   const filename = encodeURIComponent(`${profile.name}.yaml`).replace(
     /[!'()*]/g,
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   )
-  return c.body(yaml, 200, {
+  return c.body(profile.compiledYaml, 200, {
     'Content-Type': 'text/yaml; charset=utf-8',
     'Content-Disposition': `attachment; filename*=UTF-8''${filename}`,
     'Cache-Control': 'no-store',

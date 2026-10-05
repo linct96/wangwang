@@ -841,11 +841,6 @@ export async function compileProfile(env: Env, profileId: string) {
     .update(profiles)
     .set({ revision, compiledYaml: yaml, compiledAt: now, error: null, updatedAt: now })
     .where(eq(profiles.id, profileId))
-  try {
-    await env.KV.put(`profile:${profileId}:revision:${revision}`, yaml)
-  } catch {
-    // D1 保留完整配置，KV 故障不会使订阅不可用。
-  }
 }
 
 export async function processQueueMessage(env: Env, message: QueueMessage) {

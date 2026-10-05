@@ -177,6 +177,7 @@ export const profiles = sqliteTable(
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     templateId: text('template_id').$type<TemplateId>().notNull().default('builtin:minimal'),
     tokenVersion: integer('token_version').notNull().default(1),
+    subscriptionTokenHash: text('subscription_token_hash'),
     revision: integer('revision').notNull().default(0),
     compiledYaml: text('compiled_yaml'),
     compiledAt: integer('compiled_at', { mode: 'timestamp_ms' }),
@@ -184,7 +185,10 @@ export const profiles = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [index('profiles_template_id_idx').on(table.templateId)],
+  (table) => [
+    index('profiles_template_id_idx').on(table.templateId),
+    uniqueIndex('profiles_subscription_token_hash_idx').on(table.subscriptionTokenHash),
+  ],
 )
 
 export const profileNodeBinding = sqliteTable(

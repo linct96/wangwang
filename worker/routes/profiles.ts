@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
-import { count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profiles } from '../db'
 import type { TemplateId } from '../db'
 import { createJob, db, selectDraftProfileNodes } from '../tasks'
-import { subscriptionToken } from '../security'
+import { subscriptionToken, subscriptionTokenHash } from '../security'
 import { resolveTemplate } from '../templates/resolver'
 import { renderMihomoConfig } from '../templates/renderer'
 import {
@@ -101,6 +101,22 @@ async function templateSlots(env: Env, templateId: string) {
   return template?.sourceSlots || null
 }
 
+async function indexedSubscriptionToken(
+  env: Env,
+  profile: Pick<typeof profiles.$inferSelect, 'id' | 'tokenVersion' | 'subscriptionTokenHash'>,
+) {
+  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
+  const hash = await subscriptionTokenHash(token)
+  if (profile.subscriptionTokenHash !== hash) {
+    // 回填或更换密钥时修复索引；不能覆盖并发轮换后的版本。
+    await db(env)
+      .update(profiles)
+      .set({ subscriptionTokenHash: hash })
+      .where(and(eq(profiles.id, profile.id), eq(profiles.tokenVersion, profile.tokenVersion)))
+  }
+  return token
+}
+
 export async function profileView(
   env: Env,
   profile: typeof profiles.$inferSelect,
@@ -114,9 +130,10 @@ export async function profileView(
     profileTagViews(env, profile.id),
   ])
   const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding]))
-  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
+  const token = await indexedSubscriptionToken(env, profile)
   return {
     ...profile,
+    subscriptionTokenHash: undefined,
     tags: tags.map(({ name }) => name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     nodeBinding,
@@ -133,6 +150,18 @@ export const profilesRouter = new Hono<{ Bindings: Env }>()
 profilesRouter.get('/', async (c) => {
   const rows = await db(c.env).select().from(profiles).orderBy(desc(profiles.createdAt))
   return ok(c, await Promise.all(rows.map((profile) => profileView(c.env, profile, new URL(c.req.url).origin))))
+})
+
+profilesRouter.post('/reindex-tokens', async (c) => {
+  const rows = await db(c.env)
+    .select({
+      id: profiles.id,
+      tokenVersion: profiles.tokenVersion,
+      subscriptionTokenHash: profiles.subscriptionTokenHash,
+    })
+    .from(profiles)
+  await Promise.all(rows.map((profile) => indexedSubscriptionToken(c.env, profile)))
+  return ok(c, { count: rows.length })
 })
 
 profilesRouter.post('/', async (c) => {
@@ -155,11 +184,14 @@ profilesRouter.post('/', async (c) => {
   }
 
   const now = new Date()
+  const id = crypto.randomUUID()
   const profile = {
-    id: crypto.randomUUID(),
+    id,
     name: input.name,
     enabled: input.enabled,
     templateId: input.templateId as TemplateId,
+    tokenVersion: 1,
+    subscriptionTokenHash: await subscriptionTokenHash(await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, id, 1)),
     createdAt: now,
     updatedAt: now,
   }
@@ -289,7 +321,12 @@ profilesRouter.post('/:id/rotate-token', async (c) => {
   const current = await db(c.env).select().from(profiles).where(eq(profiles.id, id)).get()
   if (!current) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
   const tokenVersion = current.tokenVersion + 1
-  await db(c.env).update(profiles).set({ tokenVersion, updatedAt: new Date() }).where(eq(profiles.id, id))
   const token = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, id, tokenVersion)
+  const updated = await db(c.env)
+    .update(profiles)
+    .set({ tokenVersion, subscriptionTokenHash: await subscriptionTokenHash(token), updatedAt: new Date() })
+    .where(and(eq(profiles.id, id), eq(profiles.tokenVersion, current.tokenVersion)))
+    .returning({ id: profiles.id })
+  if (!updated.length) return fail(c, 409, 'PROFILE_TOKEN_CONFLICT', '配置已变更，请重试')
   return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${token}/config.yaml` })
 })
