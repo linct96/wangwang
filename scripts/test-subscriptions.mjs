@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
+import { parseConfigFileTextToJson } from 'typescript'
 
 // Node 24 原生执行 Worker TS；仅补齐项目使用的无扩展名相对导入。
 registerHooks({
@@ -13,6 +14,7 @@ registerHooks({
 })
 
 const { app } = await import('../worker/app.ts')
+const { default: worker } = await import('../worker/index.ts')
 const { subscriptionToken, subscriptionTokenHash, sessionHash } = await import('../worker/security.ts')
 const { compileProfile, selectProfileNodes, selectDraftProfileNodes } = await import('../worker/tasks.ts')
 const { replaceProfileNodeBinding } = await import('../worker/profile-node-binding.ts')
@@ -128,6 +130,102 @@ try {
       fixture('disabled', 0)
     }
     sqlite.exec(readFileSync(new URL(file, migrationsDir), 'utf8'))
+  }
+  // 从真实 scheduled 入口验证 Cron 分流和到期源入队，全程不访问外网。
+  const { config, error } = parseConfigFileTextToJson(
+    'wrangler.jsonc',
+    readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
+  )
+  assert.equal(error, undefined)
+  assert.deepEqual(config.triggers.crons, ['0 * * * *', '17 3 * * *'])
+  const scheduledTime = Date.now() - 3_600_000
+  const sent = []
+  const writes = []
+  let catalogReads = 0
+  let githubRequests = 0
+  const scheduledEnv = {
+    ...env,
+    JOBS: {
+      async send(message) {
+        sent.push(message)
+      },
+    },
+    KV: {
+      async get() {
+        catalogReads++
+        return null
+      },
+      async put(key, value) {
+        writes.push({ key, value })
+      },
+    },
+  }
+  async function scheduled(cron) {
+    const pending = []
+    worker.scheduled({ cron, scheduledTime }, scheduledEnv, {
+      waitUntil(promise) {
+        pending.push(promise)
+      },
+    })
+    assert.equal(pending.length, cron === 'unknown' ? 0 : 1, '定时工作必须交给 waitUntil')
+    await Promise.all(pending)
+  }
+  for (const [id, kind, enabled, interval, nextRefreshAt] of [
+    ...[1, 6, 12, 24].map((hours) => [`due-${hours}`, 'url', 1, hours, scheduledTime]),
+    ['future', 'url', 1, 1, scheduledTime + 1],
+    ['disabled', 'url', 0, 1, scheduledTime],
+    ['off', 'url', 1, 0, null],
+    ['unscheduled', 'url', 1, 6, null],
+    ['manual', 'manual', 1, 0, scheduledTime],
+    ['pending', 'url', 1, 6, scheduledTime],
+    ['running', 'url', 1, 6, scheduledTime],
+  ]) {
+    sqlite
+      .prepare(
+        'INSERT INTO sources (id,name,kind,enabled,refresh_interval_hours,next_refresh_at,created_at,updated_at) VALUES (?,?,?,?,?,?,1,1)',
+      )
+      .run(`cron-${id}`, id, kind, enabled, interval, nextRefreshAt)
+  }
+  for (const status of ['pending', 'running'])
+    sqlite
+      .prepare("INSERT INTO jobs (id,type,entity_id,status,created_at) VALUES (?,'refresh_source',?,?,1)")
+      .run(`cron-${status}`, `cron-${status}`, status)
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /^https:\/\/api\.github\.com\/repos\//)
+    githubRequests++
+    return Response.json({ sha: 'offline', tree: [{ type: 'blob', path: 'direct.txt' }] })
+  }
+  try {
+    await scheduled('0 * * * *')
+    assert.deepEqual(sent.map(({ entityId }) => entityId).sort(), [
+      'cron-due-1',
+      'cron-due-12',
+      'cron-due-24',
+      'cron-due-6',
+    ])
+    assert.ok(sent.every(({ type }) => type === 'refresh_source'))
+    assert.equal(catalogReads, 0, '每小时刷新不读取规则集目录')
+    assert.equal(githubRequests, 0, '每小时刷新不访问 GitHub')
+    await scheduled('0 * * * *')
+    assert.equal(sent.length, 4, '已有 pending/running 任务不重复入队')
+    queries = []
+    await scheduled('17 3 * * *')
+    assert.equal(queries.length, 0, '每日规则集同步不扫描订阅')
+    assert.equal(sent.length, 4)
+    assert.equal(catalogReads, 1)
+    assert.equal(githubRequests, 2)
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0].key, 'rule-set-presets:catalog')
+    assert.equal(JSON.parse(writes[0].value).sources.loyalsoldier.items[0].name, 'direct')
+    await scheduled('unknown')
+    assert.equal(githubRequests, 2)
+    console.log(
+      '订阅定时刷新回归通过：真实 Cron 入口、到期边界/各刷新间隔、停用/关闭/未到期、任务去重和每日规则集隔离。',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    sqlite.exec("DELETE FROM jobs WHERE entity_id LIKE 'cron-%'; DELETE FROM sources WHERE id LIKE 'cron-%'")
   }
   assert.equal(row('legacy').subscription_token_hash, null, '迁移保留已有数据')
   sqlite
