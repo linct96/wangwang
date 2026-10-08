@@ -42,6 +42,7 @@ export const sources = sqliteTable(
     warning: text('warning'),
     error: text('error'),
     nodeCount: integer('node_count').notNull().default(0),
+    version: integer('version').notNull().default(0),
     uploadBytes: integer('upload_bytes'),
     downloadBytes: integer('download_bytes'),
     totalBytes: integer('total_bytes'),
@@ -371,8 +372,19 @@ export const jobs = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     startedAt: integer('started_at', { mode: 'timestamp_ms' }),
     finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+    attempts: integer('attempts').notNull().default(0),
+    leaseToken: text('lease_token'),
+    leaseUntil: integer('lease_until', { mode: 'timestamp_ms' }),
+    dispatchedAt: integer('dispatched_at', { mode: 'timestamp_ms' }),
+    parentJobId: text('parent_job_id'),
+    sourceVersion: integer('source_version'),
+    refreshCommitToken: text('refresh_commit_token'),
   },
-  (table) => [index('jobs_entity_idx').on(table.type, table.entityId, table.createdAt)],
+  (table) => [
+    index('jobs_entity_idx').on(table.type, table.entityId, table.createdAt),
+    index('jobs_parent_idx').on(table.parentJobId),
+    index('jobs_recovery_idx').on(table.status, table.leaseUntil, table.dispatchedAt),
+  ],
 )
 
 export type QueueMessage = {

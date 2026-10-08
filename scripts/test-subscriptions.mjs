@@ -137,7 +137,7 @@ try {
     readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
   )
   assert.equal(error, undefined)
-  assert.deepEqual(config.triggers.crons, ['0 * * * *', '17 3 * * *'])
+  assert.deepEqual(config.triggers.crons, ['0 * * * *', '*/5 * * * *', '17 3 * * *'])
   const scheduledTime = Date.now() - 3_600_000
   const sent = []
   const writes = []

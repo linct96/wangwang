@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
 import { profileNodeSources, profileSlotSources, sources } from '../db'
@@ -155,23 +155,26 @@ sourcesRouter.patch('/:id', async (c) => {
     current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
       ? new Date(Date.now() + interval * 3_600_000)
       : null
-  await db(c.env)
+  const saved = await db(c.env)
     .update(sources)
     .set({
+      version: sql`${sources.version} + 1`,
       name: input.name,
       enabled: input.enabled,
       refreshIntervalHours: input.refreshIntervalHours,
       nodeNameFilter,
       userAgent,
       pendingUrl: input.url,
-      status: input.url ? 'idle' : undefined,
+      status: input.url || input.enabled === false ? 'idle' : undefined,
       error: input.url ? null : undefined,
       etag: userAgentChanged ? null : undefined,
       lastModified: userAgentChanged ? null : undefined,
       nextRefreshAt,
       updatedAt: new Date(),
     })
-    .where(eq(sources.id, current.id))
+    .where(and(eq(sources.id, current.id), eq(sources.version, current.version)))
+    .returning({ id: sources.id })
+  if (!saved.length) return fail(c, 409, 'SOURCE_CONFLICT', '节点源已变更，请重新加载后修改')
   if (nodeTagsChanged) await replaceSourceTags(c.env, current.id, nodeTags)
   if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagsChanged)
     await enqueueAffectedProfiles(c.env, current.id)

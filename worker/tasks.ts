@@ -28,9 +28,41 @@ import { renderMihomoConfig, type SelectedNode, type SelectedSlotNode } from './
 import { resolveTemplate } from './templates/resolver'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
+export const MAX_JOB_ATTEMPTS = 4 // 首次执行 + wrangler.jsonc 中的 3 次重试。
+const JOB_LEASE_MS = 16 * 60_000 // 超过 Queue 消费者的 15 分钟执行上限，崩溃后由定时恢复。
+const RECOVERY_SEND_MS = 5 * 60_000
 
-async function runBatches(env: Env, statements: D1PreparedStatement[]) {
-  for (let index = 0; index < statements.length; index += 80) await env.DB.batch(statements.slice(index, index + 80))
+type JobLease = { id: string; token: string }
+class PermanentJobError extends Error {
+  readonly affectsEntity: boolean
+  constructor(message: string, affectsEntity = true) {
+    super(message)
+    this.affectsEntity = affectsEntity
+  }
+}
+
+const orphanTagsSql = `
+  NOT EXISTS (SELECT 1 FROM node_tags WHERE tag_id=tags.id)
+  AND NOT EXISTS (SELECT 1 FROM source_tags WHERE tag_id=tags.id)
+  AND NOT EXISTS (SELECT 1 FROM profile_tag_filters WHERE tag_id=tags.id)
+  AND NOT EXISTS (SELECT 1 FROM profile_node_tags WHERE tag_id=tags.id)
+  AND NOT EXISTS (SELECT 1 FROM profile_slot_tags WHERE tag_id=tags.id)`
+
+const affectedSourceProfilesSql = `
+  SELECT p.id FROM profiles p WHERE
+    EXISTS (SELECT 1 FROM profile_node_sources b WHERE b.profile_id=p.id AND b.source_id=?)
+    OR EXISTS (SELECT 1 FROM profile_slot_sources b WHERE b.profile_id=p.id AND b.source_id=?)
+    OR EXISTS (SELECT 1 FROM profile_node_nodes b JOIN nodes n ON n.id=b.node_id WHERE b.profile_id=p.id AND n.source_id=?)
+    OR EXISTS (SELECT 1 FROM profile_slot_nodes b JOIN nodes n ON n.id=b.node_id WHERE b.profile_id=p.id AND n.source_id=?)
+    OR EXISTS (SELECT 1 FROM profile_node_binding b WHERE b.profile_id=p.id AND b.mode='tag')
+    OR EXISTS (SELECT 1 FROM profile_slot_bindings b WHERE b.profile_id=p.id AND b.mode='tag')`
+
+function sourceUrl(value: string) {
+  try {
+    return assertRemoteUrl(value)
+  } catch (error) {
+    throw new PermanentJobError(error instanceof Error ? error.message : '订阅 URL 无效')
+  }
 }
 
 export async function cleanupOrphanPhysicalNodes(env: Env) {
@@ -38,9 +70,7 @@ export async function cleanupOrphanPhysicalNodes(env: Env) {
     env.DB.prepare(
       'DELETE FROM physical_nodes WHERE NOT EXISTS (SELECT 1 FROM nodes WHERE nodes.physical_node_id = physical_nodes.id)',
     ),
-    env.DB.prepare(
-      'DELETE FROM tags WHERE NOT EXISTS (SELECT 1 FROM node_tags WHERE node_tags.tag_id = tags.id) AND NOT EXISTS (SELECT 1 FROM source_tags WHERE source_tags.tag_id = tags.id)',
-    ),
+    env.DB.prepare(`DELETE FROM tags WHERE ${orphanTagsSql}`),
   ])
 }
 
@@ -93,19 +123,33 @@ export function db(env: Env) {
   return drizzle(env.DB)
 }
 
+async function dispatchJob(env: Env, job: Pick<typeof jobs.$inferSelect, 'id' | 'type' | 'entityId'>) {
+  await env.JOBS.send({ jobId: job.id, type: job.type, entityId: job.entityId } satisfies QueueMessage)
+  // send 成功但此处失败时可能重复投递；消费者用租约和终态检查处理，而不是假设 exactly-once。
+  await db(env).update(jobs).set({ dispatchedAt: new Date() }).where(eq(jobs.id, job.id))
+}
+
 export async function createJob(env: Env, type: JobType, entityId: string) {
   const job = { id: crypto.randomUUID(), type, entityId, status: 'pending' as const, createdAt: new Date() }
   await db(env).insert(jobs).values(job)
   try {
-    await env.JOBS.send({ jobId: job.id, type, entityId } satisfies QueueMessage)
-  } catch (error) {
+    await dispatchJob(env, job)
+  } catch {
+    // 数据已持久化，不能把尚未执行的任务标成永久失败；定时恢复会重新入队。
     await db(env)
       .update(jobs)
-      .set({ status: 'failed', error: '任务入队失败', finishedAt: new Date() })
-      .where(eq(jobs.id, job.id))
-    throw error
+      .set({ error: '任务等待重新入队' })
+      .where(and(eq(jobs.id, job.id), eq(jobs.status, 'pending'), eq(jobs.attempts, 0)))
   }
   return job
+}
+
+async function dispatchRefreshChildren(env: Env, parentJobId: string) {
+  const pending = await db(env)
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.parentJobId, parentJobId), eq(jobs.status, 'pending'), sql`${jobs.dispatchedAt} IS NULL`))
+  for (const job of pending) await dispatchJob(env, job)
 }
 
 async function readResponse(response: Response) {
@@ -119,7 +163,7 @@ async function readResponse(response: Response) {
     length += value.byteLength
     if (length > MAX_SOURCE_BYTES) {
       await reader.cancel()
-      throw new Error('订阅内容超过 1 MiB')
+      throw new PermanentJobError('订阅内容超过 1 MiB')
     }
     chunks.push(value)
   }
@@ -138,7 +182,7 @@ export async function fetchSource(
   etag: string | null,
   lastModified: string | null,
 ) {
-  let url = assertRemoteUrl(urlValue)
+  let url = sourceUrl(urlValue)
   for (let redirect = 0; redirect <= 3; redirect += 1) {
     const headers = new Headers({ Accept: 'text/yaml,text/plain,*/*', 'User-Agent': userAgent })
     if (etag) headers.set('If-None-Match', etag)
@@ -151,11 +195,19 @@ export async function fetchSource(
       }
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('Location')
-      if (!location || redirect === 3) throw new Error('订阅重定向次数过多')
-      url = assertRemoteUrl(new URL(location, url).toString())
+      if (!location || redirect === 3) throw new PermanentJobError('订阅重定向次数过多或缺少跳转地址')
+      try {
+        url = sourceUrl(new URL(location, url).toString())
+      } catch (error) {
+        throw new PermanentJobError(error instanceof Error ? error.message : '订阅重定向地址无效')
+      }
       continue
     }
-    if (!response.ok) throw new Error(`订阅服务器返回 HTTP ${response.status}`)
+    if (!response.ok) {
+      const message = `订阅服务器返回 HTTP ${response.status}`
+      if (response.status === 408 || response.status === 429 || response.status >= 500) throw new Error(message)
+      throw new PermanentJobError(message)
+    }
     return {
       notModified: false as const,
       text: await readResponse(response),
@@ -167,117 +219,124 @@ export async function fetchSource(
   throw new Error('订阅获取失败')
 }
 
-async function replaceSourceNodes(
+async function commitSourceRefresh(
   env: Env,
-  sourceId: string,
-  parsed: Awaited<ReturnType<typeof parseProxyText>>,
-  responseMeta?: {
-    name: string | null
-    etag: string | null
-    lastModified: string | null
-    subscriptionInfo: ReturnType<typeof parseSubscriptionUserinfo>
-  },
+  source: typeof sources.$inferSelect,
+  parsed: Awaited<ReturnType<typeof parseProxyText>> | null,
+  response: Awaited<ReturnType<typeof fetchSource>>,
+  lease: JobLease,
 ) {
-  const database = db(env)
-  const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
-  if (!source) throw new Error('节点源不存在')
-  const parsedNodes = parsed.nodes
-  const [{ total }] = await database.select({ total: sql<number>`count(*)` }).from(nodes)
-  const [{ current }] = await database
-    .select({ current: sql<number>`count(*)` })
-    .from(nodes)
-    .where(eq(nodes.sourceId, sourceId))
-  if (Number(total) - Number(current) + parsedNodes.length > 2000) throw new Error('全局节点数量超过 2000')
-
   const now = Date.now()
-  for (let index = 0; index < parsedNodes.length; index += 40) {
-    await env.DB.batch(
-      parsedNodes.slice(index, index + 40).map((node) =>
-        env.DB.prepare(
-          `INSERT INTO physical_nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(fingerprint) DO UPDATE SET protocol=excluded.protocol, server=excluded.server, port=excluded.port, config=excluded.config, updated_at=excluded.updated_at`,
-        ).bind(
-          crypto.randomUUID(),
-          node.fingerprint,
-          node.config.type,
-          node.config.server,
-          node.config.port,
-          JSON.stringify(node.config),
-          now,
-          now,
-        ),
-      ),
-    )
-  }
-  const fingerprints = parsedNodes.map((node) => node.fingerprint)
-  const physicalByFingerprint = new Map<string, string>()
-  for (let index = 0; index < fingerprints.length; index += 90) {
-    const rows = await database
-      .select({ id: physicalNodes.id, fingerprint: physicalNodes.fingerprint })
-      .from(physicalNodes)
-      .where(inArray(physicalNodes.fingerprint, fingerprints.slice(index, index + 90)))
-    for (const row of rows) physicalByFingerprint.set(row.fingerprint, row.id)
-  }
-  const existing = await database
-    .select({ id: nodes.id, fingerprint: physicalNodes.fingerprint })
-    .from(nodes)
-    .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
-    .where(eq(nodes.sourceId, sourceId))
-  const existingByFingerprint = new Map(existing.map((node) => [node.fingerprint, node.id]))
-  const keptIds: string[] = []
-  const statements: D1PreparedStatement[] = []
-  parsedNodes.forEach((node, position) => {
-    const physicalNodeId = physicalByFingerprint.get(node.fingerprint)
-    if (!physicalNodeId) return
-    const id = existingByFingerprint.get(node.fingerprint) || crypto.randomUUID()
-    keptIds.push(id)
-    if (existingByFingerprint.has(node.fingerprint))
-      statements.push(
-        env.DB.prepare(
-          'UPDATE nodes SET physical_node_id = ?, original_name = ?, position = ?, updated_at = ? WHERE id = ?',
-        ).bind(physicalNodeId, node.originalName, position, now, id),
-      )
-    else
-      statements.push(
-        env.DB.prepare(
-          `INSERT INTO nodes (id, source_id, physical_node_id, original_name, alias, enabled, position, created_at, updated_at)
-           VALUES (?, ?, ?, ?, NULL, 1, ?, ?, ?)`,
-        ).bind(id, sourceId, physicalNodeId, node.originalName, position, now, now),
-      )
-  })
-  if (statements.length) await runBatches(env, statements)
-  await env.DB.prepare(`DELETE FROM nodes WHERE source_id = ? AND id NOT IN (SELECT value FROM json_each(?))`)
-    .bind(sourceId, JSON.stringify(keptIds))
-    .run()
+  const payload = JSON.stringify(
+    parsed?.nodes.map((node, position) => ({
+      ...node,
+      position,
+      id: crypto.randomUUID(),
+      physicalId: crypto.randomUUID(),
+    })) ?? [],
+  )
+  // D1 的单个字符串上限为 2 MB；超限时在任何正式写入之前结束，不退回非原子分批提交。
+  if (new TextEncoder().encode(payload).byteLength > 2_000_000)
+    throw new PermanentJobError('解析后的订阅数据超过 D1 的 2 MB 提交上限')
+  const count = parsed?.nodes.length ?? source.nodeCount
+  if (count > 2000) throw new PermanentJobError('全局节点数量超过 2000')
 
-  const relationStatements: D1PreparedStatement[] = []
-  const nextRefresh =
-    source.kind === 'url' && source.enabled && source.refreshIntervalHours > 0
-      ? now + source.refreshIntervalHours * 3_600_000
-      : null
-  relationStatements.push(
+  // 第一条语句是事务内认领标记。其余语句必须同时匹配该标记、租约和源版本；
+  // 不能仅在最后检查版本，否则下载期间的修改仍可能被前面的节点写入覆盖。
+  const guard = `EXISTS (SELECT 1 FROM jobs j JOIN sources s ON s.id = ?
+    WHERE j.id = ? AND j.status = 'running' AND j.lease_token = ? AND j.refresh_commit_token = ?
+    AND s.version = ? AND s.enabled = 1)`
+  const guardValues = [source.id, lease.id, lease.token, lease.token, source.version]
+  const statements = [
     env.DB.prepare(
-      `UPDATE sources SET url=COALESCE(pending_url, url), pending_url=NULL, name=COALESCE(?, name), status='ready', warning=?, error=NULL, node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?, info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=? WHERE id=?`,
+      `UPDATE jobs SET refresh_commit_token = ?, source_version = ?
+     WHERE id = ? AND lease_token = ? AND status = 'running' AND refresh_commit_token IS NULL
+     AND EXISTS (SELECT 1 FROM sources s WHERE s.id = ? AND s.version = ? AND s.enabled = 1
+       AND (SELECT count(*) FROM nodes WHERE source_id <> s.id) + ? <= 2000)`,
+    ).bind(lease.token, source.version + 1, lease.id, lease.token, source.id, source.version, count),
+  ]
+
+  if (parsed) {
+    // 在删除旧节点前收集指定节点绑定；任务记录与刷新结果一起提交，防止丢掉编译通知。
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO jobs (id, type, entity_id, status, created_at, parent_job_id)
+       SELECT ? || ':' || affected.id, 'compile_profile', affected.id, 'pending', ?, ?
+       FROM (${affectedSourceProfilesSql}) affected JOIN profiles p ON p.id = affected.id
+       WHERE ${guard} ON CONFLICT(id) DO NOTHING`,
+      ).bind(lease.id, now, lease.id, source.id, source.id, source.id, source.id, ...guardValues),
+    )
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO physical_nodes (id, fingerprint, protocol, server, port, config, created_at, updated_at)
+       SELECT json_extract(value, '$.physicalId'), json_extract(value, '$.fingerprint'),
+         json_extract(value, '$.config.type'), json_extract(value, '$.config.server'),
+         json_extract(value, '$.config.port'), json_extract(value, '$.config'), ?, ?
+       FROM json_each(?) WHERE ${guard} ON CONFLICT(fingerprint) DO NOTHING`,
+      ).bind(now, now, payload, ...guardValues),
+    )
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO nodes (id, source_id, physical_node_id, original_name, alias, enabled, position, created_at, updated_at)
+       SELECT coalesce(existing.id, json_extract(item.value, '$.id')), ?, physical.id,
+         json_extract(item.value, '$.originalName'), NULL, 1, json_extract(item.value, '$.position'), ?, ?
+       FROM json_each(?) item JOIN physical_nodes physical ON physical.fingerprint = json_extract(item.value, '$.fingerprint')
+       LEFT JOIN nodes existing ON existing.source_id = ? AND existing.physical_node_id = physical.id
+       WHERE ${guard}
+       ON CONFLICT(id) DO UPDATE SET original_name=excluded.original_name, position=excluded.position, updated_at=excluded.updated_at`,
+      ).bind(source.id, now, now, payload, source.id, ...guardValues),
+    )
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM nodes WHERE source_id = ? AND ${guard} AND physical_node_id NOT IN (
+        SELECT p.id FROM physical_nodes p JOIN json_each(?) item ON p.fingerprint = json_extract(item.value, '$.fingerprint'))`,
+      ).bind(source.id, ...guardValues, payload),
+    )
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM physical_nodes WHERE ${guard} AND NOT EXISTS (SELECT 1 FROM nodes WHERE physical_node_id = physical_nodes.id)`,
+      ).bind(...guardValues),
+    )
+    statements.push(env.DB.prepare(`DELETE FROM tags WHERE ${guard} AND ${orphanTagsSql}`).bind(...guardValues))
+  }
+  const info = response.subscriptionInfo
+  const keepInfo = response.notModified && !info
+  statements.push(
+    env.DB.prepare(
+      `UPDATE sources SET url=?, pending_url=NULL, name=?, status='ready', warning=?, error=NULL,
+     node_count=?, etag=?, last_modified=?, upload_bytes=?, download_bytes=?, total_bytes=?, expire_at=?,
+     info_refreshed_at=?, last_refreshed_at=?, next_refresh_at=?, updated_at=?, version=version+1
+     WHERE id=? AND ${guard}`,
     ).bind(
-      responseMeta?.name ?? null,
-      parsed.warnings.join('\n') || null,
-      parsedNodes.length,
-      responseMeta?.etag ?? source.etag,
-      responseMeta?.lastModified ?? source.lastModified,
-      responseMeta?.subscriptionInfo?.upload ?? null,
-      responseMeta?.subscriptionInfo?.download ?? null,
-      responseMeta?.subscriptionInfo?.total ?? null,
-      responseMeta?.subscriptionInfo?.expire ?? null,
-      responseMeta?.subscriptionInfo ? now : null,
+      source.pendingUrl || source.url,
+      response.name ?? source.name,
+      parsed ? parsed.warnings.join('\n') || null : source.warning,
+      count,
+      response.notModified ? source.etag : response.etag,
+      response.notModified ? source.lastModified : response.lastModified,
+      keepInfo ? source.uploadBytes : (info?.upload ?? null),
+      keepInfo ? source.downloadBytes : (info?.download ?? null),
+      keepInfo ? source.totalBytes : (info?.total ?? null),
+      keepInfo ? source.expireAt : (info?.expire ?? null),
+      keepInfo ? (source.infoRefreshedAt?.getTime() ?? null) : info ? now : null,
       now,
-      nextRefresh,
+      source.refreshIntervalHours > 0 ? now + source.refreshIntervalHours * 3_600_000 : null,
       now,
-      sourceId,
+      source.id,
+      ...guardValues,
     ),
   )
-  await runBatches(env, relationStatements)
-  await cleanupOrphanPhysicalNodes(env)
+  const [claimed] = await env.DB.batch(statements)
+  if (!claimed.meta.changes) {
+    const current = await db(env).select().from(sources).where(eq(sources.id, source.id)).get()
+    if (!current || !current.enabled) throw new PermanentJobError('节点源已删除或停用', false)
+    if (current.version !== source.version) throw new Error('节点源已变更，重新获取最新设置')
+    const total = await env.DB.prepare('SELECT count(*) AS n FROM nodes WHERE source_id <> ?')
+      .bind(source.id)
+      .first<{ n: number }>()
+    if (Number(total?.n) + count > 2000) throw new PermanentJobError('全局节点数量超过 2000')
+    throw new Error('任务执行权已变更')
+  }
 }
 
 async function tagModeProfileIds(env: Env) {
@@ -304,28 +363,10 @@ async function sourceModeProfileIds(env: Env, sourceIds: string[]) {
 }
 
 export async function affectedProfileIdsForSource(env: Env, sourceId: string) {
-  const [sourceBound, globalDirectBound, slotDirectBound, tagBound] = await Promise.all([
-    sourceModeProfileIds(env, [sourceId]),
-    db(env)
-      .select({ id: profileNodeNodes.profileId })
-      .from(profileNodeNodes)
-      .innerJoin(nodes, eq(nodes.id, profileNodeNodes.nodeId))
-      .where(eq(nodes.sourceId, sourceId)),
-    db(env)
-      .select({ id: profileSlotNodes.profileId })
-      .from(profileSlotNodes)
-      .innerJoin(nodes, eq(nodes.id, profileSlotNodes.nodeId))
-      .where(eq(nodes.sourceId, sourceId)),
-    tagModeProfileIds(env),
-  ])
-  return [
-    ...new Set([
-      ...sourceBound,
-      ...globalDirectBound.map(({ id }) => id),
-      ...slotDirectBound.map(({ id }) => id),
-      ...tagBound,
-    ]),
-  ]
+  const rows = await env.DB.prepare(affectedSourceProfilesSql)
+    .bind(sourceId, sourceId, sourceId, sourceId)
+    .all<{ id: string }>()
+  return rows.results.map(({ id }) => id)
 }
 
 export async function enqueueProfileIds(env: Env, profileIds: Iterable<string>) {
@@ -384,54 +425,50 @@ export async function enqueueProfilesForTemplate(env: Env, templateId: string) {
   return jobs
 }
 
-export async function refreshSource(env: Env, sourceId: string) {
+export async function refreshSource(env: Env, sourceId: string, lease: JobLease) {
   const database = db(env)
+  const job = await database.select().from(jobs).where(eq(jobs.id, lease.id)).get()
+  if (job?.refreshCommitToken) {
+    // 刷新已经提交。这里只补发持久化的编译任务，不能重新 fetch 后被 304 短路。
+    await dispatchRefreshChildren(env, lease.id)
+    return
+  }
   const source = await database.select().from(sources).where(eq(sources.id, sourceId)).get()
-  if (!source) throw new Error('节点源不存在')
-  if (source.kind !== 'url') throw new Error('系统节点源不能刷新')
+  if (!source || !source.enabled) throw new PermanentJobError('节点源已删除或停用', false)
+  if (source.kind !== 'url') throw new PermanentJobError('系统节点源不能刷新', false)
+  await database
+    .update(jobs)
+    .set({ sourceVersion: source.version })
+    .where(and(eq(jobs.id, lease.id), eq(jobs.leaseToken, lease.token)))
   await database
     .update(sources)
     .set({ status: 'refreshing', error: null, updatedAt: new Date() })
-    .where(eq(sources.id, sourceId))
+    .where(
+      and(
+        eq(sources.id, sourceId),
+        eq(sources.version, source.version),
+        sql`EXISTS (SELECT 1 FROM jobs WHERE id = ${lease.id} AND lease_token = ${lease.token})`,
+      ),
+    )
 
-  const candidateUrl = source.pendingUrl || source.url
   const response = await fetchSource(
-    candidateUrl!,
+    source.pendingUrl || source.url!,
     source.userAgent,
     source.pendingUrl ? null : source.etag,
     source.pendingUrl ? null : source.lastModified,
   )
+  let parsed: Awaited<ReturnType<typeof parseProxyText>> | null = null
   if (response.notModified) {
-    if (source.pendingUrl) throw new Error('新订阅地址无法验证')
-    const now = new Date()
-    await database
-      .update(sources)
-      .set({
-        name: response.name ?? undefined,
-        status: 'ready',
-        error: null,
-        ...(response.subscriptionInfo
-          ? {
-              uploadBytes: response.subscriptionInfo.upload ?? null,
-              downloadBytes: response.subscriptionInfo.download ?? null,
-              totalBytes: response.subscriptionInfo.total ?? null,
-              expireAt: response.subscriptionInfo.expire ?? null,
-              infoRefreshedAt: new Date(),
-            }
-          : {}),
-        lastRefreshedAt: now,
-        nextRefreshAt:
-          source.refreshIntervalHours > 0 ? new Date(now.getTime() + source.refreshIntervalHours * 3_600_000) : null,
-        updatedAt: now,
-      })
-      .where(eq(sources.id, sourceId))
-    return
+    if (source.pendingUrl) throw new PermanentJobError('新订阅地址无法验证')
+  } else {
+    try {
+      parsed = await parseProxyText(response.text, source.nodeNameFilter)
+    } catch (error) {
+      throw new PermanentJobError(error instanceof Error ? error.message : '订阅内容无效')
+    }
   }
-
-  const parsed = await parseProxyText(response.text, source.nodeNameFilter)
-  const affectedProfileIds = await affectedProfileIdsForSource(env, sourceId)
-  await replaceSourceNodes(env, sourceId, parsed, response)
-  await enqueueProfileIds(env, affectedProfileIds)
+  await commitSourceRefresh(env, source, parsed, response, lease)
+  await dispatchRefreshChildren(env, lease.id)
 }
 
 function nodeNameMatcher({ includeRegex, excludeRegex }: { includeRegex: string | null; excludeRegex: string | null }) {
@@ -502,7 +539,7 @@ export async function selectDirectSlotNodes(
       return !node || !node.nodeEnabled || !node.sourceEnabled
     })
     if (unavailable.length)
-      throw new Error(
+      throw new PermanentJobError(
         `槽位“${slotNames.get(binding.slotKey) || binding.slotKey}”包含 ${unavailable.length} 个不可用的指定节点，请重新选择`,
       )
     for (const id of binding.nodeIds) {
@@ -624,7 +661,8 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
     const node = byId.get(id)
     return !node || !node.nodeEnabled || !node.sourceEnabled
   })
-  if (unavailable.length) throw new Error(`节点选择包含 ${unavailable.length} 个不可用的指定节点，请重新选择`)
+  if (unavailable.length)
+    throw new PermanentJobError(`节点选择包含 ${unavailable.length} 个不可用的指定节点，请重新选择`)
   return binding.nodeIds.map((id) => {
     const node = byId.get(id)!
     return { ...node, name: node.alias || node.originalName }
@@ -729,7 +767,8 @@ async function selectDraftGlobalNodes(env: Env, binding: ProfileNodeBindingInput
     const node = byId.get(id)
     return !node || !node.nodeEnabled || !node.sourceEnabled
   })
-  if (unavailable.length) throw new Error(`节点选择包含 ${unavailable.length} 个不可用的指定节点，请重新选择`)
+  if (unavailable.length)
+    throw new PermanentJobError(`节点选择包含 ${unavailable.length} 个不可用的指定节点，请重新选择`)
   return binding.nodeIds.map((id) => {
     const node = byId.get(id)!
     return { ...node, name: node.alias || node.originalName }
@@ -834,51 +873,174 @@ export async function selectDraftProfileNodes(
   }
 }
 
-export async function compileProfile(env: Env, profileId: string) {
+export async function compileProfile(env: Env, profileId: string, lease?: JobLease) {
   const database = db(env)
   const profile = await database.select().from(profiles).where(eq(profiles.id, profileId)).get()
-  if (!profile) throw new Error('配置不存在')
+  if (!profile) throw new PermanentJobError('配置不存在', false)
   const template = await resolveTemplate(env, profile.templateId)
-  if (!template) throw new Error('订阅模板不存在')
+  if (!template) throw new PermanentJobError('订阅模板不存在')
 
   const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
-  const yaml = renderMihomoConfig({ ...(await selectProfileNodes(env, profile, slotNames)), template })
-  const revision = profile.revision + 1
+  const selected = await selectProfileNodes(env, profile, slotNames)
+  let yaml: string
+  try {
+    yaml = renderMihomoConfig({ ...selected, template })
+  } catch (error) {
+    throw new PermanentJobError(error instanceof Error ? error.message : '配置生成失败')
+  }
   const now = new Date()
-  await database
-    .update(profiles)
-    .set({ revision, compiledYaml: yaml, compiledAt: now, error: null, updatedAt: now })
-    .where(eq(profiles.id, profileId))
+  if (lease) {
+    // 编译结果与任务终态一并提交：不能在 YAML 已写入但任务终态失败后再次增加 revision。
+    const [updated] = await env.DB.batch([
+      env.DB.prepare(`UPDATE profiles SET revision=revision+1, compiled_yaml=?, compiled_at=?, error=NULL, updated_at=?
+        WHERE id=? AND revision=? AND updated_at=? AND EXISTS (
+          SELECT 1 FROM jobs WHERE id=? AND lease_token=? AND status='running')`).bind(
+        yaml,
+        now.getTime(),
+        now.getTime(),
+        profileId,
+        profile.revision,
+        profile.updatedAt.getTime(),
+        lease.id,
+        lease.token,
+      ),
+      env.DB.prepare(`UPDATE jobs SET status='succeeded', error=NULL, finished_at=?, lease_token=NULL, lease_until=NULL
+        WHERE id=? AND lease_token=? AND status='running' AND changes()=1`).bind(now.getTime(), lease.id, lease.token),
+    ])
+    if (!updated.meta.changes) throw new Error('配置或任务执行权已变更，重新编译')
+  } else {
+    const updated = await database
+      .update(profiles)
+      .set({ revision: profile.revision + 1, compiledYaml: yaml, compiledAt: now, error: null, updatedAt: now })
+      .where(
+        and(
+          eq(profiles.id, profileId),
+          eq(profiles.revision, profile.revision),
+          eq(profiles.updatedAt, profile.updatedAt),
+        ),
+      )
+      .returning({ id: profiles.id })
+    if (!updated.length) throw new Error('配置已变更，重新编译')
+  }
 }
 
-export async function processQueueMessage(env: Env, message: QueueMessage) {
+async function finishJob(env: Env, job: typeof jobs.$inferSelect, lease: JobLease, error?: Error) {
+  const now = Date.now()
+  const text = error?.message ?? null
+  const statements: D1PreparedStatement[] = []
+  const owned = `EXISTS (SELECT 1 FROM jobs j WHERE j.id = ? AND j.lease_token = ? AND j.status = 'running')`
+  if (error && (!(error instanceof PermanentJobError) || error.affectsEntity)) {
+    if (job.type === 'refresh_source') {
+      statements.push(
+        env.DB.prepare(
+          `UPDATE sources SET status='error', error=?, updated_at=? WHERE id=? AND EXISTS (
+          SELECT 1 FROM jobs j WHERE j.id=? AND j.lease_token=? AND j.status='running'
+          AND j.refresh_commit_token IS NULL AND j.source_version=sources.version)`,
+        ).bind(text, now, job.entityId, lease.id, lease.token),
+      )
+    } else {
+      statements.push(
+        env.DB.prepare(`UPDATE profiles SET error=?, updated_at=? WHERE id=? AND updated_at <= ? AND ${owned}`).bind(
+          text,
+          now,
+          job.entityId,
+          job.startedAt!.getTime(),
+          lease.id,
+          lease.token,
+        ),
+      )
+    }
+  }
+  statements.push(
+    env.DB.prepare(
+      `UPDATE jobs SET status=?, error=?, finished_at=?, lease_token=NULL, lease_until=NULL
+     WHERE id=? AND lease_token=? AND status='running'`,
+    ).bind(error ? 'failed' : 'succeeded', text, now, lease.id, lease.token),
+  )
+  await env.DB.batch(statements)
+}
+
+// 返回延迟表示需要 Queue.retry；undefined 才能 ack。数据库写入失败会抛出，不能伪装成成功。
+export async function processQueueMessage(env: Env, message: QueueMessage): Promise<number | undefined> {
   const database = db(env)
-  const job = await database.select().from(jobs).where(eq(jobs.id, message.jobId)).get()
-  if (!job || job.status === 'succeeded' || job.status === 'failed') return
-  await database
+  const previous = await database.select().from(jobs).where(eq(jobs.id, message.jobId)).get()
+  if (!previous || previous.status === 'succeeded' || previous.status === 'failed') return
+  const now = Date.now()
+  const lease = { id: previous.id, token: crypto.randomUUID() }
+  const job = await database
     .update(jobs)
-    .set({ status: 'running', startedAt: new Date(), error: null })
-    .where(eq(jobs.id, message.jobId))
+    .set({
+      status: 'running',
+      leaseToken: lease.token,
+      leaseUntil: new Date(now + JOB_LEASE_MS),
+      attempts: Math.min(previous.attempts + 1, MAX_JOB_ATTEMPTS),
+      startedAt: new Date(now),
+      error: null,
+      finishedAt: null,
+    })
+    .where(
+      and(
+        eq(jobs.id, previous.id),
+        eq(jobs.attempts, previous.attempts),
+        sql`${jobs.status} IN ('pending', 'running')`,
+        sql`coalesce(${jobs.leaseUntil}, CASE WHEN ${jobs.status}='running' THEN ${jobs.startedAt} + ${JOB_LEASE_MS} END, 0) <= ${now}`,
+        sql`NOT EXISTS (SELECT 1 FROM jobs active WHERE active.type=${previous.type} AND active.entity_id=${previous.entityId}
+      AND active.id<>${previous.id} AND active.status='running' AND coalesce(active.lease_until, active.started_at + ${JOB_LEASE_MS}, 0)>${now})`,
+      ),
+    )
+    .returning()
+    .get()
+  if (!job) return 30 // 重复投递或同一实体正在执行，不消耗数据库中的业务尝试次数。
+  if (previous.attempts >= MAX_JOB_ATTEMPTS) {
+    await finishJob(env, job, lease, new Error('任务执行中断，已达到重试上限'))
+    return
+  }
   try {
-    if (message.type === 'refresh_source') await refreshSource(env, message.entityId)
-    else await compileProfile(env, message.entityId)
-    await database.update(jobs).set({ status: 'succeeded', finishedAt: new Date() }).where(eq(jobs.id, message.jobId))
-  } catch (error) {
-    const text = error instanceof Error ? error.message : '任务执行失败'
+    // 以数据库中的任务类型/目标为准，不信任重复或过期消息携带的其他字段。
+    if (job.type === 'refresh_source') {
+      await refreshSource(env, job.entityId, lease)
+      await finishJob(env, job, lease)
+    } else {
+      await compileProfile(env, job.entityId, lease)
+    }
+  } catch (reason) {
+    const error = reason instanceof Error ? reason : new Error('任务执行失败')
+    if (error instanceof PermanentJobError || error instanceof SyntaxError || job.attempts >= MAX_JOB_ATTEMPTS) {
+      await finishJob(env, job, lease, error)
+      return
+    }
+    const delay = Math.min(5 * 2 ** (job.attempts - 1), 60)
     await database
       .update(jobs)
-      .set({ status: 'failed', error: text, finishedAt: new Date() })
-      .where(eq(jobs.id, message.jobId))
-    if (message.type === 'refresh_source') {
-      await database
-        .update(sources)
-        .set({ status: 'error', error: text, pendingUrl: null, updatedAt: new Date() })
-        .where(eq(sources.id, message.entityId))
-    } else {
-      await database
-        .update(profiles)
-        .set({ error: text, updatedAt: new Date() })
-        .where(eq(profiles.id, message.entityId))
+      .set({
+        status: 'pending',
+        error: error.message,
+        leaseToken: null,
+        leaseUntil: new Date(Date.now() + delay * 1000),
+      })
+      .where(and(eq(jobs.id, job.id), eq(jobs.leaseToken, lease.token)))
+    return delay
+  }
+}
+
+export async function recoverJobs(env: Env, now = new Date()) {
+  const pending = await db(env)
+    .select()
+    .from(jobs)
+    .where(
+      and(
+        sql`${jobs.status} IN ('pending', 'running')`,
+        sql`coalesce(${jobs.leaseUntil}, CASE WHEN ${jobs.status}='running' THEN ${jobs.startedAt} + ${JOB_LEASE_MS} END, 0) <= ${now.getTime()}`,
+        sql`(${jobs.dispatchedAt} IS NULL OR ${jobs.dispatchedAt} <= ${now.getTime() - RECOVERY_SEND_MS})`,
+      ),
+    )
+    .orderBy(asc(jobs.createdAt))
+    .limit(20)
+  for (const job of pending) {
+    try {
+      await dispatchJob(env, job)
+    } catch (error) {
+      console.error('任务恢复入队失败', job.id, error)
     }
   }
 }
