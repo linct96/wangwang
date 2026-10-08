@@ -9,7 +9,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
-    "test": "node scripts/test-subscriptions.mjs && node scripts/test-ui.mjs && node scripts/test-react-effects.mjs",
+    "test": "node scripts/test-security.mjs && node scripts/test-subscriptions.mjs && node scripts/test-ui.mjs && node scripts/test-react-effects.mjs",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy",
     "package:deploy": "pnpm build && node scripts/package-deploy.mjs",

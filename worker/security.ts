@@ -86,6 +86,20 @@ export function constantTimeEqual(left: string, right: string) {
   return result === 0
 }
 
+function blockedIpv4(a: number, b: number) {
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19))
+  )
+}
+
 export function assertRemoteUrl(value: string) {
   let url: URL
   try {
@@ -96,33 +110,24 @@ export function assertRemoteUrl(value: string) {
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
     throw new Error('订阅 URL 仅允许 HTTP/HTTPS 且不能包含用户信息')
 
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  // URL 已规范化 IP（含 IPv4 简写/整数和 IPv6 压缩）；这里只判断字面主机，不解析 DNS。
+  const host = url.hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '')
+  const ipv4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host)
+  const mappedIpv4 = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/.exec(host)
+  const mappedPrefix = mappedIpv4 ? Number.parseInt(mappedIpv4[1], 16) : null
   if (
     host === 'localhost' ||
+    host.endsWith('.localhost') ||
     host.endsWith('.local') ||
-    host === '::1' ||
-    host.startsWith('fe80:') ||
-    host.startsWith('fc') ||
-    host.startsWith('fd')
+    /^::(?:[\da-f]{1,4}(?::[\da-f]{1,4})?)?$/.test(host) ||
+    /^(?:fe[89ab][\da-f]|f[cd][\da-f]{2}|ff[\da-f]{2}):/.test(host) ||
+    (ipv4 && blockedIpv4(Number(ipv4[1]), Number(ipv4[2]))) ||
+    (mappedPrefix !== null && blockedIpv4(mappedPrefix >>> 8, mappedPrefix & 255))
   ) {
     throw new Error('订阅 URL 不能指向本地或私有地址')
-  }
-  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host)
-  if (match) {
-    const octets = match.slice(1).map(Number)
-    if (octets.some((item) => item > 255)) throw new Error('订阅 URL IP 无效')
-    const [a, b] = octets
-    if (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      a >= 224 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
-    ) {
-      throw new Error('订阅 URL 不能指向本地或私有地址')
-    }
   }
   return url
 }
