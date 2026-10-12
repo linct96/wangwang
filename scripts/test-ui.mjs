@@ -196,6 +196,31 @@ try {
   )
   assert.match(providerPreview, /use: wangwang-AirptA/)
   assert.doesNotMatch(providerPreview, /0 节点/)
+  for (const reference of [subscriptionSlot.key, 'wangwang-AirptA']) {
+    const markup = renderToStaticMarkup(
+      createElement(ConfigPreviewPanel, {
+        sourceSlots: [nodeSlot, subscriptionSlot],
+        groups: [{ name: '槽位名称', type: 'select', use: [reference, 'external'] }],
+      }),
+    )
+    const text = markup.replace(/<[^>]*>/g, '')
+    assert.match(text, /机场 A/, 'use 槽位的原始 key 和编译标识都显示左侧槽位名称')
+    assert.doesNotMatch(text, /订阅源 · 机场 A|wangwang-AirptA|__WANGWANG_SOURCE_SLOT_/, '不展示槽位内部标识或额外前缀')
+    assert.match(text, /订阅源 · external/, '外部 provider 仍显示自己的名称')
+    assert.match(markup, new RegExp(`use: ${reference}`), '提示保留真实引用标识')
+  }
+  const { ProfilePreviewPanel } = await server.ssrLoadModule('/src/features/profiles/profile-preview-panel.tsx')
+  const profileMarkup = renderToStaticMarkup(
+    createElement(ProfilePreviewPanel, {
+      sourceSlots: [subscriptionSlot],
+      preview: {
+        groups: [{ name: '配置槽位', type: 'select', use: ['wangwang-AirptA'] }],
+        totalUniqueNodes: 0,
+        emptyGroupCount: 0,
+      },
+    }),
+  )
+  assert.match(profileMarkup.replace(/<[^>]*>/g, ''), /机场 A/, '配置预览也传递槽位名称映射')
   for (const group of [
     { name: '自动包含', type: 'select', includeAllProxies: true, includeAllProviders: true },
     { name: '标签兼容', type: 'select', staticProxies: ['包含全部节点', '包含全部代理集合'] },

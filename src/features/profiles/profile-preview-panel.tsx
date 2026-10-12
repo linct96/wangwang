@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
-import type { ProfileNodeBinding, ProfileSlotBinding, ProfileYamlPreview, TemplateId } from '@/api/types'
+import type {
+  ProfileNodeBinding,
+  ProfileSlotBinding,
+  ProfileYamlPreview,
+  TemplateId,
+  TemplateSourceSlot,
+} from '@/api/types'
 import { ConfigPreviewPanel } from '@/components/config-preview-panel'
 import type { ProfilePreviewResult } from './use-profile-preview'
 
@@ -11,6 +17,7 @@ export type ProfilePreviewPanelProps = {
   templateId?: TemplateId
   nodeBinding?: ProfileNodeBinding
   slotBindings?: ProfileSlotBinding[]
+  sourceSlots?: TemplateSourceSlot[]
   onToggleCollapse?: () => void
 }
 
@@ -21,6 +28,7 @@ export function ProfilePreviewPanel({
   templateId,
   nodeBinding,
   slotBindings,
+  sourceSlots,
   onToggleCollapse,
 }: ProfilePreviewPanelProps) {
   const [viewMode, setViewMode] = useState<'groups' | 'yaml'>('groups')
@@ -84,6 +92,7 @@ export function ProfilePreviewPanel({
       viewMode={viewMode}
       onViewModeChange={setViewMode}
       groups={preview.groups}
+      sourceSlots={sourceSlots}
       groupsLoading={loading}
       groupsEmptyText="暂无策略组数据"
       groupsEmptySubText="在左侧选择规则模板并配置节点源，此处将自动呈现"

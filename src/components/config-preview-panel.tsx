@@ -22,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { slotProviderName, type TemplateSourceSlot } from '../../shared/source-slots'
 
 export type ConfigPreviewGroupNode = {
   id: string
@@ -42,10 +43,7 @@ export type ConfigPreviewGroup = {
   includeAllProviders?: boolean
 }
 
-export type ConfigPreviewSourceSlot = {
-  key: string
-  name: string
-}
+export type ConfigPreviewSourceSlot = TemplateSourceSlot
 
 export type ConfigPreviewPanelProps = {
   className?: string
@@ -133,6 +131,18 @@ export function ConfigPreviewPanel({
   const slotMap = useMemo(() => {
     return new Map((sourceSlots ?? []).map(({ key, name }) => [key, name]))
   }, [sourceSlots])
+  const providerSlotMap = useMemo(
+    () =>
+      new Map(
+        (sourceSlots ?? [])
+          .filter(({ type }) => type === 'subscription')
+          .flatMap(({ key, name }) => [
+            [key, name],
+            [slotProviderName(key), name],
+          ]),
+      ),
+    [sourceSlots],
+  )
 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [copied, setCopied] = useState(false)
@@ -356,7 +366,7 @@ export function ConfigPreviewPanel({
                               {groupProviders.map((name) => (
                                 <Badge key={name} variant="outline" title={`use: ${name}`}>
                                   <Boxes data-icon="inline-start" />
-                                  订阅源 · {slotMap.get(name) || name}
+                                  {providerSlotMap.get(name) || `订阅源 · ${name}`}
                                 </Badge>
                               ))}
                               {groupStatics.map((sp) => {

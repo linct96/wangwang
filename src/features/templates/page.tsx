@@ -341,7 +341,7 @@ export function TemplatesPage() {
           onClose={() => setPreviewing(undefined)}
           contentClassName="template-preview-dialog sm:max-w-4xl"
         >
-          <TemplatePreview className="h-[560px]" templateId={previewing.id} auto />
+          <TemplatePreview className="h-[560px]" templateId={previewing.id} sourceSlots={previewing.sourceSlots} auto />
         </AppDialog>
       )}
       {deleting && (

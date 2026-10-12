@@ -906,6 +906,7 @@ function LivePreviewWrapper({
         )}
         <ProfilePreviewPanel
           preview={preview}
+          sourceSlots={currentTemplate?.sourceSlots}
           loading={templateDetailLoading || (!currentTemplate && !currentError)}
           templateId={templateId}
           nodeBinding={nodeBinding}
