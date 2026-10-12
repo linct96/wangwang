@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { z } from 'zod'
 import { createServer } from 'vite'
 
 // Deterministic hook/event checks against actual source, not a React scheduler or DOM simulation.
@@ -684,6 +685,105 @@ try {
   assert.ok(editors.every((node) => node.attributes.properties.some((prop) => prop.name?.getText() === 'key')))
 } finally {
   await server.close()
+}
+
+const subscriptionEditor = harness(
+  'features/profiles/subscription-slot-binding-editor.tsx',
+  'SubscriptionSlotBindingEditor',
+)
+let subscriptionValue = { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
+const subscriptionProps = () => ({
+  slot: { key: 'subscription', name: '机场', type: 'subscription' },
+  value: subscriptionValue,
+  sources: [{ id: 'airport', name: '机场', kind: 'url', enabled: true, url: 'https://example.com/sub' }],
+  onChange(next) {
+    subscriptionValue = next
+  },
+})
+let subscriptionTree = subscriptionEditor.render(subscriptionProps())
+assert.equal(find(subscriptionTree, 'FieldError').length, 0, '空订阅槽位初始不报错')
+find(subscriptionTree, 'Select')[0].props.onOpenChange(true)
+assert.equal(find(subscriptionEditor.render(subscriptionProps()), 'FieldError').length, 0, '打开选择器不立即报错')
+find(subscriptionTree, 'Select')[0].props.onOpenChange(false)
+subscriptionTree = subscriptionEditor.render(subscriptionProps())
+assert.equal(find(subscriptionTree, 'FieldError').length, 1, '关闭空选择器后显示必填错误')
+find(subscriptionTree, 'Select')[0].props.onValueChange('airport')
+subscriptionTree = subscriptionEditor.render(subscriptionProps())
+assert.equal(find(subscriptionTree, 'FieldError').length, 0, '选择有效订阅后消除错误')
+assert.equal(subscriptionValue.sourceIds[0], 'airport')
+find(subscriptionTree, 'Select')[0].props.onValueChange(null)
+assert.equal(find(subscriptionEditor.render(subscriptionProps()), 'FieldError').length, 1, '清空已操作槽位后报错')
+assert.equal(subscriptionValue.sourceIds.length, 0)
+
+const profilePath = 'features/profiles/profile-editor.tsx'
+const profileHelper = (name) =>
+  evaluate(
+    nodes(profilePath, (node) => ts.isFunctionDeclaration(node) && node.name?.text === name)[0].getText(
+      source(profilePath),
+    ),
+    {},
+  )
+const subscriptionSlot = { key: 'subscription', name: '机场', type: 'subscription' }
+const profileTemplates = [{ id: 'builtin:minimal', name: '模板', kind: 'builtin', sourceSlots: [subscriptionSlot] }]
+let profileFormOptions
+let profileValues
+const profileForm = { Field: 'Field', Subscribe: 'Subscribe', store: {}, state: {} }
+const profileEditor = harness(profilePath, 'ProfileEditor', {
+  z,
+  NODE_BINDING_EDITOR_SCOPE: { key: 'profile-node-binding', name: '全部节点' },
+  emptyNodeBinding: profileHelper('emptyNodeBinding'),
+  validRegex: profileHelper('validRegex'),
+  hasConfiguration: profileHelper('hasConfiguration'),
+  cn: (...names) => names.filter(Boolean).join(' '),
+  useApi: (path) => ({ data: path === '/templates' ? profileTemplates : subscriptionProps().sources, loading: false }),
+  useStore: () => 'builtin:minimal',
+  useForm(options) {
+    profileFormOptions = options
+    profileValues ||= {
+      ...options.defaultValues,
+      name: '配置',
+      slotBindings: [{ ...subscriptionValue, slotKey: subscriptionSlot.key }],
+    }
+    profileForm.state.values = profileValues
+    return profileForm
+  },
+})
+const profileTree = profileEditor.render({})
+const profileSubscriptions = find(profileTree, 'Subscribe')
+const profileState = { values: profileValues, isSubmitting: false, canSubmit: true, submissionAttempts: 0 }
+const footer = profileSubscriptions.find(({ props }) => props.selector(profileState)[0] === profileValues)
+const submitButton = () =>
+  find(footer.props.children[0](footer.props.selector(profileState)), 'Button').find(
+    ({ props }) => props.type === 'submit',
+  )
+assert.equal(submitButton().props.disabled, false, '空订阅槽位允许点击创建以触发校验')
+assert.equal(profileFormOptions.validators.onSubmit.safeParse(profileValues).success, false, '空槽位仍无法通过保存校验')
+profileValues.slotBindings[0].sourceIds = ['missing']
+assert.equal(submitButton().props.disabled, true, '已失效的绑定仍禁止保存')
+profileValues.slotBindings[0].sourceIds = ['airport']
+assert.equal(submitButton().props.disabled, false)
+assert.equal(
+  profileFormOptions.validators.onSubmit.safeParse(profileValues).success,
+  true,
+  '有效订阅允许仅 provider 配置',
+)
+const slotsSubscriber = profileSubscriptions.find(({ props }) => {
+  const selected = props.selector(profileState)
+  return selected.length === 3 && selected[0] === profileValues.templateId && selected[2] === 0
+})
+for (const submissionAttempts of [0, 1]) {
+  const slotsField = slotsSubscriber.props.children[0](
+    slotsSubscriber.props.selector({ ...profileState, submissionAttempts }),
+  )
+  const slotTree = slotsField.props.children[0]({
+    state: { value: profileValues.slotBindings, meta: { isValid: true } },
+    handleChange() {},
+  })
+  assert.equal(
+    find(slotTree, 'SubscriptionSlotBindingEditor')[0].props.showValidation,
+    submissionAttempts > 0,
+    '提交状态传递到每个订阅槽位',
+  )
 }
 
 let data = { items: [{ id: 'A', name: 'Alpha' }] }

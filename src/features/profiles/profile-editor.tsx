@@ -615,8 +615,12 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
               {/* 模块 3：动态节点槽 */}
               {/* 模块 3：动态节点槽（直接平铺为独立折叠卡片） */}
-              <form.Subscribe selector={(state) => [state.values.templateId, state.values.slotBindings] as const}>
-                {([templateId]) => {
+              <form.Subscribe
+                selector={(state) =>
+                  [state.values.templateId, state.values.slotBindings, state.submissionAttempts] as const
+                }
+              >
+                {([templateId, , submissionAttempts]) => {
                   const currentTemplate = templates.find(({ id: currentId }) => currentId === templateId)
                   const slots = currentTemplate?.sourceSlots || []
                   if (slots.length === 0) return null
@@ -694,6 +698,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                         slot={slot}
                                         value={binding}
                                         sources={sources}
+                                        showValidation={submissionAttempts > 0}
                                         onChange={(next) =>
                                           field.handleChange(
                                             field.state.value.map((item) =>
@@ -785,7 +790,9 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                     ?.sourceSlots.filter(({ type }) => type === 'subscription')
                     .some((slot) => {
                       const binding = values.slotBindings.find(({ slotKey }) => slotKey === slot.key)
-                      if (!binding || binding.mode !== 'source' || binding.sourceIds.length !== 1) return true
+                      if (!binding) return true
+                      if (binding.mode === 'source' && binding.sourceIds.length === 0) return false
+                      if (binding.mode !== 'source' || binding.sourceIds.length !== 1) return true
                       const source = sources.find(({ id }) => id === binding.sourceIds[0])
                       return !source || source.kind !== 'url' || !source.enabled || !source.url
                     })

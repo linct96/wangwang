@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ProfileNodeBinding, Source, TemplateSourceSlot } from '@/api/types'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -6,18 +7,23 @@ export function SubscriptionSlotBindingEditor({
   slot,
   value,
   sources,
+  showValidation = false,
   onChange,
 }: {
   slot: TemplateSourceSlot
   value: ProfileNodeBinding
   sources: Source[]
+  showValidation?: boolean
   onChange: (value: ProfileNodeBinding) => void
 }) {
+  const [touched, setTouched] = useState(false)
   const sourceId = value.mode === 'source' ? value.sourceIds[0] : undefined
   const selected = sources.find(({ id }) => id === sourceId)
   const subscriptions = sources.filter(({ kind }) => kind === 'url')
   const error = !sourceId
-    ? '请为此槽位选择一个订阅节点源'
+    ? touched || showValidation
+      ? '请为此槽位选择一个订阅节点源'
+      : ''
     : !selected
       ? '绑定的节点源不存在，请重新选择'
       : !selected.enabled
@@ -35,9 +41,13 @@ export function SubscriptionSlotBindingEditor({
             value: source.id,
             label: `${source.name} · ${source.enabled && source.url ? '已启用' : '不可用'}`,
           }))}
-          onValueChange={(id) =>
+          onOpenChange={(open) => {
+            if (!open) setTouched(true)
+          }}
+          onValueChange={(id) => {
+            setTouched(true)
             onChange({ mode: 'source', sourceIds: id ? [id] : [], includeRegex: null, excludeRegex: null })
-          }
+          }}
         >
           <SelectTrigger id={`subscription-${slot.key}`} aria-invalid={Boolean(error)} className="w-full">
             <SelectValue placeholder="选择一个订阅节点源" />

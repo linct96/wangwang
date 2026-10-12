@@ -189,17 +189,35 @@ try {
   const { SubscriptionSlotBindingEditor } = await server.ssrLoadModule(
     '/src/features/profiles/subscription-slot-binding-editor.tsx',
   )
-  const picker = (sourceIds) =>
+  const picker = (sourceIds, showValidation = false, sourceOverrides = {}) =>
     renderToStaticMarkup(
       createElement(SubscriptionSlotBindingEditor, {
         slot: subscriptionSlot,
         value: { mode: 'source', sourceIds, includeRegex: null, excludeRegex: null },
-        sources: [{ id: 'airport', name: '机场', kind: 'url', enabled: true, url: 'https://example.com/sub' }],
+        sources: [
+          {
+            id: 'airport',
+            name: '机场',
+            kind: 'url',
+            enabled: true,
+            url: 'https://example.com/sub',
+            ...sourceOverrides,
+          },
+        ],
+        showValidation,
         onChange() {},
       }),
     )
-  assert.match(picker([]), /请为此槽位选择一个订阅节点源/)
+  assert.doesNotMatch(
+    picker([]),
+    /请为此槽位选择一个订阅节点源|aria-invalid="true"|data-invalid="true"/,
+    '空槽位首屏不报错',
+  )
+  assert.match(picker([], true), /请为此槽位选择一个订阅节点源/, '提交后提示空槽位必填')
+  assert.match(picker([], true), /aria-invalid="true"/)
   assert.match(picker(['missing']), /绑定的节点源不存在/)
+  assert.match(picker(['airport'], false, { enabled: false }), /绑定的节点源已停用/)
+  assert.match(picker(['airport'], false, { url: null }), /绑定源的订阅 URL 不可用/)
   assert.match(picker(['airport']), /机场 · 已启用/)
   assert.doesNotMatch(picker(['airport'], true), /aria-invalid="true"/, '有效选择消除提交错误')
   const { SourceSlotTag } = await server.ssrLoadModule('/src/components/source-slot-tag.tsx')
