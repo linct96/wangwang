@@ -8,9 +8,12 @@ import { body, fail, ok } from '../http'
 import { db, enqueueProfilesForTemplate, selectProfileNodes } from '../tasks'
 import { builtinTemplates } from '../templates/builtin'
 import { renderMihomoConfig, type SelectedNode, type SelectedSlotNode } from '../templates/renderer'
-import { resolveCustomTemplates, resolveTemplate, templateView } from '../templates/resolver'
-import { SOURCE_SLOT_KEY_PATTERN } from '../templates/source-slots'
+import { resolveCustomTemplates, resolveTemplate, templateBoundSlotKeys, templateView } from '../templates/resolver'
+import { SOURCE_SLOT_KEY_PATTERN, type TemplateSourceSlot } from '../templates/source-slots'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml } from '../templates/validator'
+import { slotProviderName } from '../templates/source-slots'
+import { readProfileSlotBindings } from '../profile-slot-bindings'
+import { resolveProfileProxyProviders, type ProfileProxyProviders } from '../profile-proxy-providers'
 
 const yamlSchema = z
   .string()
@@ -22,6 +25,7 @@ const sourceSlotsSchema = z
       .object({
         key: z.string().regex(SOURCE_SLOT_KEY_PATTERN, '节点源槽位 key 格式无效'),
         name: z.string().trim().min(1, '节点源槽位名称不能为空').max(40),
+        type: z.enum(['nodes', 'subscription']).default('nodes'),
       })
       .strict(),
   )
@@ -43,16 +47,13 @@ const previewSchema = z
   .refine((value) => Boolean(value.templateId) !== Boolean(value.yaml), 'templateId 和 yaml 必须且只能提供一个')
   .refine((value) => !value.yaml || Boolean(value.sourceSlots), '预览 YAML 时必须提供节点源槽位')
 
-async function replaceTemplateSlots(env: Env, templateId: string, sourceSlots: z.infer<typeof sourceSlotsSchema>) {
+async function replaceTemplateSlots(env: Env, templateId: string, sourceSlots: TemplateSourceSlot[]) {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM template_slots WHERE template_id = ?').bind(templateId),
-    ...sourceSlots.map(({ key, name }, position) =>
-      env.DB.prepare('INSERT INTO template_slots (template_id, `key`, name, position) VALUES (?, ?, ?, ?)').bind(
-        templateId,
-        key,
-        name,
-        position,
-      ),
+    ...sourceSlots.map(({ key, name, type }, position) =>
+      env.DB.prepare(
+        'INSERT INTO template_slots (template_id, `key`, name, type, position) VALUES (?, ?, ?, ?, ?)',
+      ).bind(templateId, key, name, type || 'nodes', position),
     ),
   ])
 }
@@ -133,28 +134,60 @@ templatesRouter.post('/preview', async (c) => {
       nodeId: 'preview-global',
       physicalNodeId: 'preview-global',
       name: '全局示例节点',
-      config: { type: 'ss', server: 'global.example.com', port: 8388 },
+      config: { type: 'ss', server: 'global.example.com', port: 8388, cipher: 'aes-128-gcm', password: 'preview-only' },
     },
   ]
-  let slotNodes: SelectedSlotNode[] = slots.map(({ key, name }, index) => ({
-    slotKey: key,
-    nodeId: `preview-slot-${index}`,
-    physicalNodeId: `preview-slot-${index}`,
-    name: `${name}示例`,
-    config: { type: 'ss', server: `slot${index + 1}.example.com`, port: 8388 },
-  }))
-  if (input.profileId) {
-    const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
-    if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
-    ;({ globalNodes, slotNodes } = await selectProfileNodes(
-      c.env,
-      profile,
-      new Map(slots.map(({ key, name }) => [key, name])),
-    ))
-  }
+  let proxyProviders: ProfileProxyProviders = Object.fromEntries(
+    slots
+      .filter(({ type }) => type === 'subscription')
+      .map(({ key }) => {
+        const name = slotProviderName(key)
+        return [
+          name,
+          {
+            type: 'http',
+            url: `https://example.com/${name}.yaml`,
+            path: `./proxy_providers/${name}.yaml`,
+            interval: 3600,
+            header: { 'User-Agent': ['clash-verge/v2.5.2'] },
+            'health-check': { enable: true, url: 'https://www.gstatic.com/generate_204', interval: 300 },
+          },
+        ]
+      }),
+  )
+  let slotNodes: SelectedSlotNode[] = slots
+    .filter(({ type }) => type !== 'subscription')
+    .map(({ key, name }, index) => ({
+      slotKey: key,
+      nodeId: `preview-slot-${index}`,
+      physicalNodeId: `preview-slot-${index}`,
+      name: `${name}示例`,
+      config: {
+        type: 'ss',
+        server: `slot${index + 1}.example.com`,
+        port: 8388,
+        cipher: 'aes-128-gcm',
+        password: 'preview-only',
+      },
+    }))
   try {
+    if (input.profileId) {
+      const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
+      if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
+      ;({ globalNodes, slotNodes } = await selectProfileNodes(
+        c.env,
+        profile,
+        new Map(slots.map(({ key, name }) => [key, name])),
+        new Set(slots.filter(({ type }) => type === 'subscription').map(({ key }) => key)),
+      ))
+      proxyProviders = await resolveProfileProxyProviders(
+        c.env,
+        slots,
+        await readProfileSlotBindings(c.env, profile.id),
+      )
+    }
     return ok(c, {
-      yaml: renderMihomoConfig({ globalNodes, slotNodes, template }),
+      yaml: renderMihomoConfig({ globalNodes, slotNodes, template, proxyProviders }),
       nodeCount: new Set([...globalNodes, ...slotNodes].map(({ physicalNodeId }) => physicalNodeId)).size,
     })
   } catch (error) {
@@ -187,7 +220,10 @@ templatesRouter.get('/:id', async (c) => {
     .select({ value: count() })
     .from(profiles)
     .where(eq(profiles.templateId, template.id as TemplateId))
-  return ok(c, templateView(template, Number(value), true))
+  return ok(c, {
+    ...templateView(template, Number(value), true),
+    boundSlotKeys: await templateBoundSlotKeys(c.env, template.id),
+  })
 })
 
 templatesRouter.patch('/:id', async (c) => {
@@ -202,7 +238,14 @@ templatesRouter.patch('/:id', async (c) => {
     .where(eq(profiles.templateId, id as TemplateId))
   const nextYaml = input.yaml || current.yaml
   const nextSlots = input.sourceSlots || current.sourceSlots
+  const boundSlotKeys = await templateBoundSlotKeys(c.env, id)
   try {
+    const lockedSlot = current.sourceSlots.find((slot) => {
+      const next = nextSlots.find(({ key }) => key === slot.key)
+      return boundSlotKeys.includes(slot.key) && next && (slot.type || 'nodes') !== (next.type || 'nodes')
+    })
+    if (lockedSlot)
+      return fail(c, 409, 'TEMPLATE_SOURCE_SLOTS_LOCKED', `槽位“${lockedSlot.name}”已被配置绑定，不能修改槽位类型`)
     parseTemplateYaml(nextYaml, nextSlots)
     const nextKeys = new Set(nextSlots.map(({ key }) => key))
     if (
@@ -225,7 +268,12 @@ templatesRouter.patch('/:id', async (c) => {
   if (input.sourceSlots) await replaceTemplateSlots(c.env, id, input.sourceSlots)
   const [updated, jobs] = await Promise.all([resolveTemplate(c.env, id), enqueueProfilesForTemplate(c.env, id)])
   return c.json(
-    { data: { template: templateView(updated!, Number(profileCount), true), jobIds: jobs.map((job) => job.id) } },
+    {
+      data: {
+        template: { ...templateView(updated!, Number(profileCount), true), boundSlotKeys },
+        jobIds: jobs.map((job) => job.id),
+      },
+    },
     202,
   )
 })

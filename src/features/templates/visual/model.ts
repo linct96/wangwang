@@ -1,4 +1,5 @@
-export type SourceSlotDraft = { key: string; name: string }
+export type { TemplateSourceSlot as SourceSlotDraft } from '../../../../shared/source-slots'
+import type { TemplateSourceSlot as SourceSlotDraft } from '../../../../shared/source-slots'
 
 export type VisualTemplateDraft = {
   geo: GeoSettingsDraft

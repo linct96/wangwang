@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { SlotBindingEditor } from './slot-binding-editor'
+import { SubscriptionSlotBindingEditor } from './subscription-slot-binding-editor'
 import { ProfilePreviewPanel } from './profile-preview-panel'
 import { useProfilePreview } from './use-profile-preview'
 import '@/styles/profile-editor.css'
@@ -127,56 +128,66 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       slotBindings: [] as ProfileSlotBinding[],
     },
     validators: {
-      onSubmit: z.object({
-        name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
-        nodeBinding: z.discriminatedUnion('mode', [
-          z.object({
-            mode: z.literal('source'),
-            sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
-            includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
-            excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
-          }),
-          z.object({
-            mode: z.literal('node'),
-            nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
-            missingNodeIds: z.array(z.string()),
-          }),
-          z.object({
-            mode: z.literal('tag'),
-            tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
-            includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
-            excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
-          }),
-        ]),
-        slotBindings: z.array(
-          z.discriminatedUnion('mode', [
+      onSubmit: z
+        .object({
+          name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
+          nodeBinding: z.discriminatedUnion('mode', [
             z.object({
-              slotKey: z.string(),
               mode: z.literal('source'),
-              sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
+              sourceIds: z.array(z.string()).max(20, '最多选择 20 个节点源'),
               includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
               excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
             }),
             z.object({
-              slotKey: z.string(),
               mode: z.literal('node'),
               nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
               missingNodeIds: z.array(z.string()),
             }),
             z.object({
-              slotKey: z.string(),
               mode: z.literal('tag'),
               tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
               includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
               excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
             }),
           ]),
+          slotBindings: z.array(
+            z.discriminatedUnion('mode', [
+              z.object({
+                slotKey: z.string(),
+                mode: z.literal('source'),
+                sourceIds: z.array(z.string()).min(1, '请至少选择一个节点源'),
+                includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+                excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
+              }),
+              z.object({
+                slotKey: z.string(),
+                mode: z.literal('node'),
+                nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
+                missingNodeIds: z.array(z.string()),
+              }),
+              z.object({
+                slotKey: z.string(),
+                mode: z.literal('tag'),
+                tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
+                includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+                excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
+              }),
+            ]),
+          ),
+          templateId: z.custom<TemplateId>(
+            (value) => typeof value === 'string' && value.length > 0,
+            '请选择订阅规则模板',
+          ),
+        })
+        .refine(
+          (value) =>
+            value.nodeBinding.mode !== 'source' ||
+            value.nodeBinding.sourceIds.length > 0 ||
+            templates
+              .find(({ id }) => id === value.templateId)
+              ?.sourceSlots.some(({ type }) => type === 'subscription'),
+          { message: '请至少选择一个普通节点源或绑定订阅源槽位', path: ['nodeBinding', 'sourceIds'] },
         ),
-        templateId: z.custom<TemplateId>(
-          (value) => typeof value === 'string' && value.length > 0,
-          '请选择订阅规则模板',
-        ),
-      }),
     },
     onSubmit: async ({ value }) => {
       setError('')
@@ -642,7 +653,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                     <div className="flex items-center gap-2">
                                       <Plug className="size-4 text-amber-500" />
                                       <strong className="text-sm font-semibold text-foreground">
-                                        动态节点槽 · {slot.name}
+                                        {slot.type === 'subscription' ? '订阅源槽位' : '动态节点槽'} · {slot.name}
                                       </strong>
                                     </div>
 
@@ -670,20 +681,35 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
                                 {isExpanded && (
                                   <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
-                                    <SlotBindingEditor
-                                      slot={slot}
-                                      value={binding}
-                                      sources={sources}
-                                      nodes={nodes}
-                                      tags={tagOptions}
-                                      onChange={(next) =>
-                                        field.handleChange(
-                                          field.state.value.map((item) =>
-                                            item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
-                                          ),
-                                        )
-                                      }
-                                    />
+                                    {slot.type === 'subscription' ? (
+                                      <SubscriptionSlotBindingEditor
+                                        slot={slot}
+                                        value={binding}
+                                        sources={sources}
+                                        onChange={(next) =>
+                                          field.handleChange(
+                                            field.state.value.map((item) =>
+                                              item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
+                                            ),
+                                          )
+                                        }
+                                      />
+                                    ) : (
+                                      <SlotBindingEditor
+                                        slot={slot}
+                                        value={binding}
+                                        sources={sources}
+                                        nodes={nodes}
+                                        tags={tagOptions}
+                                        onChange={(next) =>
+                                          field.handleChange(
+                                            field.state.value.map((item) =>
+                                              item.slotKey === slot.key ? { ...next, slotKey: slot.key } : item,
+                                            ),
+                                          )
+                                        }
+                                      />
+                                    )}
                                   </div>
                                 )}
                               </section>
@@ -746,14 +772,25 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             <div className="profile-sticky-footer-inner">
               <form.Subscribe selector={(state) => [state.values, state.isSubmitting, state.canSubmit] as const}>
                 {([values, isSubmitting, canSubmit]) => {
-                  const unavailable = [values.nodeBinding, ...values.slotBindings].some(
-                    (binding) =>
-                      binding.mode === 'node' &&
-                      binding.nodeIds.some((nodeId) => {
-                        const node = nodes.find(({ id: currentId }) => currentId === nodeId)
-                        return !node || !node.enabled || !node.sourceEnabled
-                      }),
-                  )
+                  const unavailableSubscription = templates
+                    .find(({ id }) => id === values.templateId)
+                    ?.sourceSlots.filter(({ type }) => type === 'subscription')
+                    .some((slot) => {
+                      const binding = values.slotBindings.find(({ slotKey }) => slotKey === slot.key)
+                      if (!binding || binding.mode !== 'source' || binding.sourceIds.length !== 1) return true
+                      const source = sources.find(({ id }) => id === binding.sourceIds[0])
+                      return !source || source.kind !== 'url' || !source.enabled || !source.url
+                    })
+                  const unavailable =
+                    unavailableSubscription ||
+                    [values.nodeBinding, ...values.slotBindings].some(
+                      (binding) =>
+                        binding.mode === 'node' &&
+                        binding.nodeIds.some((nodeId) => {
+                          const node = nodes.find(({ id: currentId }) => currentId === nodeId)
+                          return !node || !node.enabled || !node.sourceEnabled
+                        }),
+                    )
 
                   return (
                     <div className="flex items-center gap-3">

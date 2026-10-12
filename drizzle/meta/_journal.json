@@ -36,6 +36,13 @@
       "when": 1791430027297,
       "tag": "0004_atomic_refresh_retry",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791790284403,
+      "tag": "0005_template_slot_types",
+      "breakpoints": true
     }
   ]
 }

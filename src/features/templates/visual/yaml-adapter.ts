@@ -78,18 +78,29 @@ export function inferSourceSlots(yamlText: string): SourceSlotDraft[] {
   if (doc.errors.length || !isMap(doc.contents)) return []
   const root = doc.toJS() as Record<string, unknown>
   if (!Array.isArray(root['proxy-groups'])) return []
+  const groups = root['proxy-groups']
   const keys = [
     ...new Set(
-      root['proxy-groups'].flatMap((group) =>
-        object(group) && Array.isArray(group.proxies)
-          ? group.proxies.filter(
-              (value): value is string => typeof value === 'string' && SOURCE_SLOT_KEY_PATTERN.test(value),
+      groups.flatMap((group) =>
+        object(group)
+          ? [group.proxies, group.use].flatMap((items) =>
+              Array.isArray(items)
+                ? items.filter(
+                    (value): value is string => typeof value === 'string' && SOURCE_SLOT_KEY_PATTERN.test(value),
+                  )
+                : [],
             )
           : [],
       ),
     ),
   ]
-  return keys.map((key, index) => ({ key, name: `节点源槽位 ${index + 1}` }))
+  return keys.map((key, index) => ({
+    key,
+    name: `节点源槽位 ${index + 1}`,
+    type: groups.some((group: unknown) => object(group) && Array.isArray(group.use) && group.use.includes(key))
+      ? 'subscription'
+      : 'nodes',
+  }))
 }
 
 export function parseGeoSettings(root: Record<string, unknown>): { draft: GeoSettingsDraft; warnings: VisualIssue[] } {
@@ -455,15 +466,25 @@ export function parseVisualTemplate(yamlText: string, sourceSlots: SourceSlotDra
       (!Array.isArray(value.proxies) || value.proxies.some((item) => typeof item !== 'string'))
     )
       throw new Error(`代理组“${name}”的 proxies 必须是字符串数组`)
+    if (value.use !== undefined && (!Array.isArray(value.use) || value.use.some((item) => typeof item !== 'string')))
+      throw new Error(`代理组“${name}”的 use 必须是字符串数组`)
     const extras = Object.fromEntries(
       Object.entries(value).filter(([key]) => !GROUP_KEYS.has(key) || (type === 'fallback' && key === 'tolerance')),
     )
+    if (Array.isArray(value.use)) {
+      const external = value.use.filter((item) => !slotKeys.has(item))
+      if (external.length) extras.use = external
+      else delete extras.use
+    }
     const group: StructuredProxyGroupDraft = {
       kind: 'structured',
       id,
       name,
       type: type as SupportedProxyGroupType,
-      members: ((value.proxies as string[] | undefined) || []).map((member) => parseMember(member, groupIds, slotKeys)),
+      members: [
+        ...((value.proxies as string[] | undefined) || []),
+        ...((value.use as string[] | undefined) || []).filter((item) => slotKeys.has(item)),
+      ].map((member) => parseMember(member, groupIds, slotKeys)),
       defaultSelected: typeof value['default-selected'] === 'string' ? value['default-selected'] : undefined,
       includeAllProxies: resolveIncludeAllFlag(value['include-all'], value['include-all-proxies']),
       includeAllProviders: resolveIncludeAllFlag(value['include-all'], value['include-all-providers']),
@@ -727,14 +748,27 @@ function applyRuleProviders(
   if (!map.items.length) doc.delete('rule-providers')
 }
 
-function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>) {
+function serializeGroup(group: ProxyGroupDraft, names: Map<string, string>, slots: SourceSlotDraft[]) {
   if (group.kind === 'raw') return group.raw
   const value: Record<string, unknown> = {
     ...group.extras,
     name: group.name,
     type: group.type,
-    proxies: group.members.map((member) => memberValue(member, names)),
+    proxies: group.members
+      .filter(
+        (member) =>
+          member.kind !== 'source-slot' || slots.find(({ key }) => key === member.slotKey)?.type !== 'subscription',
+      )
+      .map((member) => memberValue(member, names)),
   }
+  const subscriptions = group.members
+    .filter(
+      (member) =>
+        member.kind === 'source-slot' && slots.find(({ key }) => key === member.slotKey)?.type === 'subscription',
+    )
+    .map((member) => memberValue(member, names))
+  if (subscriptions.length)
+    value.use = [...new Set([...(Array.isArray(group.extras.use) ? group.extras.use : []), ...subscriptions])]
   if (group.type === 'select' && group.defaultSelected) value['default-selected'] = group.defaultSelected
   if (group.includeAllProxies !== undefined) value['include-all-proxies'] = group.includeAllProxies
   if (group.includeAllProviders !== undefined) value['include-all-providers'] = group.includeAllProviders
@@ -773,7 +807,7 @@ export function applyVisualTemplate(yamlText: string, draft: VisualTemplateDraft
   const providerNames = new Map(draft.ruleProviders.map((provider) => [provider.id, provider.name]))
   doc.set(
     'proxy-groups',
-    draft.groups.map((group) => serializeGroup(group, names)),
+    draft.groups.map((group) => serializeGroup(group, names, draft.sourceSlots)),
   )
   applyRuleProviders(doc, draft, previousDraft, names)
   doc.set(

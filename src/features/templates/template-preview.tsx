@@ -25,13 +25,12 @@ export function TemplatePreview({
   const [loading, setLoading] = useState(false)
 
   async function load(signal?: AbortSignal) {
-    if (isEditing) return
     setLoading(true)
     setError('')
     try {
       const result = await api<PreviewResult>('/templates/preview', {
         method: 'POST',
-        body: JSON.stringify({ templateId }),
+        body: JSON.stringify(isEditing ? { yaml, sourceSlots: sourceSlots || [] } : { templateId }),
         signal,
       })
       if (!signal?.aborted) setPreview(result)
@@ -43,14 +42,18 @@ export function TemplatePreview({
   }
 
   useEffect(() => {
-    if (!auto || isEditing || !templateId) return
+    if (!isEditing && (!auto || !templateId)) return
     const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
+    setPreview(undefined)
+    const timer = setTimeout(() => void load(controller.signal), 250)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto, isEditing, templateId])
+  }, [auto, isEditing, templateId, yaml, sourceSlots])
 
-  const currentYaml = isEditing ? (yaml ?? '') : (preview?.yaml ?? '')
+  const currentYaml = preview?.yaml ?? ''
 
   const groups = useMemo<ConfigPreviewGroup[]>(() => {
     if (!currentYaml) return []
@@ -68,6 +71,7 @@ export function TemplatePreview({
           proxies: Array.isArray(g?.proxies) ? g.proxies.map(String) : [],
           staticProxies: Array.isArray(g?.proxies) ? g.proxies.map(String) : [],
           nodes: [],
+          use: Array.isArray(g.use) ? g.use.map(String) : [],
           includeAllProxies,
           includeAllProviders,
         }
@@ -84,16 +88,16 @@ export function TemplatePreview({
       defaultViewMode="groups"
       groups={groups}
       sourceSlots={sourceSlots}
-      groupsLoading={!isEditing && loading}
+      groupsLoading={loading}
       groupsEmptyText="暂无策略组数据"
       groupsEmptySubText="当前模板尚未解析到有效 proxy-groups 策略组"
       yaml={currentYaml}
-      yamlLoading={!isEditing && loading}
+      yamlLoading={loading}
       yamlError={error}
       yamlEmptyText="尚未生成配置预览"
       yamlEmptySubText={isEditing ? '暂无 YAML 内容' : '点击右上角刷新按钮即可编译并生成预览'}
       nodeCount={preview?.nodeCount}
-      yamlViewTitle={isEditing ? '查看当前模板 YAML 源码' : '查看最终编译后的 YAML 配置'}
+      yamlViewTitle={isEditing ? '查看示例编译 YAML（订阅地址为示例）' : '查看最终编译后的 YAML 配置'}
       onRefreshYaml={isEditing ? undefined : () => void load()}
     />
   )

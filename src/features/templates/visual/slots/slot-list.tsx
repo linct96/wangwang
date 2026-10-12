@@ -7,6 +7,7 @@ export function SlotList({
   slots,
   groups,
   issues,
+  boundSlotKeys = [],
   onChange,
   onSave,
   onDelete,
@@ -14,6 +15,7 @@ export function SlotList({
   slots: SourceSlotDraft[]
   groups: ProxyGroupDraft[]
   issues: VisualIssue[]
+  boundSlotKeys?: string[]
   onChange: (slots: SourceSlotDraft[], meta?: VisualChangeMeta) => void
   onSave: (slot: SourceSlotDraft) => void
   onDelete: (slot: SourceSlotDraft) => void
@@ -50,6 +52,7 @@ export function SlotList({
             slots={slots}
             groups={groups}
             issues={issues}
+            typeLocked={boundSlotKeys.includes(slot.key)}
             onSave={onSave}
             onDelete={() => onDelete(slot)}
           />

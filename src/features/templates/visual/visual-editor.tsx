@@ -28,12 +28,14 @@ import { applyRuleSetPresets, insertRulesBeforeMatch, RuleSetPresetDialog } from
 export function VisualTemplateEditor({
   draft,
   issues,
+  boundSlotKeys = [],
   onChange,
   geoProvider = 'metacubex',
   customGeo = false,
 }: {
   draft: VisualTemplateDraft
   issues: VisualIssue[]
+  boundSlotKeys?: string[]
   onChange: (draft: VisualTemplateDraft, meta?: VisualChangeMeta) => void
   geoProvider?: GeoProvider | ((type: 'GEOSITE' | 'GEOIP') => GeoProvider)
   customGeo?: boolean
@@ -195,6 +197,7 @@ export function VisualTemplateEditor({
           slots={draft.sourceSlots}
           groups={draft.groups}
           issues={issues}
+          boundSlotKeys={boundSlotKeys}
           onChange={updateSlots}
           onSave={saveSlot}
           onDelete={removeSlot}

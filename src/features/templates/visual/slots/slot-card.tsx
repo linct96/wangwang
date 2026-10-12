@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/react/sortable'
 import { ChevronDown, CircleAlert, Edit2, GripVertical, Network, Plug, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/app-primitives'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import type { ProxyGroupDraft, SourceSlotDraft, VisualIssue } from '../model'
 import { SlotDialog } from './slot-dialog'
 
@@ -12,6 +13,7 @@ export function SlotCard({
   groups,
   index,
   issues,
+  typeLocked = false,
   onSave,
   onDelete,
 }: {
@@ -20,6 +22,7 @@ export function SlotCard({
   groups: ProxyGroupDraft[]
   index: number
   issues: VisualIssue[]
+  typeLocked?: boolean
   onSave: (slot: SourceSlotDraft) => void
   onDelete: () => void
 }) {
@@ -35,7 +38,7 @@ export function SlotCard({
       group.members.some((member) => member.kind === 'source-slot' && member.slotKey === slot.key),
   )
 
-  const slotIssues = issues.filter((issue) => issue.slotKey === slot.key)
+  const slotIssues = issues.filter((issue) => issue.slotKey === slot.key && issue.code !== 'SLOT_UNUSED')
   const hasError = slotIssues.some((issue) => issue.level === 'error')
 
   return (
@@ -67,8 +70,11 @@ export function SlotCard({
         >
           <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
           <div className="flex items-center gap-2 min-w-0">
-            <Plug className="size-4 text-amber-500 shrink-0" />
+            <Plug
+              className={cn('size-4 shrink-0', slot.type === 'subscription' ? 'text-indigo-500' : 'text-amber-500')}
+            />
             <strong className="truncate">{slot.name || '未命名槽位'}</strong>
+            <Badge variant="outline">{slot.type === 'subscription' ? 'use' : 'proxies'}</Badge>
           </div>
           {slotIssues.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-destructive">
@@ -83,7 +89,7 @@ export function SlotCard({
           )}
         </div>
         <div className="template-visual-card-actions" onClick={(e) => e.stopPropagation()}>
-          <SlotDialog slots={slots} groups={groups} value={slot} onSave={onSave}>
+          <SlotDialog slots={slots} groups={groups} value={slot} typeLocked={typeLocked} onSave={onSave}>
             <IconButton label="编辑槽位">
               <Edit2 />
             </IconButton>

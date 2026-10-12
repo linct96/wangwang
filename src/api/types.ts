@@ -102,7 +102,8 @@ export type NodeImportResult = {
   warnings: string[]
 }
 
-export type TemplateSourceSlot = { key: string; name: string }
+export type { TemplateSourceSlot } from '../../shared/source-slots'
+import type { TemplateSourceSlot } from '../../shared/source-slots'
 export type ProfileNodeBinding =
   | {
       mode: 'source'
@@ -148,7 +149,7 @@ export type TemplateSummary = {
   updatedAt: string | null
 }
 
-export type TemplateDetail = TemplateSummary & { yaml: string }
+export type TemplateDetail = TemplateSummary & { yaml: string; boundSlotKeys?: string[] }
 export type TemplatePreview = { yaml: string; nodeCount: number }
 
 export type Profile = {

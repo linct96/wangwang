@@ -4,6 +4,7 @@ import { db } from './tasks'
 import { normalizeTagInputs } from './tag-model'
 import { ensureTags } from './tag-store'
 import type { TemplateSourceSlot } from './templates/source-slots'
+import { resolveProfileProxyProviders, subscriptionSlotBinding } from './profile-proxy-providers'
 
 export type ProfileSlotBindingInput =
   | {
@@ -75,10 +76,10 @@ async function validateReferences(env: Env, sourceIds: string[], nodeIds: string
   }
 }
 
-export async function validateProfileNodeBinding(env: Env, binding: ProfileNodeBindingInput) {
+export async function validateProfileNodeBinding(env: Env, binding: ProfileNodeBindingInput, allowEmptySource = false) {
   if (binding.mode === 'source') {
     const sourceIds = [...new Set(binding.sourceIds)]
-    if (!sourceIds.length) throw new Error('节点选择至少需要一个节点源')
+    if (!sourceIds.length && !allowEmptySource) throw new Error('请至少选择一个普通节点源或绑定订阅源槽位')
     const normalized = {
       mode: 'source' as const,
       sourceIds,
@@ -114,7 +115,9 @@ export async function validateProfileSlotBindings(
   if (bindingMap.size !== bindings.length || bindings.some(({ slotKey }) => !slotKeys.has(slotKey)))
     throw new Error('动态节点槽绑定无效')
 
-  const normalized: ProfileSlotBindingInput[] = slots.map(({ key, name }) => {
+  const normalized: ProfileSlotBindingInput[] = slots.map((slot) => {
+    const { key, name } = slot
+    if (slot.type === 'subscription') return subscriptionSlotBinding(slot, bindings)
     const binding = bindingMap.get(key)
     if (!binding) throw new Error(`缺少槽位“${name}”的绑定`)
     if (binding.mode === 'source') {
@@ -147,6 +150,7 @@ export async function validateProfileSlotBindings(
   const sourceIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])))]
   const nodeIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'node' ? binding.nodeIds : [])))]
   await validateReferences(env, sourceIds, nodeIds)
+  await resolveProfileProxyProviders(env, slots, normalized)
   return normalized
 }
 

@@ -265,6 +265,210 @@ try {
   editor.unmount()
   assert.equal(timers.size, 0)
 
+  const slotFixtures = [
+    { key: '__WANGWANG_SOURCE_SLOT_Bound1__', name: '已绑定', type: 'nodes' },
+    { key: '__WANGWANG_SOURCE_SLOT_Free01__', name: '未绑定', type: 'nodes' },
+  ]
+  for (const props of [{ id: 'in-use' }, { source: 'builtin:minimal' }]) {
+    const loaded = harness(editorPath, 'TemplateEditor', {
+      ...adapter,
+      ...validation,
+      ...geoCatalog,
+      blankSourceSlots: [],
+    })
+    loaded.render(props)
+    loaded.flush()
+    loaded.requests[0].resolve({
+      name: '在用模板',
+      description: null,
+      profileCount: 5,
+      sourceSlots: slotFixtures,
+      boundSlotKeys: [slotFixtures[0].key],
+      yaml,
+    })
+    await tick()
+    const loadedTree = loaded.render(props)
+    assert.deepEqual(
+      Array.from(find(loadedTree, 'VisualTemplateEditor')[0].props.boundSlotKeys),
+      props.id ? [slotFixtures[0].key] : [],
+      '仅编辑原模板时使用槽位绑定锁定，复制不继承锁定',
+    )
+    loaded.unmount()
+  }
+  const slotList = harness('features/templates/visual/slots/slot-list.tsx', 'SlotList')
+  const slotListTree = slotList.render({
+    slots: slotFixtures,
+    groups: [],
+    issues: [],
+    boundSlotKeys: [slotFixtures[0].key],
+    onChange() {},
+    onSave() {},
+    onDelete() {},
+  })
+  assert.deepEqual(
+    find(slotListTree, 'SlotCard').map(({ props }) => props.typeLocked),
+    [true, false],
+    '锁定按槽位 key 分配，不再锁住整个模板',
+  )
+  for (const typeLocked of [true, false]) {
+    const dialog = harness('features/templates/visual/slots/slot-dialog.tsx', 'SlotDialog', { slotTypeOptions: [] })
+    const props = { slots: slotFixtures, groups: [], value: slotFixtures[0], typeLocked, children: '编辑', onSave() {} }
+    const closed = dialog.render(props)
+    find(closed, 'span')[0].props.onClick({ stopPropagation() {} })
+    assert.equal(
+      find(dialog.render(props), 'Select')[0].props.disabled,
+      typeLocked,
+      '未被代理组引用时仍按实际配置绑定判断类型控件是否禁用',
+    )
+  }
+
+  const subscriptionFixture = { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' }
+  const structuredGroup = {
+    kind: 'structured',
+    id: 'test-group',
+    name: '测试组',
+    type: 'select',
+    members: [{ kind: 'source-slot', slotKey: subscriptionFixture.key }],
+    extras: {},
+    includeAllProviders: true,
+  }
+  const warningCases = [
+    [structuredGroup, true],
+    [{ ...structuredGroup, includeAllProxies: true }, true],
+    [{ ...structuredGroup, members: [], extras: { use: ['external'] } }, true],
+    [{ ...structuredGroup, members: [{ kind: 'source-slot', slotKey: slotFixtures[0].key }] }, false],
+    [{ ...structuredGroup, members: [] }, false],
+    [{ ...structuredGroup, includeAllProviders: false }, false],
+    [
+      {
+        kind: 'raw',
+        id: 'raw-group',
+        name: '高级组',
+        type: 'select',
+        raw: { 'include-all': true, 'include-all-providers': false, use: ['external'] },
+      },
+      true,
+    ],
+    [
+      {
+        kind: 'raw',
+        id: 'raw-group',
+        name: '高级组',
+        type: 'select',
+        raw: { 'include-all-proxies': true, use: ['external'] },
+      },
+      false,
+    ],
+  ]
+  const { cn } = await server.ssrLoadModule('/src/lib/utils.ts')
+  for (const [group, expectedWarning] of warningCases) {
+    const card = harness('features/templates/visual/groups/group-card.tsx', 'GroupCard', {
+      useSortable: () => ({}),
+      memberLabel: () => '引用',
+      cn,
+    })
+    const props = {
+      group,
+      groups: [group],
+      sourceSlots: [...slotFixtures, subscriptionFixture],
+      index: 0,
+      onSave() {},
+      onDelete() {},
+    }
+    const collapsed = card.render(props)
+    assert.equal(find(collapsed, 'Alert').length, 0, '代理组折叠时不显示告警')
+    find(collapsed, 'div')
+      .find(({ props }) => props.className === 'template-group-header-info')
+      .props.onKeyDown({ key: 'Enter', preventDefault() {} })
+    const expanded = card.render(props)
+    assert.equal(find(expanded, 'Alert').length, 0, '代理组展开面板不再显示覆盖 use 告警')
+    if (group.kind === 'raw') continue
+    if (group.includeAllProxies)
+      assert.ok(
+        find(expanded, 'Globe')[0].props.className.includes('text-amber-500'),
+        '包含全部节点与 proxies 槽位颜色一致',
+      )
+    if (group.includeAllProviders)
+      assert.ok(
+        find(expanded, 'Boxes')[0].props.className.includes('text-indigo-500'),
+        '包含全部代理集合与 use 槽位颜色一致',
+      )
+    for (const [index, member] of group.members.filter((member) => member.kind === 'source-slot').entries()) {
+      const expectedColor = member.slotKey === subscriptionFixture.key ? 'text-indigo-500' : 'text-amber-500'
+      assert.ok(find(expanded, 'Plug')[index].props.className.includes(expectedColor), '代理组引用沿用槽位类型颜色')
+      const tag = harness('features/templates/visual/groups/member-editor.tsx', 'MemberTag', {
+        useSortable: () => ({}),
+        memberLabel: () => '引用',
+        cn,
+      })
+      const tagTree = tag.render({ member, index, groups: props.groups, sourceSlots: props.sourceSlots, onDelete() {} })
+      assert.ok(find(tagTree, 'Plug')[0].props.className.includes(expectedColor), '弹窗已选成员沿用槽位类型颜色')
+    }
+    let savedGroup
+    const dialog = harness('features/templates/visual/groups/group-dialog.tsx', 'GroupDialog', {
+      memberLabel: () => '引用',
+      cn,
+      FieldHelp: 'FieldHelp',
+      ProxyGroupIconPicker: 'ProxyGroupIconPicker',
+    })
+    const dialogProps = {
+      value: group,
+      groups: [group],
+      sourceSlots: props.sourceSlots,
+      children: '编辑',
+      onSave(next) {
+        savedGroup = next
+      },
+    }
+    const closedDialog = dialog.render(dialogProps)
+    assert.equal(find(closedDialog, 'Alert').length, 0)
+    find(closedDialog, 'span')[0].props.onClick({ stopPropagation() {} })
+    let opened = dialog.render(dialogProps)
+    const memberProps = find(opened, 'MemberEditor')[0].props
+    const memberPanel = harness('features/templates/visual/groups/member-editor.tsx', 'MemberEditor', {
+      cn,
+      MemberTag: 'MemberTag',
+    }).render(memberProps)
+    assert.equal(memberPanel.props.children.at(-1), memberProps.children, '提示位于成员表单项内部的底部')
+    const availableSlotIcons = find(memberPanel, 'Plug')
+    const unselectedSlots = props.sourceSlots.filter(
+      (slot) => !group.members.some((member) => member.kind === 'source-slot' && member.slotKey === slot.key),
+    )
+    assert.equal(availableSlotIcons.length, unselectedSlots.length)
+    unselectedSlots.forEach((slot, index) =>
+      assert.ok(
+        availableSlotIcons[index].props.className.includes(
+          slot.type === 'subscription' ? 'text-indigo-500' : 'text-amber-500',
+        ),
+        '成员选择菜单沿用槽位类型颜色',
+      ),
+    )
+    assert.equal(find(opened, 'Alert').length, Number(expectedWarning), '覆盖 use 仅在编辑代理组弹窗中提示')
+    if (expectedWarning) {
+      assert.notEqual(find(opened, 'Alert')[0].props.variant, 'destructive', '提示不是阻断性错误')
+      assert.equal(find(opened, 'AlertDescription')[0].props.children[0], '「包含全部代理集合」开启后将会覆盖use选择')
+    }
+    const providerSelect = (tree) =>
+      find(tree, 'Select').filter(({ props }) => props.items.length === 2 && props.items[0].value === 'false')[1]
+    providerSelect(opened).props.onValueChange('false')
+    opened = dialog.render(dialogProps)
+    assert.equal(find(opened, 'Alert').length, 0, '关闭自动包含后告警实时消失')
+    providerSelect(opened).props.onValueChange('true')
+    opened = dialog.render(dialogProps)
+    const members = find(opened, 'MemberEditor')[0].props
+    members.onChange({ ...members.form, members: [], extras: {} })
+    opened = dialog.render(dialogProps)
+    assert.equal(find(opened, 'Alert').length, 0, '无显式 use 时不提示')
+    const cleared = find(opened, 'MemberEditor')[0].props
+    cleared.onChange({ ...cleared.form, members: structuredGroup.members })
+    opened = dialog.render(dialogProps)
+    assert.equal(find(opened, 'Alert').length, 1, '加入订阅槽位后告警实时出现')
+    find(opened, 'Button')
+      .find(({ props }) => props.children[0] === '保存')
+      .props.onClick()
+    assert.equal(savedGroup.includeAllProviders, true, '告警不阻止保存或修改自动包含开关')
+  }
+
   const failed = harness(editorPath, 'TemplateEditor', { ...adapter, ...validation, blankSourceSlots: [] })
   failed.render({ id: 'B' })
   failed.flush()

@@ -1,3 +1,4 @@
+import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
 import type {
   RuleDraft,
   RuleProviderDraft,
@@ -259,7 +260,12 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       add({ level: 'warning', code: 'RAW_GROUP', message: `代理组“${group.name}”仅支持 YAML 编辑`, groupId: group.id })
       return
     }
-    if (!group.members.length && !group.includeAllProxies && !group.includeAllProviders)
+    if (
+      !group.members.length &&
+      !(Array.isArray(group.extras.use) && group.extras.use.length) &&
+      !group.includeAllProxies &&
+      !group.includeAllProviders
+    )
       add({
         level: 'error',
         code: 'GROUP_MEMBERS_EMPTY',
@@ -321,8 +327,11 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
       })
   })
 
-  if (draft.groups.some((group) => group.kind === 'structured' && group.includeAllProxies))
-    draft.sourceSlots.forEach(({ key }) => usedSlots.add(key))
+  for (const group of draft.groups) {
+    const flags = group.kind === 'raw' ? resolveProxyGroupIncludeAll(group.raw) : group
+    for (const slot of draft.sourceSlots)
+      if (slot.type === 'subscription' ? flags.includeAllProviders : flags.includeAllProxies) usedSlots.add(slot.key)
+  }
 
   for (const group of draft.groups) {
     if (group.kind !== 'structured') continue

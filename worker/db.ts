@@ -165,6 +165,9 @@ export const templateSlots = sqliteTable(
       .references(() => templates.id, { onDelete: 'cascade' }),
     key: text('key').notNull(),
     name: text('name').notNull(),
+    type: text('type', { enum: ['nodes', 'subscription'] })
+      .notNull()
+      .default('nodes'),
     position: integer('position').notNull(),
   },
   (table) => [primaryKey({ columns: [table.templateId, table.key] })],

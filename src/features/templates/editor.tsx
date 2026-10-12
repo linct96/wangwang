@@ -49,6 +49,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
   const navigate = useNavigate()
   const { resolvedTheme } = useTheme()
   const [name, setName] = useState('')
+  const [boundSlotKeys, setBoundSlotKeys] = useState<string[]>([])
   const [description, setDescription] = useState('')
   const [yaml, setYaml] = useState(source === 'blank' ? blankTemplate : '')
   const [loading, setLoading] = useState(Boolean(id || source?.startsWith('builtin:')))
@@ -149,6 +150,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
       .then((template) => {
         if (controller.signal.aborted) return
         setName(id ? template.name : `${template.name} 副本`)
+        setBoundSlotKeys(id ? template.boundSlotKeys || [] : [])
         setDescription(template.description || '')
         yamlRef.current = template.yaml
         sourceSlotsRef.current = template.sourceSlots
@@ -400,6 +402,7 @@ function TemplateEditor({ id, source }: { id?: string; source?: NewTemplateSourc
                 <VisualTemplateEditor
                   draft={visualDraft}
                   issues={visualIssues}
+                  boundSlotKeys={boundSlotKeys}
                   onChange={updateVisualDraft}
                   geoProvider={(type) => inferGeoSource(visualDraft.geo, type).provider}
                   customGeo={

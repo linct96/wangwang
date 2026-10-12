@@ -176,7 +176,13 @@ sourcesRouter.patch('/:id', async (c) => {
     .returning({ id: sources.id })
   if (!saved.length) return fail(c, 409, 'SOURCE_CONFLICT', '节点源已变更，请重新加载后修改')
   if (nodeTagsChanged) await replaceSourceTags(c.env, current.id, nodeTags)
-  if ((typeof input.enabled === 'boolean' && input.enabled !== current.enabled) || nodeTagsChanged)
+  if (
+    (typeof input.enabled === 'boolean' && input.enabled !== current.enabled) ||
+    nodeTagsChanged ||
+    userAgentChanged ||
+    interval !== current.refreshIntervalHours ||
+    nodeNameFilter !== current.nodeNameFilter
+  )
     await enqueueAffectedProfiles(c.env, current.id)
   const updated = await db(c.env).select().from(sources).where(eq(sources.id, current.id)).get()
   return ok(c, { source: sourceView(updated!, 0, nodeTags), jobId: null })

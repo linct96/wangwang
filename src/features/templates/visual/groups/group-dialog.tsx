@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { CircleHelp, Smile } from 'lucide-react'
+import { AlertTriangle, CircleHelp, Smile } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppDialog } from '@/components/app-primitives'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -195,6 +196,13 @@ export function GroupDialog({
 }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups, sourceSlots[0]))
+
+  const hasExplicitUse =
+    (Array.isArray(form.extras.use) && form.extras.use.length > 0) ||
+    form.members.some(
+      (member) =>
+        member.kind === 'source-slot' && sourceSlots.find(({ key }) => key === member.slotKey)?.type === 'subscription',
+    )
 
   function show() {
     setForm(value || newGroup('select', groups, sourceSlots[0]))
@@ -503,7 +511,14 @@ export function GroupDialog({
                 )}
               </div>
             )}
-            <MemberEditor form={form} groups={groups} sourceSlots={sourceSlots} onChange={setForm} />
+            <MemberEditor form={form} groups={groups} sourceSlots={sourceSlots} onChange={setForm}>
+              {form.includeAllProviders && hasExplicitUse && (
+                <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100">
+                  <AlertTriangle />
+                  <AlertDescription>「包含全部代理集合」开启后将会覆盖use选择</AlertDescription>
+                </Alert>
+              )}
+            </MemberEditor>
           </FieldGroup>
           <div className="dialog-actions">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

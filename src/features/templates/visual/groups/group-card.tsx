@@ -58,7 +58,7 @@ export function GroupCard({
           <Badge variant="secondary">{group.type}</Badge>
           {!expanded && (
             <span className="template-group-summary">
-              {group.kind === 'structured' ? `${group.members.length} 个节点/子组` : 'RAW 配置'}
+              {group.kind === 'structured' ? `${group.members.length} 项引用` : 'RAW 配置'}
             </span>
           )}
         </div>
@@ -137,14 +137,14 @@ export function GroupCard({
                   )}
                 </div>
               )}
-              <div className="template-node-ref-title">包含节点与子组</div>
+              <div className="template-node-ref-title">包含节点、订阅源与子组</div>
               {group.members.length === 0 && !group.includeAllProxies && !group.includeAllProviders ? (
                 <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (
                 <div className="template-node-ref-tags">
                   {group.includeAllProxies && (
-                    <div className="template-node-tag border-dashed border-sky-300 bg-sky-50/60 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
-                      <Globe className="template-node-ref-icon text-sky-500" />
+                    <div className="template-node-tag border-dashed border-amber-300 bg-amber-50/60 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                      <Globe className="template-node-ref-icon text-amber-500" />
                       <span className="template-node-tag-name">包含全部节点</span>
                     </div>
                   )}
@@ -158,7 +158,16 @@ export function GroupCard({
                     const label = memberLabel(member, groups, sourceSlots)
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'source-slot' && <Plug className="template-node-ref-icon text-amber-500" />}
+                        {member.kind === 'source-slot' && (
+                          <Plug
+                            className={cn(
+                              'template-node-ref-icon',
+                              sourceSlots.find(({ key }) => key === member.slotKey)?.type === 'subscription'
+                                ? 'text-indigo-500'
+                                : 'text-amber-500',
+                            )}
+                          />
+                        )}
                         {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
                         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
                         {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}

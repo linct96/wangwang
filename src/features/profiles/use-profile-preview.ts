@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { parse } from 'yaml'
 import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
 import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
+import { slotProviderName } from '../../../shared/source-slots'
 
 export type ResolvedProxyGroup = {
   name: string
@@ -11,6 +12,7 @@ export type ResolvedProxyGroup = {
   excludeFilter?: string
   nodes: NodeOption[]
   staticProxies: string[]
+  use?: string[]
   includeAllProxies?: boolean
   includeAllProviders?: boolean
 }
@@ -107,8 +109,19 @@ export function useProfilePreview(
       return filtered
     }
 
-    const resolvedSlots = new Map(slotBindings.map((binding) => [binding.slotKey, resolveBinding(binding)]))
-    const slotMap = new Map(template.sourceSlots.map(({ key }) => [key, resolvedSlots.get(key) || []]))
+    const subscriptionKeys = new Set(
+      template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
+    )
+    const resolvedSlots = new Map(
+      slotBindings
+        .filter(({ slotKey }) => !subscriptionKeys.has(slotKey))
+        .map((binding) => [binding.slotKey, resolveBinding(binding)]),
+    )
+    const slotMap = new Map(
+      template.sourceSlots
+        .filter(({ type }) => type !== 'subscription')
+        .map(({ key }) => [key, resolvedSlots.get(key) || []]),
+    )
     const selectedNodesMap = new Map<string, NodeOption>()
     for (const node of [resolveBinding(nodeBinding), ...slotMap.values()].flat())
       if (!selectedNodesMap.has(node.physicalNodeId)) selectedNodesMap.set(node.physicalNodeId, node)
@@ -145,13 +158,21 @@ export function useProfilePreview(
         excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
         nodes: resolvedNodes,
         staticProxies,
+        use: Array.isArray(g.use)
+          ? g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name)))
+          : [],
         includeAllProxies,
         includeAllProviders,
       }
     })
 
     const emptyGroupCount = groups.filter(
-      (g) => g.nodes.length === 0 && g.staticProxies.length === 0 && !g.includeAllProxies && !g.includeAllProviders,
+      (g) =>
+        g.nodes.length === 0 &&
+        g.staticProxies.length === 0 &&
+        !g.use?.length &&
+        !g.includeAllProxies &&
+        !g.includeAllProviders,
     ).length
 
     return {

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import { parseConfigFileTextToJson } from 'typescript'
+import { parse } from 'yaml'
 
 // Node 24 原生执行 Worker TS；仅补齐项目使用的无扩展名相对导入。
 registerHooks({
@@ -16,7 +17,10 @@ registerHooks({
 const { app } = await import('../worker/app.ts')
 const { default: worker } = await import('../worker/index.ts')
 const { subscriptionToken, subscriptionTokenHash, sessionHash } = await import('../worker/security.ts')
-const { compileProfile, selectProfileNodes, selectDraftProfileNodes } = await import('../worker/tasks.ts')
+const { compileProfile, selectProfileNodes, selectDraftProfileNodes, affectedProfileIdsForSource } =
+  await import('../worker/tasks.ts')
+const { renderMihomoConfig } = await import('../worker/templates/renderer.ts')
+const { parseTemplateYaml } = await import('../worker/templates/validator.ts')
 const { replaceProfileNodeBinding } = await import('../worker/profile-node-binding.ts')
 const { replaceProfileSlotBindings } = await import('../worker/profile-slot-bindings.ts')
 const { replaceSourceTags } = await import('../worker/tag-store.ts')
@@ -305,6 +309,356 @@ try {
   await subscription(token, 404, 0)
   await compileProfile(env, profile.id)
   assert.equal(await (await subscription(token, 200, 1)).text(), row(profile.id).compiled_yaml)
+  // 模板声明订阅源槽位：单源绑定、不展开节点、混用 proxies/use、多组复用。
+  const request = (module, path, method = 'GET', body) =>
+    app.fetch(
+      new Request(`${origin}/api/${module}${path}`, {
+        method,
+        headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+      env,
+    )
+  const slotA = { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' }
+  const slotB = { key: '__WANGWANG_SOURCE_SLOT_AirptB__', name: '机场 B', type: 'subscription' }
+  const nodeSlot = { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' }
+  const providerYaml = `proxy-groups:
+  - name: 全部
+    type: select
+    use: [${slotA.key}, ${slotB.key}]
+  - name: A
+    type: select
+    use: [${slotA.key}]
+  - name: B
+    type: select
+    use: [${slotB.key}]
+rules:
+  - MATCH,全部
+`
+  for (const id of ['airport-a', 'airport-b', 'airport-off', 'airport-private', 'airport-pending'])
+    sqlite
+      .prepare(`INSERT INTO sources (id,name,kind,url,enabled,user_agent,refresh_interval_hours,node_name_filter,created_at,updated_at)
+      VALUES (?,?,'url',?,?,'provider-test-UA',6,'剩余|到期',1,1)`)
+      .run(
+        id,
+        id,
+        id === 'airport-private'
+          ? 'http://127.0.0.1/sub'
+          : id === 'airport-pending'
+            ? null
+            : `https://example.com/${id}?token=secret`,
+        id === 'airport-off' ? 0 : 1,
+      )
+  // 已有缓存节点也不能注入订阅槽位。
+  sqlite
+    .prepare(`INSERT INTO nodes (id,source_id,physical_node_id,original_name,position,created_at,updated_at)
+    VALUES ('airport-node','airport-a','physical-test','机场缓存节点',0,1,1)`)
+    .run()
+  const templateResponse = await request('templates', '', 'POST', {
+    name: '订阅槽位模板',
+    yaml: providerYaml,
+    sourceSlots: [slotA, slotB],
+  })
+  assert.equal(templateResponse.status, 201, await templateResponse.clone().text())
+  const providerTemplate = (await templateResponse.json()).data
+  const binding = (slot, id) => ({
+    slotKey: slot.key,
+    mode: 'source',
+    sourceIds: [id],
+    includeRegex: null,
+    excludeRegex: null,
+  })
+  const draft = {
+    name: '订阅槽位配置',
+    templateId: providerTemplate.id,
+    nodeBinding: { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null },
+    slotBindings: [binding(slotA, 'airport-a'), binding(slotB, 'airport-b')],
+  }
+  for (const invalid of [
+    [],
+    [binding(slotA, 'airport-a')],
+    [binding(slotA, 'missing'), binding(slotB, 'airport-b')],
+    [binding(slotA, 'system-manual'), binding(slotB, 'airport-b')],
+    [binding(slotA, 'airport-off'), binding(slotB, 'airport-b')],
+    [binding(slotA, 'airport-private'), binding(slotB, 'airport-b')],
+    [binding(slotA, 'airport-pending'), binding(slotB, 'airport-b')],
+    [{ ...binding(slotA, 'airport-a'), sourceIds: ['airport-a', 'airport-b'] }, binding(slotB, 'airport-b')],
+    [{ slotKey: slotA.key, mode: 'node', nodeIds: ['node-test'] }, binding(slotB, 'airport-b')],
+    [{ slotKey: slotA.key, mode: 'tag', tags: ['test'] }, binding(slotB, 'airport-b')],
+    [{ ...binding(slotA, 'airport-a'), includeRegex: 'HK' }, binding(slotB, 'airport-b')],
+    [binding(slotA, 'airport-a'), binding(slotA, 'airport-a')],
+  ])
+    assert.equal((await admin('', 'POST', { ...draft, slotBindings: invalid })).status, 400)
+  const providerCreated = await admin('', 'POST', draft)
+  assert.equal(providerCreated.status, 202, await providerCreated.clone().text())
+  const providerProfile = (await providerCreated.json()).data.profile
+  assert.deepEqual(providerProfile.slotBindings, draft.slotBindings)
+  assert.equal(Object.hasOwn(providerProfile, 'proxySourceIds'), false, '不保留配置级 provider 多选方案')
+  await compileProfile(env, providerProfile.id)
+  const compiled = parse(row(providerProfile.id).compiled_yaml)
+  assert.deepEqual(compiled.proxies, [], '订阅节点不展开，provider-only 配置可生成')
+  assert.deepEqual(Object.keys(compiled['proxy-providers']), ['wangwang-AirptA', 'wangwang-AirptB'])
+  assert.deepEqual(
+    compiled['proxy-groups'].map((g) => g.use),
+    [['wangwang-AirptA', 'wangwang-AirptB'], ['wangwang-AirptA'], ['wangwang-AirptB']],
+  )
+  assert.doesNotMatch(row(providerProfile.id).compiled_yaml, /__WANGWANG_/)
+  assert.deepEqual(compiled['proxy-providers']['wangwang-AirptA'], {
+    type: 'http',
+    url: 'https://example.com/airport-a?token=secret',
+    path: './proxy_providers/wangwang-AirptA.yaml',
+    interval: 21600,
+    header: { 'User-Agent': ['provider-test-UA'] },
+    'exclude-filter': '剩余|到期',
+    'health-check': { enable: true, url: 'https://www.gstatic.com/generate_204', interval: 300 },
+  })
+  const previewResponse = await admin('/preview', 'POST', draft)
+  assert.equal(previewResponse.status, 200)
+  const previewData = (await previewResponse.json()).data
+  assert.equal(previewData.error, null)
+  assert.equal(previewData.nodeCount, 0, '动态节点数量未知，不伪报本地缓存数量')
+  assert.deepEqual(parse(previewData.yaml), compiled)
+  const sample = await request('templates', '/preview', 'POST', { templateId: providerTemplate.id })
+  assert.equal(sample.status, 200, await sample.clone().text())
+  assert.match(
+    parse((await sample.json()).data.yaml)['proxy-providers']['wangwang-AirptA'].url,
+    /^https:\/\/example.com\//,
+  )
+  const boundPreview = await request('templates', '/preview', 'POST', {
+    templateId: providerTemplate.id,
+    profileId: providerProfile.id,
+  })
+  assert.equal(boundPreview.status, 200)
+  assert.deepEqual(parse((await boundPreview.json()).data.yaml), compiled)
+  assert.equal(
+    (
+      await request('templates', `/${providerTemplate.id}`, 'PATCH', {
+        sourceSlots: [{ ...slotA, type: 'nodes' }, slotB],
+      })
+    ).status,
+    409,
+    '已绑定槽位不能切换类型',
+  )
+  const boundDetail = (await (await request('templates', `/${providerTemplate.id}`)).json()).data
+  assert.deepEqual(boundDetail.boundSlotKeys.sort(), [slotA.key, slotB.key].sort())
+  // 模拟旧数据中模板在用但某个槽位尚未绑定；其他模板的同名 key 不应锁住它。
+  sqlite
+    .prepare('DELETE FROM profile_slot_sources WHERE profile_id=? AND slot_key=?')
+    .run(providerProfile.id, slotB.key)
+  sqlite
+    .prepare('DELETE FROM profile_slot_bindings WHERE profile_id=? AND slot_key=?')
+    .run(providerProfile.id, slotB.key)
+  fixture('other-template-binding')
+  sqlite
+    .prepare("INSERT INTO profile_slot_bindings (profile_id,slot_key,mode) VALUES (?,?,'node')")
+    .run('other-template-binding', slotB.key)
+  const partiallyBound = (await (await request('templates', `/${providerTemplate.id}`)).json()).data
+  assert.equal(partiallyBound.profileCount, 1)
+  assert.deepEqual(partiallyBound.boundSlotKeys, [slotA.key], '锁定依据是当前模板的具体槽位绑定')
+  const changedSlots = [slotA, { ...slotB, type: 'nodes' }]
+  const changedYaml = `proxy-groups:\n  - name: 全部\n    type: select\n    use: [${slotA.key}]\n    proxies: [${slotB.key}]\nrules:\n  - MATCH,全部\n`
+  const unlockedChange = await request('templates', `/${providerTemplate.id}`, 'PATCH', {
+    yaml: changedYaml,
+    sourceSlots: changedSlots,
+  })
+  assert.equal(unlockedChange.status, 202, await unlockedChange.clone().text())
+  const updatedTemplate = (await unlockedChange.json()).data.template
+  assert.equal(updatedTemplate.sourceSlots[1].type, 'nodes', '模板在用也允许未绑定槽位切换类型')
+  assert.deepEqual(updatedTemplate.boundSlotKeys, [slotA.key])
+  assert.equal(
+    (
+      await request('templates', `/${providerTemplate.id}`, 'PATCH', {
+        yaml: providerYaml,
+        sourceSlots: [slotA, slotB],
+      })
+    ).status,
+    202,
+    '未绑定槽位可双向切换类型',
+  )
+  const copiedResponse = await request('templates', `/${providerTemplate.id}/duplicate`, 'POST')
+  assert.equal(copiedResponse.status, 201)
+  const copiedId = (await copiedResponse.json()).data.id
+  assert.deepEqual(
+    (await (await request('templates', `/${copiedId}`)).json()).data.boundSlotKeys,
+    [],
+    '副本不继承原模板的绑定锁定',
+  )
+  assert.equal((await request('templates', `/${copiedId}`, 'DELETE')).status, 200)
+  assert.equal((await admin(`/${providerProfile.id}`, 'PATCH', { slotBindings: draft.slotBindings })).status, 202)
+  assert.equal(
+    (await request('templates', `/${providerTemplate.id}`, 'PATCH', { yaml: changedYaml, sourceSlots: changedSlots }))
+      .status,
+    409,
+    '加载后新绑定的槽位在保存时仍会被后端保护',
+  )
+  sqlite.prepare('DELETE FROM profiles WHERE id=?').run('other-template-binding')
+  for (const yaml of [
+    providerYaml.replace('use:', 'proxies:'),
+    providerYaml.replace(slotA.key, '__WANGWANG_SOURCE_SLOT_unknwn__'),
+  ])
+    assert.throws(() => parseTemplateYaml(yaml, [slotA, slotB]))
+  for (const flag of ['include-all-providers', 'include-all']) {
+    const yaml = providerYaml.replace('type: select', `type: select\n    ${flag}: true`)
+    assert.doesNotThrow(() => parseTemplateYaml(yaml, [slotA, slotB]))
+    const sampleResponse = await request('templates', '/preview', 'POST', { yaml, sourceSlots: [slotA, slotB] })
+    assert.equal(sampleResponse.status, 200, await sampleResponse.clone().text())
+    const sampleYaml = parse((await sampleResponse.json()).data.yaml)
+    assert.equal(sampleYaml['proxy-groups'][0][flag], true)
+    assert.deepEqual(
+      sampleYaml['proxy-groups'][0].use,
+      ['wangwang-AirptA', 'wangwang-AirptB'],
+      '保留显式 use 和自动包含开关，由 Mihomo 决定生效范围',
+    )
+    const createResponse = await request('templates', '', 'POST', {
+      name: `兼容 ${flag}`,
+      yaml,
+      sourceSlots: [slotA, slotB],
+    })
+    assert.equal(createResponse.status, 201, await createResponse.clone().text())
+    const created = (await createResponse.json()).data
+    assert.equal(
+      (await request('templates', `/${created.id}`, 'PATCH', { yaml })).status,
+      202,
+      '自动包含与 use 并存不阻止保存',
+    )
+    assert.equal((await request('templates', `/${created.id}`, 'DELETE')).status, 200)
+    const automaticYaml = `proxy-groups:\n  - name: 自动包含\n    type: select\n    ${flag}: true\n    use: [ignored-provider]\nrules: ['MATCH,自动包含']\n`
+    const automaticResponse = await request('templates', '/preview', 'POST', {
+      yaml: automaticYaml,
+      sourceSlots: [slotA, slotB],
+    })
+    assert.equal(automaticResponse.status, 200, await automaticResponse.clone().text())
+    const automaticConfig = parse((await automaticResponse.json()).data.yaml)
+    assert.deepEqual(Object.keys(automaticConfig['proxy-providers']).sort(), ['wangwang-AirptA', 'wangwang-AirptB'])
+    assert.deepEqual(
+      automaticConfig['proxy-groups'][0].use,
+      ['ignored-provider'],
+      '被自动包含覆盖的无效 use 不产生错误',
+    )
+  }
+  assert.throws(
+    () => parseTemplateYaml('proxy-groups:\n  - {name: 未引用, type: select, proxies: [DIRECT]}', [slotA]),
+    /未被代理组引用/,
+    '未被显式或自动引用的槽位仍保留校验',
+  )
+  assert.throws(
+    () => parseTemplateYaml(`proxy-groups:\n  - name: wrong\n    type: select\n    use: [${nodeSlot.key}]`, [nodeSlot]),
+    /proxies/,
+  )
+  assert.throws(
+    () =>
+      renderMihomoConfig({
+        globalNodes: [],
+        slotNodes: [],
+        template: {
+          yaml: providerYaml + 'proxy-providers:\n  wangwang-AirptA: {type: http, url: https://example.com/existing}\n',
+          sourceSlots: [slotA, slotB],
+        },
+        proxyProviders: compiled['proxy-providers'],
+      }),
+    /冲突/,
+  )
+  assert.throws(
+    () =>
+      renderMihomoConfig({
+        globalNodes: [],
+        slotNodes: [],
+        template: { yaml: providerYaml, sourceSlots: [slotA, slotB] },
+      }),
+    /未绑定/,
+  )
+  assert.throws(
+    () =>
+      renderMihomoConfig({
+        globalNodes: [],
+        slotNodes: [],
+        template: {
+          yaml: 'proxy-providers:\n  existing: {type: http, url: https://example.com/sub}\nproxy-groups:\n  - {name: bad, type: select, use: [missing]}',
+          sourceSlots: [],
+        },
+      }),
+    /不存在的 provider/,
+  )
+  assert.equal(
+    (
+      await admin(`/${providerProfile.id}`, 'PATCH', {
+        slotBindings: [binding(slotA, 'airport-b'), binding(slotB, 'airport-b')],
+      })
+    ).status,
+    202,
+  )
+  await compileProfile(env, providerProfile.id)
+  assert.equal(
+    parse(row(providerProfile.id).compiled_yaml)['proxy-providers']['wangwang-AirptA'].url,
+    'https://example.com/airport-b?token=secret',
+    '重新绑定保持 provider 名称稳定',
+  )
+  assert.ok((await affectedProfileIdsForSource(env, 'airport-b')).includes(providerProfile.id))
+  sqlite.prepare('DELETE FROM jobs WHERE entity_id=?').run(providerProfile.id)
+  assert.equal(
+    (
+      await request('sources', '/airport-b', 'PATCH', {
+        userAgent: 'changed-UA',
+        refreshIntervalHours: 12,
+        nodeNameFilter: '到期',
+      })
+    ).status,
+    200,
+  )
+  assert.ok(sqlite.prepare("SELECT 1 FROM jobs WHERE type='compile_profile' AND entity_id=?").get(providerProfile.id))
+  await compileProfile(env, providerProfile.id)
+  const updatedProvider = parse(row(providerProfile.id).compiled_yaml)['proxy-providers']['wangwang-AirptA']
+  assert.equal(updatedProvider.interval, 43200)
+  assert.deepEqual(updatedProvider.header['User-Agent'], ['changed-UA'])
+  assert.equal(updatedProvider['exclude-filter'], '到期')
+  assert.equal((await request('sources', '/airport-b', 'PATCH', { enabled: false })).status, 409)
+  assert.equal((await request('sources', '/airport-b', 'DELETE')).status, 409)
+  sqlite.prepare('UPDATE sources SET url=? WHERE id=?').run('https://example.com/new', 'airport-b')
+  await compileProfile(env, providerProfile.id)
+  assert.equal(
+    parse(row(providerProfile.id).compiled_yaml)['proxy-providers']['wangwang-AirptA'].url,
+    'https://example.com/new',
+  )
+  sqlite.prepare('UPDATE sources SET enabled=0 WHERE id=?').run('airport-b')
+  await assert.rejects(compileProfile(env, providerProfile.id), /已停用/)
+  sqlite.prepare('UPDATE sources SET enabled=1 WHERE id=?').run('airport-b')
+  const mixedYaml = providerYaml.replace('    use:', `    proxies: [${nodeSlot.key}, DIRECT]\n    use:`)
+  const mixedResponse = await request('templates', '', 'POST', {
+    name: '混用模板',
+    yaml: mixedYaml,
+    sourceSlots: [nodeSlot, slotA, slotB],
+  })
+  assert.equal(mixedResponse.status, 201, await mixedResponse.clone().text())
+  const mixedTemplate = (await mixedResponse.json()).data
+  assert.equal(mixedTemplate.sourceSlots[0].type, 'nodes', '旧槽位缺省为普通节点')
+  const mixedDraft = {
+    ...draft,
+    templateId: mixedTemplate.id,
+    slotBindings: [binding(nodeSlot, 'system-manual'), ...draft.slotBindings],
+  }
+  const mixedResponsePreview = await admin('/preview', 'POST', mixedDraft)
+  const mixedData = (await mixedResponsePreview.json()).data
+  assert.equal(mixedData.error, null)
+  const mixed = parse(mixedData.yaml)
+  assert.deepEqual(
+    mixed.proxies.map(({ name }) => name),
+    ['测试节点'],
+  )
+  assert.deepEqual(mixed['proxy-groups'][0].proxies, ['测试节点', 'DIRECT'])
+  assert.deepEqual(mixed['proxy-groups'][0].use, ['wangwang-AirptA', 'wangwang-AirptB'])
+  assert.equal((await admin(`/${providerProfile.id}`, 'PATCH', { enabled: false })).status, 202)
+  assert.equal((await admin(`/${providerProfile.id}`, 'PATCH', { name: '仅改名称' })).status, 202)
+  const renamedProvider = (await (await admin(`/${providerProfile.id}`)).json()).data
+  assert.equal(renamedProvider.enabled, false, '省略 enabled 不重新启用配置')
+  assert.equal(renamedProvider.templateId, providerTemplate.id, '省略 templateId 不回退内置模板')
+  assert.equal(renamedProvider.slotBindings[0].sourceIds[0], 'airport-b', '仅改名称保留槽位绑定')
+  assert.equal((await admin(`/${providerProfile.id}`, 'DELETE')).status, 200)
+  assert.equal(
+    sqlite.prepare('SELECT count(*) AS n FROM profile_slot_bindings WHERE profile_id=?').get(providerProfile.id).n,
+    0,
+  )
+  console.log('订阅源槽位回归通过：绑定校验、混用与复用、纯 provider、预览、类型锁定、重绑定与更新。')
+
   assert.equal((await admin(`/${profile.id}`, 'PATCH', { enabled: false })).status, 202)
   await subscription(token, 404, 0)
   assert.equal((await admin(`/${profile.id}`, 'PATCH', { enabled: true, name: '已改名' })).status, 202)

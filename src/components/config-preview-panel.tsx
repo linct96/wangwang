@@ -37,6 +37,7 @@ export type ConfigPreviewGroup = {
   excludeFilter?: string
   nodes?: ConfigPreviewGroupNode[]
   staticProxies?: string[]
+  use?: string[]
   includeAllProxies?: boolean
   includeAllProviders?: boolean
 }
@@ -274,9 +275,11 @@ export function ConfigPreviewPanel({
                   const isExpanded = !collapsedGroups[group.name]
                   const groupNodes = group.nodes ?? []
                   const groupStatics = group.staticProxies ?? []
+                  const groupProviders = group.use ?? []
                   const totalMembers =
                     groupNodes.length +
                     groupStatics.length +
+                    groupProviders.length +
                     (group.includeAllProxies ? 1 : 0) +
                     (group.includeAllProviders ? 1 : 0)
                   const isEmpty = totalMembers === 0
@@ -308,13 +311,7 @@ export function ConfigPreviewPanel({
                             </Badge>
                           ) : (
                             <Badge variant="secondary" className="text-[11px] h-4.5 px-1.5 font-mono">
-                              {groupNodes.length > 0
-                                ? `${groupNodes.length} 节点`
-                                : group.includeAllProxies
-                                  ? '全部节点'
-                                  : group.includeAllProviders
-                                    ? '全部集合'
-                                    : `${groupStatics.length} 项`}
+                              {groupNodes.length > 0 ? `${groupNodes.length} 节点` : `${totalMembers} 项`}
                             </Badge>
                           )}
                         </div>
@@ -340,10 +337,10 @@ export function ConfigPreviewPanel({
                             <div className="preview-node-ref-tags">
                               {group.includeAllProxies && (
                                 <div
-                                  className="preview-node-tag border-dashed border-sky-500/40 bg-sky-500/10 text-sky-950 dark:text-sky-200"
+                                  className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
                                   title="包含全部节点 (include-all-proxies)"
                                 >
-                                  <Globe className="size-3 text-sky-500 shrink-0" />
+                                  <Globe className="size-3 text-amber-500 shrink-0" />
                                   <span className="preview-node-tag-name">包含全部节点</span>
                                 </div>
                               )}
@@ -356,6 +353,12 @@ export function ConfigPreviewPanel({
                                   <span className="preview-node-tag-name">包含全部代理集合</span>
                                 </div>
                               )}
+                              {groupProviders.map((name) => (
+                                <Badge key={name} variant="outline" title={`use: ${name}`}>
+                                  <Boxes data-icon="inline-start" />
+                                  订阅源 · {slotMap.get(name) || name}
+                                </Badge>
+                              ))}
                               {groupStatics.map((sp) => {
                                 const isSlot = sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')
                                 const slotName = isSlot ? slotMap.get(sp) || '节点源槽位' : null
@@ -367,10 +370,10 @@ export function ConfigPreviewPanel({
                                   return (
                                     <div
                                       key={sp}
-                                      className="preview-node-tag border-dashed border-sky-500/40 bg-sky-500/10 text-sky-950 dark:text-sky-200"
+                                      className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
                                       title="包含全部节点"
                                     >
-                                      <Globe className="size-3 text-sky-500 shrink-0" />
+                                      <Globe className="size-3 text-amber-500 shrink-0" />
                                       <span className="preview-node-tag-name">包含全部节点</span>
                                     </div>
                                   )

@@ -1,6 +1,7 @@
 import { stringify } from 'yaml'
 import type { PhysicalProxyConfig } from '../db'
-import type { TemplateSourceSlot } from './source-slots'
+import { slotProviderName, type TemplateSourceSlot } from './source-slots'
+import type { ProfileProxyProviders } from '../profile-proxy-providers'
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml, validateRenderedConfig } from './validator'
 
 export type SelectedNode = {
@@ -16,14 +17,28 @@ export function renderMihomoConfig({
   globalNodes,
   slotNodes,
   template,
+  proxyProviders = {},
 }: {
   globalNodes: SelectedNode[]
   slotNodes: SelectedSlotNode[]
   template: { yaml: string; sourceSlots: TemplateSourceSlot[] }
+  proxyProviders?: ProfileProxyProviders
 }) {
   const slots = template.sourceSlots
   const config = parseTemplateYaml(template.yaml, slots)
-  const orderedSlotNodes = slots.flatMap(({ key }) => slotNodes.filter((node) => node.slotKey === key))
+  const existing = config['proxy-providers']
+  if (existing !== undefined && (!existing || typeof existing !== 'object' || Array.isArray(existing)))
+    throw new Error('模板 proxy-providers 必须是对象')
+  for (const name of Object.keys(proxyProviders))
+    if (existing && Object.hasOwn(existing, name)) throw new Error(`代理集合名称与模板冲突：${name}`)
+  if (Object.keys(proxyProviders).length)
+    config['proxy-providers'] = { ...(existing as Record<string, unknown>), ...proxyProviders }
+  const subscriptionKeys = new Set(slots.filter(({ type }) => type === 'subscription').map(({ key }) => key))
+  for (const key of subscriptionKeys)
+    if (!Object.hasOwn(proxyProviders, slotProviderName(key))) throw new Error(`订阅源槽位未绑定：${key}`)
+  const orderedSlotNodes = slots
+    .filter(({ type }) => type !== 'subscription')
+    .flatMap(({ key }) => slotNodes.filter((node) => node.slotKey === key))
   const uniqueNodes = [
     ...[...globalNodes, ...orderedSlotNodes]
       .reduce(
@@ -32,7 +47,7 @@ export function renderMihomoConfig({
       )
       .values(),
   ]
-  if (!uniqueNodes.length) throw new Error('配置没有可用节点')
+  if (!uniqueNodes.length && !Object.keys(config['proxy-providers'] || {}).length) throw new Error('配置没有可用节点')
   if (uniqueNodes.length > 1000) throw new Error('单个配置最多包含 1000 个节点')
 
   const seenNames = new Map<string, number>()
@@ -54,6 +69,8 @@ export function renderMihomoConfig({
   }
 
   for (const group of config['proxy-groups'] as Array<Record<string, unknown>>) {
+    if (Array.isArray(group.use))
+      group.use = [...new Set(group.use.map((item) => (subscriptionKeys.has(item) ? slotProviderName(item) : item)))]
     if (!Array.isArray(group.proxies)) continue
     const filter = compileNodeFilter(group.filter, 'filter')
     const exclude = compileNodeFilter(group['exclude-filter'], 'exclude-filter')

@@ -15,6 +15,7 @@ import {
   validateProfileSlotBindings,
 } from '../profile-slot-bindings'
 import { readProfileNodeBinding, replaceProfileNodeBinding } from '../profile-node-binding'
+import { resolveProfileProxyProviders } from '../profile-proxy-providers'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
@@ -31,7 +32,7 @@ const nodeBindingSchema = z.discriminatedUnion('mode', [
   z
     .object({
       mode: z.literal('source'),
-      sourceIds: z.array(z.string().min(1)).min(1).max(20),
+      sourceIds: z.array(z.string().min(1)).max(20),
       includeRegex: regexSchema,
       excludeRegex: regexSchema,
     })
@@ -94,7 +95,14 @@ export const profileSchema = z
   })
   .strict()
 
-export const profileUpdateSchema = profileSchema.partial().strict()
+export const profileUpdateSchema = profileSchema
+  .partial()
+  .extend({
+    templateId: templateIdSchema.optional(),
+    enabled: z.boolean().optional(),
+    tags: profileSchema.shape.tags.removeDefault().optional(),
+  })
+  .strict()
 
 async function templateSlots(env: Env, templateId: string) {
   const template = await resolveTemplate(env, templateId)
@@ -176,7 +184,11 @@ profilesRouter.post('/', async (c) => {
   let bindings
   try {
     ;[nodeBinding, bindings] = await Promise.all([
-      validateProfileNodeBinding(c.env, input.nodeBinding),
+      validateProfileNodeBinding(
+        c.env,
+        input.nodeBinding,
+        slots.some(({ type }) => type === 'subscription'),
+      ),
       validateProfileSlotBindings(c.env, slots, input.slotBindings),
     ])
   } catch (error) {
@@ -223,12 +235,14 @@ profilesRouter.post('/preview', async (c) => {
 
   const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
   try {
-    const { globalNodes, slotNodes } = await selectDraftProfileNodes(c.env, input, slotNames)
+    const bindings = await validateProfileSlotBindings(c.env, template.sourceSlots, input.slotBindings)
+    const proxyProviders = await resolveProfileProxyProviders(c.env, template.sourceSlots, bindings)
+    const providerSlotKeys = new Set(
+      template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
+    )
+    const { globalNodes, slotNodes } = await selectDraftProfileNodes(c.env, input, slotNames, providerSlotKeys)
     const uniquePhysicalCount = new Set([...globalNodes, ...slotNodes].map((n) => n.physicalNodeId)).size
-    if (!uniquePhysicalCount) {
-      return ok(c, { yaml: '', error: '当前配置没有可用节点', nodeCount: 0 })
-    }
-    const yaml = renderMihomoConfig({ globalNodes, slotNodes, template })
+    const yaml = renderMihomoConfig({ globalNodes, slotNodes, template, proxyProviders })
     return ok(c, { yaml, error: null, nodeCount: uniquePhysicalCount })
   } catch (error) {
     return ok(c, { yaml: '', error: error instanceof Error ? error.message : '生成配置预览失败', nodeCount: 0 })
@@ -254,10 +268,16 @@ profilesRouter.patch('/:id', async (c) => {
   if (input.templateId && input.templateId !== current.templateId && !input.slotBindings)
     return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', '切换模板时必须重新绑定动态节点槽')
 
+  const slots = await templateSlots(c.env, input.templateId || current.templateId)
+  if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
   let nodeBinding
-  if (input.nodeBinding) {
+  if (input.nodeBinding || input.templateId || input.slotBindings) {
     try {
-      nodeBinding = await validateProfileNodeBinding(c.env, input.nodeBinding)
+      nodeBinding = await validateProfileNodeBinding(
+        c.env,
+        input.nodeBinding || (await readProfileNodeBinding(c.env, id)),
+        slots.some(({ type }) => type === 'subscription'),
+      )
     } catch (error) {
       return fail(c, 400, 'PROFILE_NODE_BINDING_INVALID', error instanceof Error ? error.message : '节点选择无效')
     }
@@ -265,8 +285,6 @@ profilesRouter.patch('/:id', async (c) => {
 
   let bindings
   if (input.slotBindings) {
-    const slots = await templateSlots(c.env, input.templateId || current.templateId)
-    if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
     try {
       bindings = await validateProfileSlotBindings(c.env, slots, input.slotBindings)
     } catch (error) {

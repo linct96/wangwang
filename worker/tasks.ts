@@ -16,6 +16,7 @@ import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews, normalizeTagName } from './tag-model'
 import { readProfileNodeBinding } from './profile-node-binding'
+import { resolveProfileProxyProviders } from './profile-proxy-providers'
 import {
   readProfileSlotBindings,
   type ProfileNodeBinding,
@@ -673,11 +674,13 @@ export async function selectProfileNodes(
   env: Env,
   profile: typeof profiles.$inferSelect,
   slotNames = new Map<string, string>(),
+  providerSlotKeys = new Set<string>(),
 ): Promise<{ globalNodes: SelectedNode[]; slotNodes: SelectedSlotNode[] }> {
-  const [nodeBinding, bindings] = await Promise.all([
+  const [nodeBinding, allBindings] = await Promise.all([
     readProfileNodeBinding(env, profile.id),
     readProfileSlotBindings(env, profile.id),
   ])
+  const bindings = allBindings.filter(({ slotKey }) => !providerSlotKeys.has(slotKey))
   const globalNodes = await selectGlobalNodes(env, profile.id, nodeBinding)
   const slotNodes = [
     ...(await selectSourceSlotNodes(
@@ -825,21 +828,23 @@ export async function selectDraftProfileNodes(
     tags?: string[]
   },
   slotNames = new Map<string, string>(),
+  providerSlotKeys = new Set<string>(),
 ): Promise<{ globalNodes: SelectedNode[]; slotNodes: SelectedSlotNode[] }> {
+  const bindings = draft.slotBindings.filter(({ slotKey }) => !providerSlotKeys.has(slotKey))
   const globalNodes = await selectDraftGlobalNodes(env, draft.nodeBinding)
   const slotNodes = [
     ...(await selectDraftSourceSlotNodes(
       env,
-      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'source' }> => b.mode === 'source'),
+      bindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'source' }> => b.mode === 'source'),
     )),
     ...(await selectDirectSlotNodes(
       env,
-      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'node' }> => b.mode === 'node'),
+      bindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'node' }> => b.mode === 'node'),
       slotNames,
     )),
     ...(await selectTagSlotNodes(
       env,
-      draft.slotBindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'tag' }> => b.mode === 'tag'),
+      bindings.filter((b): b is Extract<ProfileSlotBindingInput, { mode: 'tag' }> => b.mode === 'tag'),
     )),
   ]
 
@@ -881,10 +886,15 @@ export async function compileProfile(env: Env, profileId: string, lease?: JobLea
   if (!template) throw new PermanentJobError('订阅模板不存在')
 
   const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
-  const selected = await selectProfileNodes(env, profile, slotNames)
+  const providerSlotKeys = new Set(
+    template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
+  )
+  const selected = await selectProfileNodes(env, profile, slotNames, providerSlotKeys)
   let yaml: string
   try {
-    yaml = renderMihomoConfig({ ...selected, template })
+    const bindings = await readProfileSlotBindings(env, profile.id)
+    const proxyProviders = await resolveProfileProxyProviders(env, template.sourceSlots, bindings)
+    yaml = renderMihomoConfig({ ...selected, template, proxyProviders })
   } catch (error) {
     throw new PermanentJobError(error instanceof Error ? error.message : '配置生成失败')
   }

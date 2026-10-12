@@ -4,25 +4,34 @@ import { toast } from 'sonner'
 import { Network } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ProxyGroupDraft, SourceSlotDraft } from '../model'
+
+const slotTypeOptions = [
+  { value: 'nodes', label: '普通节点槽位' },
+  { value: 'subscription', label: '订阅源槽位' },
+]
 
 export function SlotDialog({
   slots,
   groups,
   value,
+  typeLocked = false,
   onSave,
   children,
 }: {
   slots: SourceSlotDraft[]
   groups: ProxyGroupDraft[]
   value?: SourceSlotDraft
+  typeLocked?: boolean
   onSave: (slot: SourceSlotDraft) => void
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(value?.name || '')
+  const [type, setType] = useState<'nodes' | 'subscription'>(value?.type || 'nodes')
 
   function show() {
     if (!value && slots.length >= 20) {
@@ -30,6 +39,7 @@ export function SlotDialog({
       return
     }
     setName(value?.name || '')
+    setType(value?.type || 'nodes')
     setOpen(true)
   }
 
@@ -49,11 +59,12 @@ export function SlotDialog({
     }
 
     if (value) {
-      onSave({ ...value, name: trimmed })
+      onSave({ ...value, name: trimmed, type })
     } else {
       onSave({
         key: `__WANGWANG_SOURCE_SLOT_${nanoid(6)}__`,
         name: trimmed,
+        type,
       })
     }
     setOpen(false)
@@ -83,9 +94,39 @@ export function SlotDialog({
           onClose={() => setOpen(false)}
         >
           <FieldGroup className="gap-4">
+            <Field data-disabled={typeLocked && Boolean(value)}>
+              <FieldLabel htmlFor="slot-type">槽位类型</FieldLabel>
+              <Select
+                disabled={typeLocked && Boolean(value)}
+                items={slotTypeOptions}
+                value={type}
+                onValueChange={(next: 'nodes' | 'subscription' | null) => {
+                  if (next) setType(next)
+                }}
+              >
+                <SelectTrigger id="slot-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="nodes">普通节点槽位</SelectItem>
+                    <SelectItem value="subscription">订阅源槽位</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                {type === 'subscription'
+                  ? '绑定一个 URL 订阅节点源，通过代理组 use 动态加载，不展开本地节点。'
+                  : '根据节点源、标签或指定节点筛选并注入，通过 proxies 引用。'}
+              </FieldDescription>
+              {typeLocked && value && (
+                <FieldDescription>此槽位已被配置绑定，不能修改类型；代理组引用与配置绑定相互独立。</FieldDescription>
+              )}
+            </Field>
             <Field>
-              <FieldLabel>槽位名称</FieldLabel>
+              <FieldLabel htmlFor="slot-name">槽位名称</FieldLabel>
               <Input
+                id="slot-name"
                 value={name}
                 maxLength={40}
                 placeholder="例如：🚀 主力节点、香港节点"
@@ -98,9 +139,7 @@ export function SlotDialog({
                   }
                 }}
               />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                用于在分流订阅中标识该槽位，建议使用清晰的功能或地区名称。
-              </p>
+              <FieldDescription>用于在分流订阅中标识该槽位，建议使用清晰的功能或地区名称。</FieldDescription>
             </Field>
 
             {value && (
