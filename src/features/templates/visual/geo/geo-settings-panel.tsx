@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Database, Globe, Replace, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, Database, Map, Replace, Sparkles, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
@@ -140,8 +140,8 @@ export function GeoSettingsPanel({
           >
             <ChevronDown className={cn('template-collapse-icon', expanded && 'expanded')} />
             <div className="flex items-center gap-2">
-              <Globe className="size-4 text-primary" />
-              <strong>GEO 规则数据源</strong>
+              <Map className="size-4 text-sky-500" />
+              <strong>GEO 数据库 (GeoData)</strong>
             </div>
 
             {/* 状态徽标组 */}

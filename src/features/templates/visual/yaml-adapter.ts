@@ -852,11 +852,7 @@ export function uniqueName(base: string, groups: ProxyGroupDraft[]) {
   return `${base} ${suffix}`
 }
 
-export function newGroup(
-  type: SupportedProxyGroupType,
-  groups: ProxyGroupDraft[],
-  initialSlot?: SourceSlotDraft,
-): StructuredProxyGroupDraft {
+export function newGroup(type: SupportedProxyGroupType, groups: ProxyGroupDraft[]): StructuredProxyGroupDraft {
   const base =
     type === 'select' ? '代理组' : type === 'url-test' ? '自动选择' : type === 'fallback' ? '故障转移' : '负载均衡'
   return {
@@ -864,7 +860,7 @@ export function newGroup(
     id: runtimeId('group', groups.length),
     name: uniqueName(base, groups),
     type,
-    members: initialSlot ? [{ kind: 'source-slot', slotKey: initialSlot.key }] : [],
+    members: [],
     extras: {},
     ...(type === 'select' ? {} : { url: 'https://www.gstatic.com/generate_204', interval: 300 }),
     ...(type === 'url-test' ? { tolerance: 50 } : {}),

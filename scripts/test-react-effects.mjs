@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { nanoid } from 'nanoid'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
@@ -265,6 +266,64 @@ try {
   editor.unmount()
   assert.equal(timers.size, 0)
 
+  const { parse } = await import('yaml')
+  const { resolveProxyGroupIncludeAll } = await server.ssrLoadModule('/src/lib/mihomo.ts')
+  const previewSlots = [
+    { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' },
+    { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' },
+  ]
+  const templateYaml = `proxy-groups:\n  - name: 模板组\n    type: select\n    proxies: [${previewSlots[0].key}, DIRECT]\n    use: [${previewSlots[1].key}, external]\n    include-all: true\nrules: ['MATCH,模板组']\n`
+  const compiledYaml =
+    'proxy-groups: [{name: 模板组, type: select, proxies: [普通节点示例, DIRECT], use: [wangwang-AirptA, external], include-all: true}]'
+  const templatePreview = () =>
+    harness('features/templates/template-preview.tsx', 'TemplatePreview', {
+      parse,
+      resolveProxyGroupIncludeAll,
+      setTimeout(fn) {
+        timers.set(++timerId, fn)
+        return timerId
+      },
+      clearTimeout(id) {
+        timers.delete(id)
+      },
+    })
+  for (const props of [
+    { yaml: templateYaml, sourceSlots: previewSlots },
+    { templateId: 'saved-template', auto: true },
+  ]) {
+    const view = templatePreview()
+    view.render(props)
+    view.flush()
+    for (const [id, run] of timers) {
+      timers.delete(id)
+      run()
+    }
+    if (props.templateId) {
+      assert.equal(view.requests[0].path, '/templates/saved-template')
+      view.requests[0].resolve({ yaml: templateYaml, sourceSlots: previewSlots })
+      await tick()
+    }
+    const request = view.requests.at(-1)
+    assert.equal(request.path, '/templates/preview')
+    assert.deepEqual(JSON.parse(request.options.body), { yaml: templateYaml, sourceSlots: previewSlots })
+    request.resolve({ yaml: compiledYaml, nodeCount: 2 })
+    await tick()
+    const panel = find(view.render(props), 'ConfigPreviewPanel')[0].props
+    assert.deepEqual(
+      Array.from(panel.groups[0].staticProxies),
+      [previewSlots[0].key, 'DIRECT'],
+      '标签来源于模板，不是假节点',
+    )
+    assert.deepEqual(Array.from(panel.groups[0].use), [previewSlots[1].key, 'external'])
+    assert.equal(panel.groups[0].includeAllProxies, true)
+    assert.equal(panel.groups[0].includeAllProviders, true)
+    assert.deepEqual(panel.sourceSlots, previewSlots)
+    assert.equal(panel.yaml, compiledYaml, '编译 YAML 保持原样')
+    assert.equal(panel.nodeCount, 2)
+    view.unmount()
+    assert.equal(timers.size, 0)
+  }
+
   const slotFixtures = [
     { key: '__WANGWANG_SOURCE_SLOT_Bound1__', name: '已绑定', type: 'nodes' },
     { key: '__WANGWANG_SOURCE_SLOT_Free01__', name: '未绑定', type: 'nodes' },
@@ -361,6 +420,127 @@ try {
     ],
   ]
   const { cn } = await server.ssrLoadModule('/src/lib/utils.ts')
+  for (const type of ['select', 'url-test', 'fallback', 'load-balance']) {
+    assert.deepEqual(adapter.newGroup(type, []).members, [], '所有新代理组默认不引用槽位')
+  }
+  for (const sourceSlots of [[], previewSlots, [...previewSlots].reverse()]) {
+    const dialog = harness('features/templates/visual/groups/group-dialog.tsx', 'GroupDialog', {
+      newGroup: adapter.newGroup,
+      memberLabel: () => 'DIRECT',
+      cn,
+      FieldHelp: 'FieldHelp',
+      ProxyGroupIconPicker: 'ProxyGroupIconPicker',
+    })
+    const props = { groups: [], sourceSlots, onSave() {}, children: '添加' }
+    const open = () => {
+      find(dialog.render(props), 'span')[0].props.onClick({ stopPropagation() {} })
+      return dialog.render(props)
+    }
+    let tree = open()
+    const members = find(tree, 'MemberEditor')[0].props
+    assert.equal(members.form.members.length, 0, '有无槽位及槽位顺序都不影响新建默认留空')
+    members.onChange({ ...members.form, members: [{ kind: 'builtin', value: 'DIRECT' }] })
+    tree = dialog.render(props)
+    find(tree, 'AppDialog')[0].props.onClose()
+    tree = open()
+    assert.equal(find(tree, 'MemberEditor')[0].props.form.members.length, 0, '重新打开添加弹窗恢复空成员')
+    dialog.unmount()
+  }
+  const memberPath = 'features/templates/visual/groups/member-editor.tsx'
+  const duplicateDraft = adapter.parseVisualTemplate(
+    templateYaml.replace('DIRECT]', `DIRECT, DIRECT, ${previewSlots[0].key}]`),
+    previewSlots,
+  ).draft
+  let memberForm = duplicateDraft.groups[0]
+  const originalMembers = JSON.stringify(memberForm.members)
+  let memberChanges = 0
+  const memberEditor = harness(memberPath, 'MemberEditor', {
+    nanoid,
+    cn,
+    memberLabel: (member) => member.value || member.slotKey,
+    MemberTag: 'MemberTag',
+    isSortableOperation: () => true,
+  })
+  const renderMembers = () =>
+    memberEditor.render({
+      form: memberForm,
+      groups: duplicateDraft.groups,
+      sourceSlots: previewSlots,
+      onChange(next) {
+        memberForm = next
+        memberChanges++
+      },
+    })
+  let memberTree = renderMembers()
+  const initialTags = find(memberTree, 'MemberTag')
+  const ids = new Map(initialTags.map(({ props }) => [props.member, props.id]))
+  assert.equal(new Set(ids.values()).size, memberForm.members.length, '导入的重复节点和槽位拥有独立身份')
+  const checkMemberIds = () => {
+    const tags = find(memberTree, 'MemberTag')
+    tags.forEach(({ props }, index) => {
+      assert.equal(props.key, props.id, 'React key 与拖拽 id 相同')
+      assert.equal(props.id, ids.get(props.member), '移动或删除不改变其他成员身份')
+      let sortable
+      harness(memberPath, 'MemberTag', {
+        cn,
+        memberLabel: () => '成员',
+        useSortable(input) {
+          sortable = input
+          return {}
+        },
+      }).render(props)
+      assert.equal(sortable.id, props.id)
+      assert.equal(sortable.index, index, '只有排序位置随顺序变化')
+    })
+  }
+  checkMemberIds()
+  for (const [from, to] of [
+    [0, 4],
+    [3, 1],
+    [4, 0],
+  ]) {
+    find(memberTree, 'DragDropProvider')[0].props.onDragEnd({
+      operation: { source: { initialIndex: from, index: to } },
+    })
+    memberTree = renderMembers()
+    checkMemberIds()
+  }
+  for (const event of [
+    { canceled: true, operation: { source: { initialIndex: 0, index: 2 } } },
+    { operation: {} },
+    { operation: { source: { initialIndex: 0, index: 0 } } },
+    { operation: { source: { initialIndex: -1, index: 2 } } },
+    { operation: { source: { initialIndex: 0, index: 99 } } },
+  ])
+    find(memberTree, 'DragDropProvider')[0].props.onDragEnd(event)
+  assert.equal(memberChanges, 3, '取消、无目标、原位和越界拖拽不修改成员')
+  const remaining = memberForm.members.filter((_, index) => index !== 1)
+  find(memberTree, 'MemberTag')[1].props.onDelete()
+  assert.deepEqual(Array.from(memberForm.members), Array.from(remaining))
+  memberTree = renderMembers()
+  checkMemberIds()
+  find(memberTree, 'DropdownMenuItem')
+    .find((item) => find(item, 'span').some(({ props }) => props.children[0] === 'REJECT'))
+    .props.onClick()
+  memberTree = renderMembers()
+  const addedTag = find(memberTree, 'MemberTag').at(-1)
+  assert.equal(addedTag.props.member.value, 'REJECT')
+  assert.ok(!new Set(ids.values()).has(addedTag.props.id), '新添加成员获得独立标识')
+  ids.set(addedTag.props.member, addedTag.props.id)
+  checkMemberIds()
+  assert.equal(JSON.stringify(duplicateDraft.groups[0].members), originalMembers, '身份标识和排序不污染原始成员数据')
+  const savedMembers = parse(adapter.applyVisualTemplate(templateYaml, { ...duplicateDraft, groups: [memberForm] }))[
+    'proxy-groups'
+  ][0]
+  assert.deepEqual(
+    savedMembers.proxies,
+    Array.from(memberForm.members)
+      .filter((m) => m.kind !== 'source-slot' || m.slotKey === previewSlots[0].key)
+      .map((m) => m.value || m.slotKey),
+  )
+  assert.deepEqual(savedMembers.use, ['external', previewSlots[1].key], '订阅引用保持原样')
+  memberEditor.unmount()
+
   for (const [group, expectedWarning] of warningCases) {
     const card = harness('features/templates/visual/groups/group-card.tsx', 'GroupCard', {
       useSortable: () => ({}),
@@ -395,13 +575,26 @@ try {
       )
     for (const [index, member] of group.members.filter((member) => member.kind === 'source-slot').entries()) {
       const expectedColor = member.slotKey === subscriptionFixture.key ? 'text-indigo-500' : 'text-amber-500'
-      assert.ok(find(expanded, 'Plug')[index].props.className.includes(expectedColor), '代理组引用沿用槽位类型颜色')
+      const sharedTag = find(expanded, 'SourceSlotTag')[index]
+      assert.equal(sharedTag.props.slot.key, member.slotKey, '代理组复用共享槽位标签')
+      const slotTag = harness('components/source-slot-tag.tsx', 'SourceSlotTag', { cn })
+      assert.ok(
+        find(slotTag.render(sharedTag.props), 'Plug')[0].props.className.includes(expectedColor),
+        '代理组引用沿用槽位类型颜色',
+      )
       const tag = harness('features/templates/visual/groups/member-editor.tsx', 'MemberTag', {
         useSortable: () => ({}),
         memberLabel: () => '引用',
         cn,
       })
-      const tagTree = tag.render({ member, index, groups: props.groups, sourceSlots: props.sourceSlots, onDelete() {} })
+      const tagTree = tag.render({
+        member,
+        id: `fixture-${index}`,
+        index,
+        groups: props.groups,
+        sourceSlots: props.sourceSlots,
+        onDelete() {},
+      })
       assert.ok(find(tagTree, 'Plug')[0].props.className.includes(expectedColor), '弹窗已选成员沿用槽位类型颜色')
     }
     let savedGroup
@@ -425,11 +618,17 @@ try {
     find(closedDialog, 'span')[0].props.onClick({ stopPropagation() {} })
     let opened = dialog.render(dialogProps)
     const memberProps = find(opened, 'MemberEditor')[0].props
+    assert.deepEqual(memberProps.form.members, group.members, '编辑已有代理组保留成员')
     const memberPanel = harness('features/templates/visual/groups/member-editor.tsx', 'MemberEditor', {
+      nanoid,
       cn,
       MemberTag: 'MemberTag',
     }).render(memberProps)
     assert.equal(memberPanel.props.children.at(-1), memberProps.children, '提示位于成员表单项内部的底部')
+    assert.ok(
+      find(memberPanel, 'span').some(({ props }) => props.children[0] === '代理组节点'),
+      '成员模块标题使用新名称',
+    )
     const availableSlotIcons = find(memberPanel, 'Plug')
     const unselectedSlots = props.sourceSlots.filter(
       (slot) => !group.members.some((member) => member.kind === 'source-slot' && member.slotKey === slot.key),

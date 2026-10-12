@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { Boxes, ChevronDown, Edit2, Eye, Globe, GripVertical, Network, Plug, Radio, Server, Trash2 } from 'lucide-react'
+import { Boxes, ChevronDown, Edit2, Eye, Globe, GripVertical, Network, Radio, Server, Trash2 } from 'lucide-react'
 import { AppDialog, IconButton } from '@/components/app-primitives'
 import { Badge } from '@/components/ui/badge'
+import { SourceSlotTag } from '@/components/source-slot-tag'
 import { cn } from '@/lib/utils'
 import { memberLabel, type ProxyGroupDraft, type SourceSlotDraft } from '../model'
 import { GroupDialog } from './group-dialog'
@@ -137,7 +138,7 @@ export function GroupCard({
                   )}
                 </div>
               )}
-              <div className="template-node-ref-title">包含节点、订阅源与子组</div>
+              <div className="template-node-ref-title">代理组节点</div>
               {group.members.length === 0 && !group.includeAllProxies && !group.includeAllProviders ? (
                 <div className="template-node-ref-empty">暂无包含节点与子组</div>
               ) : (
@@ -156,18 +157,21 @@ export function GroupCard({
                   )}
                   {group.members.map((member, index) => {
                     const label = memberLabel(member, groups, sourceSlots)
+                    if (member.kind === 'source-slot') {
+                      return (
+                        <SourceSlotTag
+                          key={`${member.kind}-${index}`}
+                          slot={
+                            sourceSlots.find(({ key }) => key === member.slotKey) ?? {
+                              key: member.slotKey,
+                              name: label,
+                            }
+                          }
+                        />
+                      )
+                    }
                     return (
                       <div key={`${member.kind}-${index}`} className="template-node-tag">
-                        {member.kind === 'source-slot' && (
-                          <Plug
-                            className={cn(
-                              'template-node-ref-icon',
-                              sourceSlots.find(({ key }) => key === member.slotKey)?.type === 'subscription'
-                                ? 'text-indigo-500'
-                                : 'text-amber-500',
-                            )}
-                          />
-                        )}
                         {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500" />}
                         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500" />}
                         {member.kind === 'raw' && <Server className="template-node-ref-icon text-purple-500" />}

@@ -630,7 +630,7 @@ rules:
   })
   assert.equal(mixedResponse.status, 201, await mixedResponse.clone().text())
   const mixedTemplate = (await mixedResponse.json()).data
-  assert.equal(mixedTemplate.sourceSlots[0].type, 'nodes', '旧槽位缺省为普通节点')
+  assert.equal(mixedTemplate.sourceSlots[0].type, 'nodes', '旧槽位缺省为节点槽位类型')
   const mixedDraft = {
     ...draft,
     templateId: mixedTemplate.id,

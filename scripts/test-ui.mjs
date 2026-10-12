@@ -47,6 +47,11 @@ for (const file of readdirSync(`${root}src`, { recursive: true }).filter((file) 
   visit(source)
 }
 
+const slotDialogSource = readFileSync(`${root}src/features/templates/visual/slots/slot-dialog.tsx`, 'utf8')
+assert.match(slotDialogSource, /value: 'nodes', label: '节点槽位'/, '槽位类型选择器使用新名称')
+assert.match(slotDialogSource, /<SelectItem value="nodes">节点槽位<\/SelectItem>/, '槽位类型选项名称保持一致')
+assert.doesNotMatch(slotDialogSource, /普通节点槽位/, '不再展示旧类型名称')
+
 const server = await createServer({
   root,
   configFile: false,
@@ -54,6 +59,8 @@ const server = await createServer({
   server: { middlewareMode: true },
 })
 try {
+  const { Badge } = await server.ssrLoadModule('/src/components/ui/badge.tsx')
+  const headerBadge = (label) => renderToStaticMarkup(createElement(Badge, { variant: 'secondary' }, label))
   const { Button } = await server.ssrLoadModule('/src/components/ui/button.tsx')
   const { Select, SelectTrigger, SelectValue } = await server.ssrLoadModule('/src/components/ui/select.tsx')
   const { Checkbox } = await server.ssrLoadModule('/src/components/ui/checkbox.tsx')
@@ -165,6 +172,10 @@ try {
     const unused = slotMarkup(slot, [{ level: 'error', code: 'SLOT_UNUSED', message: '槽位未引用', slotKey: slot.key }])
     assert.match(unused, /未被代理组引用/)
     assert.match(unused, /lucide-plug/, '两种槽位使用相同插头图标')
+    assert.ok(
+      unused.includes(headerBadge(slot.type === 'subscription' ? 'use' : 'proxies')),
+      '槽位标题标签与代理组使用相同的 secondary 样式和默认尺寸',
+    )
     assert.match(
       unused,
       slot.type === 'subscription' ? /text-indigo-500/ : /text-amber-500/,
@@ -190,7 +201,45 @@ try {
   assert.match(picker([]), /请为此槽位选择一个订阅节点源/)
   assert.match(picker(['missing']), /绑定的节点源不存在/)
   assert.match(picker(['airport']), /机场 · 已启用/)
+  assert.doesNotMatch(picker(['airport'], true), /aria-invalid="true"/, '有效选择消除提交错误')
+  const { SourceSlotTag } = await server.ssrLoadModule('/src/components/source-slot-tag.tsx')
   const { ConfigPreviewPanel } = await server.ssrLoadModule('/src/components/config-preview-panel.tsx')
+  for (const type of ['select', 'url-test', 'fallback', 'load-balance', '自定义类型']) {
+    for (const nodes of [[], [{ id: 'node', name: '节点' }]]) {
+      const markup = renderToStaticMarkup(
+        createElement(ConfigPreviewPanel, { groups: [{ name: '标题标签', type, nodes }] }),
+      )
+      assert.ok(markup.includes(headerBadge(type)), '预览组类型标签复用左侧代理组样式，不按类型换色或缩小')
+      assert.ok(markup.includes(headerBadge(`${nodes.length} 节点`)), '预览标题右侧计数标签使用相同样式')
+    }
+  }
+  for (const filter of [undefined, '不匹配']) {
+    const emptyPreview = renderToStaticMarkup(
+      createElement(ConfigPreviewPanel, { groups: [{ name: '空节点组', type: 'select', filter }] }),
+    )
+    assert.match(emptyPreview, /暂无节点/)
+    assert.match(emptyPreview, /0 节点/)
+    assert.doesNotMatch(
+      emptyPreview,
+      /当前未选择节点|preview-group-card-empty|data-variant="destructive"/,
+      '空组使用中性占位',
+    )
+  }
+  const nodePreview = renderToStaticMarkup(
+    createElement(ConfigPreviewPanel, {
+      sourceSlots: [nodeSlot],
+      groups: [{ name: '节点槽位', type: 'select', staticProxies: [nodeSlot.key, 'DIRECT', '子组'] }],
+    }),
+  )
+  assert.ok(nodePreview.includes(renderToStaticMarkup(createElement(SourceSlotTag, { slot: nodeSlot }))))
+  assert.doesNotMatch(nodePreview, /border-dashed|普通节点示例/, '普通槽位复用左侧标签，不显示示例节点或额外底色')
+  assert.match(nodePreview, /lucide-radio/, '内建策略图标不变')
+  assert.match(nodePreview, /lucide-network/, '子组图标不变')
+  const tagStyles = readFileSync(`${root}src/styles/components.css`, 'utf8')
+  assert.match(tagStyles, /\.template-node-tag,\s*\.preview-node-tag\s*\{/, '左右标签共享基础样式')
+  const emptyNoteStyles = tagStyles.match(/\.preview-empty-group-note\s*\{([^}]+)\}/)[1]
+  assert.doesNotMatch(emptyNoteStyles, /destructive/, '空节点占位不使用错误色')
+  assert.match(emptyNoteStyles, /var\(--muted-foreground\)/)
   const providerPreview = renderToStaticMarkup(
     createElement(ConfigPreviewPanel, { groups: [{ name: '仅订阅', type: 'select', use: ['wangwang-AirptA'] }] }),
   )
@@ -208,6 +257,12 @@ try {
     assert.doesNotMatch(text, /订阅源 · 机场 A|wangwang-AirptA|__WANGWANG_SOURCE_SLOT_/, '不展示槽位内部标识或额外前缀')
     assert.match(text, /订阅源 · external/, '外部 provider 仍显示自己的名称')
     assert.match(markup, new RegExp(`use: ${reference}`), '提示保留真实引用标识')
+    assert.ok(
+      markup.includes(
+        renderToStaticMarkup(createElement(SourceSlotTag, { slot: subscriptionSlot, title: `use: ${reference}` })),
+      ),
+      '订阅槽位复用左侧标签的图标、颜色、名称和尺寸',
+    )
   }
   const { ProfilePreviewPanel } = await server.ssrLoadModule('/src/features/profiles/profile-preview-panel.tsx')
   const profileMarkup = renderToStaticMarkup(
@@ -230,6 +285,47 @@ try {
     assert.match(markup, /text-indigo-500/, '预览的全部代理集合沿用 use 槽位颜色')
     assert.doesNotMatch(markup, /sky-/, '不再使用与 proxies 不一致的天蓝色')
   }
+  const profileEditorSource = readFileSync(`${root}src/features/profiles/profile-editor.tsx`, 'utf8')
+  assert.doesNotMatch(profileEditorSource, /动态节点槽 ·|订阅源槽位 ·/, '槽位标题不再带有旧前缀')
+  assert.match(profileEditorSource, /Globe className="size-4 text-amber-500"/, '全部节点图标与右侧预览配色一致')
+  assert.match(
+    profileEditorSource,
+    /slot\.type === 'subscription' \? 'text-indigo-500' : 'text-amber-500'/,
+    '槽位图标配色与模板保持一致',
+  )
+  assert.match(
+    profileEditorSource,
+    /slot\.type === 'subscription' \? 'use' : 'proxies'/,
+    '槽位标题带有与模板一致的类型 Badge',
+  )
+  const geoPanelSource = readFileSync(`${root}src/features/templates/visual/geo/geo-settings-panel.tsx`, 'utf8')
+  assert.doesNotMatch(geoPanelSource, /GEO 规则数据源/, 'GEO 面板标题不再使用旧文案')
+  assert.match(geoPanelSource, /<strong>GEO 数据库 \(GeoData\)<\/strong>/, 'GEO 标题采用与流量嗅探一致的中英文规范')
+  assert.match(geoPanelSource, /Map className="size-4 text-sky-500"/, 'GEO 图标采用地图图标并搭配明亮天蓝色')
+
+  const { GeoSettingsPanel } = await server.ssrLoadModule('/src/features/templates/visual/geo/geo-settings-panel.tsx')
+  const { SnifferSettingsPanel } = await server.ssrLoadModule(
+    '/src/features/templates/visual/sniffer/sniffer-settings-panel.tsx',
+  )
+  const geoMarkup = renderToStaticMarkup(
+    createElement(GeoSettingsPanel, { value: { geoxUrl: {} }, issues: [], onChange: () => {} }),
+  )
+  const snifferMarkup = renderToStaticMarkup(
+    createElement(SnifferSettingsPanel, {
+      value: { sniff: { HTTP: {}, TLS: {}, QUIC: {} } },
+      issues: [],
+      onChange: () => {},
+    }),
+  )
+  assert.match(geoMarkup, /class="[^"]*lucide-map[^"]*size-4 text-sky-500[^"]*"/, 'GEO 模块渲染专属 Map 图标与配色')
+  assert.match(geoMarkup, /<strong>GEO 数据库 \(GeoData\)<\/strong>/, 'GEO 模块渲染统一风格标题')
+  assert.match(
+    snifferMarkup,
+    /class="[^"]*lucide-radar[^"]*size-4 text-purple-500[^"]*"/,
+    '流量嗅探渲染 Radar 图标与配色',
+  )
+  assert.match(snifferMarkup, /<strong>流量嗅探 \(Sniffer\)<\/strong>/, '流量嗅探保持统一风格标题')
+
   console.log('订阅槽位 UI 回归通过：混用序列化、导入类型、自动包含兼容、单选状态与 provider 预览。')
   console.log('UI 迁移回归通过：单一 Base UI、调用 API、显式表单提交、首屏选项标签、半选、进度语义与分段选择。')
 } finally {

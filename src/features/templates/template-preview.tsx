@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { parse } from 'yaml'
 import { api } from '@/api/client'
-import type { TemplateId, TemplatePreview as PreviewResult, TemplateSourceSlot } from '@/api/types'
+import type { TemplateDetail, TemplateId, TemplatePreview as PreviewResult, TemplateSourceSlot } from '@/api/types'
 import { ConfigPreviewPanel } from '@/components/config-preview-panel'
 import type { ConfigPreviewGroup } from '@/components/config-preview-panel'
 import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
@@ -20,7 +20,7 @@ export function TemplatePreview({
   className?: string
 }) {
   const isEditing = yaml !== undefined
-  const [preview, setPreview] = useState<PreviewResult>()
+  const [preview, setPreview] = useState<PreviewResult & { template: Pick<TemplateDetail, 'yaml' | 'sourceSlots'> }>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -28,12 +28,15 @@ export function TemplatePreview({
     setLoading(true)
     setError('')
     try {
+      const template = isEditing
+        ? { yaml, sourceSlots: sourceSlots || [] }
+        : await api<TemplateDetail>(`/templates/${templateId}`, { signal })
       const result = await api<PreviewResult>('/templates/preview', {
         method: 'POST',
-        body: JSON.stringify(isEditing ? { yaml, sourceSlots: sourceSlots || [] } : { templateId }),
+        body: JSON.stringify({ yaml: template.yaml, sourceSlots: template.sourceSlots }),
         signal,
       })
-      if (!signal?.aborted) setPreview(result)
+      if (!signal?.aborted) setPreview({ ...result, template })
     } catch (reason) {
       if (!signal?.aborted) setError(reason instanceof Error ? reason.message : '预览生成失败')
     } finally {
@@ -54,11 +57,13 @@ export function TemplatePreview({
   }, [auto, isEditing, templateId, yaml, sourceSlots])
 
   const currentYaml = preview?.yaml ?? ''
+  // 标签保留模板槽位身份，编译 YAML 中的示例节点只用于 YAML 预览。
+  const templateYaml = yaml ?? preview?.template.yaml ?? ''
 
   const groups = useMemo<ConfigPreviewGroup[]>(() => {
-    if (!currentYaml) return []
+    if (!templateYaml) return []
     try {
-      const parsed = parse(currentYaml)
+      const parsed = parse(templateYaml)
       if (!parsed || typeof parsed !== 'object') return []
       const rawGroups = Array.isArray(parsed['proxy-groups']) ? parsed['proxy-groups'] : []
       return rawGroups.map((g: Record<string, unknown>) => {
@@ -79,7 +84,7 @@ export function TemplatePreview({
     } catch {
       return []
     }
-  }, [currentYaml])
+  }, [templateYaml])
 
   return (
     <ConfigPreviewPanel
@@ -87,7 +92,7 @@ export function TemplatePreview({
       title="配置预览"
       defaultViewMode="groups"
       groups={groups}
-      sourceSlots={sourceSlots}
+      sourceSlots={isEditing ? sourceSlots : preview?.template.sourceSlots}
       groupsLoading={loading}
       groupsEmptyText="暂无策略组数据"
       groupsEmptySubText="当前模板尚未解析到有效 proxy-groups 策略组"

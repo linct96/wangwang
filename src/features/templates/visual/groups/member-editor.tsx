@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { nanoid } from 'nanoid'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable'
 import { CircleHelp, GripVertical, Network, Plug, Plus, Radio, X } from 'lucide-react'
@@ -23,19 +25,21 @@ import {
 
 export function MemberTag({
   member,
+  id,
   index,
   groups,
   sourceSlots,
   onDelete,
 }: {
   member: ProxyGroupMemberDraft
+  id: string
   index: number
   groups: ProxyGroupDraft[]
   sourceSlots: SourceSlotDraft[]
   onDelete: () => void
 }) {
   const { ref, handleRef, isDragging } = useSortable({
-    id: `member-${index}`,
+    id,
     index,
   })
   const label = memberLabel(member, groups, sourceSlots)
@@ -90,6 +94,8 @@ export function MemberEditor({
   onChange: (form: StructuredProxyGroupDraft) => void
   children?: React.ReactNode
 }) {
+  // 对象身份区分重复成员，排序时保留原对象和标识，不写入模板数据。
+  const [memberIds] = useState(() => new WeakMap<ProxyGroupMemberDraft, string>())
   const selectedKeys = new Set(
     form.members.map((m) =>
       m.kind === 'source-slot'
@@ -132,7 +138,7 @@ export function MemberEditor({
     <Field>
       <div className="flex items-center justify-between gap-2">
         <FieldLabel className="items-center gap-1.5">
-          <span>包含节点、订阅源与子组</span>
+          <span>代理组节点</span>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -150,7 +156,7 @@ export function MemberEditor({
             >
               <CircleHelp className="size-3.5" />
             </TooltipTrigger>
-            <TooltipContent>普通节点与子组使用 proxies，订阅源槽位自动使用 use</TooltipContent>
+            <TooltipContent>节点槽位与子组使用 proxies，订阅源槽位自动使用 use</TooltipContent>
           </Tooltip>
         </FieldLabel>
         <DropdownMenu>
@@ -227,16 +233,21 @@ export function MemberEditor({
               暂未包含任何成员，点击右上角“添加”
             </div>
           ) : (
-            form.members.map((member, index) => (
-              <MemberTag
-                key={`${member.kind}-${member.kind === 'group' ? member.groupId : member.kind === 'source-slot' ? member.slotKey : member.value}-${index}`}
-                member={member}
-                index={index}
-                groups={groups}
-                sourceSlots={sourceSlots}
-                onDelete={() => removeMember(index)}
-              />
-            ))
+            form.members.map((member, index) => {
+              const id = memberIds.get(member) ?? nanoid()
+              memberIds.set(member, id)
+              return (
+                <MemberTag
+                  key={id}
+                  id={id}
+                  member={member}
+                  index={index}
+                  groups={groups}
+                  sourceSlots={sourceSlots}
+                  onDelete={() => removeMember(index)}
+                />
+              )
+            })
           )}
         </div>
       </DragDropProvider>

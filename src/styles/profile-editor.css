@@ -61,7 +61,7 @@
     margin-bottom: 16px;
   }
 
-  /* 基础区块卡牌规范（参考 GEO 规则数据源可折叠卡牌） */
+  /* 基础区块卡牌规范（参考 GEO 数据库可折叠卡牌） */
   .profile-section {
     background: var(--card);
     border: 1px solid var(--border);

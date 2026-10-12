@@ -539,7 +539,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                           >
                             <ChevronDown className={cn('profile-collapse-icon', nodesExpanded && 'expanded')} />
                             <div className="flex items-center gap-2">
-                              <Globe className="size-4 text-sky-500" />
+                              <Globe className="size-4 text-amber-500" />
                               <strong className="text-sm font-semibold text-foreground">全部节点</strong>
                             </div>
 
@@ -650,11 +650,19 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                     }}
                                   >
                                     <ChevronDown className={cn('profile-collapse-icon', isExpanded && 'expanded')} />
-                                    <div className="flex items-center gap-2">
-                                      <Plug className="size-4 text-amber-500" />
-                                      <strong className="text-sm font-semibold text-foreground">
-                                        {slot.type === 'subscription' ? '订阅源槽位' : '动态节点槽'} · {slot.name}
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Plug
+                                        className={cn(
+                                          'size-4 shrink-0',
+                                          slot.type === 'subscription' ? 'text-indigo-500' : 'text-amber-500',
+                                        )}
+                                      />
+                                      <strong className="text-sm font-semibold text-foreground truncate">
+                                        {slot.name}
                                       </strong>
+                                      <Badge variant="outline">
+                                        {slot.type === 'subscription' ? 'use' : 'proxies'}
+                                      </Badge>
                                     </div>
 
                                     {(binding.mode === 'source' || binding.mode === 'tag') &&

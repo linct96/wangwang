@@ -195,7 +195,7 @@ export function GroupDialog({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups, sourceSlots[0]))
+  const [form, setForm] = useState<StructuredProxyGroupDraft>(() => value || newGroup('select', groups))
 
   const hasExplicitUse =
     (Array.isArray(form.extras.use) && form.extras.use.length > 0) ||
@@ -205,7 +205,7 @@ export function GroupDialog({
     )
 
   function show() {
-    setForm(value || newGroup('select', groups, sourceSlots[0]))
+    setForm(value || newGroup('select', groups))
     setOpen(true)
   }
 

@@ -354,23 +354,6 @@
     align-items: center;
     gap: 6px;
   }
-  .template-node-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
-    border-radius: var(--radius-xs, 4px);
-    background: var(--muted);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    line-height: 1.4;
-    max-width: 100%;
-  }
-  .template-node-tag-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   .template-node-ref-icon {
     width: 13px;
     height: 13px;

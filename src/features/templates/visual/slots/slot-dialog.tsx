@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import type { ProxyGroupDraft, SourceSlotDraft } from '../model'
 
 const slotTypeOptions = [
-  { value: 'nodes', label: '普通节点槽位' },
+  { value: 'nodes', label: '节点槽位' },
   { value: 'subscription', label: '订阅源槽位' },
 ]
 
@@ -109,7 +109,7 @@ export function SlotDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="nodes">普通节点槽位</SelectItem>
+                    <SelectItem value="nodes">节点槽位</SelectItem>
                     <SelectItem value="subscription">订阅源槽位</SelectItem>
                   </SelectGroup>
                 </SelectContent>

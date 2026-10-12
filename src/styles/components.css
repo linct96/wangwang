@@ -157,10 +157,6 @@
   border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
 }
 
-.preview-group-card-empty {
-  border-color: color-mix(in oklch, var(--destructive) 35%, var(--border));
-}
-
 .preview-group-card-header {
   display: flex;
   align-items: center;
@@ -205,6 +201,7 @@
   padding: 1px;
 }
 
+.template-node-tag,
 .preview-node-tag {
   display: inline-flex;
   align-items: center;
@@ -215,9 +212,10 @@
   border: 1px solid var(--border);
   font-size: 12px;
   line-height: 1.4;
-  max-width: 240px;
+  max-width: 100%;
 }
 
+.template-node-tag-name,
 .preview-node-tag-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -227,9 +225,9 @@
 .preview-empty-group-note {
   padding: 8px 10px;
   border-radius: 4px;
-  background: color-mix(in oklch, var(--destructive) 6%, transparent);
-  border: 1px dashed color-mix(in oklch, var(--destructive) 25%, transparent);
-  color: var(--destructive);
+  background: var(--muted);
+  border: 1px dashed var(--border);
+  color: var(--muted-foreground);
   font-size: 11.5px;
 }
 

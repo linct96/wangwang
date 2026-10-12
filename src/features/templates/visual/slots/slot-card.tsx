@@ -74,7 +74,7 @@ export function SlotCard({
               className={cn('size-4 shrink-0', slot.type === 'subscription' ? 'text-indigo-500' : 'text-amber-500')}
             />
             <strong className="truncate">{slot.name || '未命名槽位'}</strong>
-            <Badge variant="outline">{slot.type === 'subscription' ? 'use' : 'proxies'}</Badge>
+            <Badge variant="secondary">{slot.type === 'subscription' ? 'use' : 'proxies'}</Badge>
           </div>
           {slotIssues.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-destructive">

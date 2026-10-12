@@ -13,7 +13,6 @@ import {
   Layers,
   Network,
   PanelRightClose,
-  Plug,
   Radio,
   RefreshCw,
   Server,
@@ -21,6 +20,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SourceSlotTag } from '@/components/source-slot-tag'
 import { cn } from '@/lib/utils'
 import { slotProviderName, type TemplateSourceSlot } from '../../shared/source-slots'
 
@@ -80,19 +80,6 @@ export type ConfigPreviewPanelProps = {
   onToggleCollapse?: () => void
 }
 
-function groupTypeBadgeVariant(type: string) {
-  switch (type.toLowerCase()) {
-    case 'select':
-      return 'default'
-    case 'url-test':
-      return 'secondary'
-    case 'fallback':
-      return 'outline'
-    default:
-      return 'secondary'
-  }
-}
-
 export function ConfigPreviewPanel({
   className,
   title = '配置预览',
@@ -129,16 +116,16 @@ export function ConfigPreviewPanel({
   }
 
   const slotMap = useMemo(() => {
-    return new Map((sourceSlots ?? []).map(({ key, name }) => [key, name]))
+    return new Map((sourceSlots ?? []).map((slot) => [slot.key, slot]))
   }, [sourceSlots])
   const providerSlotMap = useMemo(
     () =>
       new Map(
         (sourceSlots ?? [])
           .filter(({ type }) => type === 'subscription')
-          .flatMap(({ key, name }) => [
-            [key, name],
-            [slotProviderName(key), name],
+          .flatMap((slot) => [
+            [slot.key, slot],
+            [slotProviderName(slot.key), slot],
           ]),
       ),
     [sourceSlots],
@@ -295,7 +282,7 @@ export function ConfigPreviewPanel({
                   const isEmpty = totalMembers === 0
 
                   return (
-                    <div key={group.name} className={cn('preview-group-card', isEmpty && 'preview-group-card-empty')}>
+                    <div key={group.name} className="preview-group-card">
                       {/* 卡片头部 */}
                       <div className="preview-group-card-header" onClick={() => toggleGroup(group.name)}>
                         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -309,18 +296,14 @@ export function ConfigPreviewPanel({
                           <span className="font-medium text-xs text-foreground truncate" title={group.name}>
                             {group.name}
                           </span>
-                          <Badge variant={groupTypeBadgeVariant(group.type)} className="text-[10px] h-4 px-1 shrink-0">
-                            {group.type}
-                          </Badge>
+                          <Badge variant="secondary">{group.type}</Badge>
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           {isEmpty ? (
-                            <Badge variant="destructive" className="text-[10px] h-4.5 px-1.5">
-                              0 节点
-                            </Badge>
+                            <Badge variant="secondary">0 节点</Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-[11px] h-4.5 px-1.5 font-mono">
+                            <Badge variant="secondary">
                               {groupNodes.length > 0 ? `${groupNodes.length} 节点` : `${totalMembers} 项`}
                             </Badge>
                           )}
@@ -363,15 +346,23 @@ export function ConfigPreviewPanel({
                                   <span className="preview-node-tag-name">包含全部代理集合</span>
                                 </div>
                               )}
-                              {groupProviders.map((name) => (
-                                <Badge key={name} variant="outline" title={`use: ${name}`}>
-                                  <Boxes data-icon="inline-start" />
-                                  {providerSlotMap.get(name) || `订阅源 · ${name}`}
-                                </Badge>
-                              ))}
+                              {groupProviders.map((name) => {
+                                const slot = providerSlotMap.get(name)
+                                return slot ? (
+                                  <SourceSlotTag key={name} slot={slot} title={`use: ${name}`} />
+                                ) : (
+                                  <Badge key={name} variant="outline" title={`use: ${name}`}>
+                                    <Boxes data-icon="inline-start" />
+                                    {`订阅源 · ${name}`}
+                                  </Badge>
+                                )
+                              })}
                               {groupStatics.map((sp) => {
-                                const isSlot = sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')
-                                const slotName = isSlot ? slotMap.get(sp) || '节点源槽位' : null
+                                if (sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')) {
+                                  return (
+                                    <SourceSlotTag key={sp} slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位' }} />
+                                  )
+                                }
                                 const isAllProxies = sp === '包含全部节点' || sp === 'include-all-proxies'
                                 const isAllProviders = sp === '包含全部代理集合' || sp === 'include-all-providers'
                                 const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
@@ -403,25 +394,13 @@ export function ConfigPreviewPanel({
                                 }
 
                                 return (
-                                  <div
-                                    key={sp}
-                                    className={cn(
-                                      'preview-node-tag',
-                                      isSlot &&
-                                        'border-dashed border-amber-500/45 bg-amber-500/10 text-amber-950 dark:text-amber-200',
-                                    )}
-                                    title={isSlot ? `节点源槽位: ${slotName} (${sp})` : sp}
-                                  >
-                                    {isSlot ? (
-                                      <Plug className="size-3 text-amber-500 shrink-0" />
-                                    ) : isBuiltin ? (
+                                  <div key={sp} className="preview-node-tag" title={sp}>
+                                    {isBuiltin ? (
                                       <Radio className="size-3 text-emerald-500 shrink-0" />
                                     ) : (
                                       <Network className="size-3 text-blue-500 shrink-0" />
                                     )}
-                                    <span className={cn('preview-node-tag-name', !isSlot && 'font-mono')}>
-                                      {isSlot ? slotName : sp}
-                                    </span>
+                                    <span className="preview-node-tag-name font-mono">{sp}</span>
                                   </div>
                                 )
                               })}
@@ -443,7 +422,7 @@ export function ConfigPreviewPanel({
                             </div>
                           ) : (
                             <div className="preview-empty-group-note">
-                              <span>当前未选择节点，或被该组的正则过滤规则全部过滤。</span>
+                              <span>暂无节点</span>
                             </div>
                           )}
                         </div>
