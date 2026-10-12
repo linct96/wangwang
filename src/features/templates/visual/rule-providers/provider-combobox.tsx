@@ -46,7 +46,7 @@ export function RuleProviderCombobox({
         </span>
         <ChevronsUpDown data-icon="inline-end" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-(--anchor-width) p-2">
+      <PopoverContent align="start" className="w-max min-w-(--anchor-width) max-w-(--available-width) p-2">
         <Input
           value={query}
           autoFocus
@@ -71,8 +71,10 @@ export function RuleProviderCombobox({
             >
               <Check className={cn('size-4 shrink-0', provider.id === value ? 'opacity-100' : 'opacity-0')} />
               <span className="min-w-0 flex-1">
-                <strong className="block truncate text-sm font-medium">{provider.name}</strong>
-                <small className="block truncate text-muted-foreground">{ruleProviderLabel(provider)}</small>
+                <strong className="block whitespace-normal wrap-anywhere text-sm font-medium">{provider.name}</strong>
+                <small className="block whitespace-normal wrap-anywhere text-muted-foreground">
+                  {ruleProviderLabel(provider)}
+                </small>
               </span>
             </button>
           ))}

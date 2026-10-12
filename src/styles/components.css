@@ -216,11 +216,6 @@
   font-size: 12px;
   line-height: 1.4;
   max-width: 240px;
-  transition: all 0.12s ease;
-}
-
-.preview-node-tag:hover {
-  border-color: color-mix(in oklch, var(--border) 60%, var(--foreground));
 }
 
 .preview-node-tag-name {

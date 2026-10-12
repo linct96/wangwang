@@ -292,7 +292,7 @@ export function RuleMatcher({
           <SelectTrigger className="w-[155px] font-mono">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="w-max min-w-(--anchor-width) max-w-(--available-width)">
             <SelectGroup>
               {ruleTypes.map((t) => {
                 const meta = getRuleTypeMeta(t)
@@ -356,7 +356,7 @@ export function RuleMatcher({
         <SelectTrigger className="w-auto font-mono cursor-pointer select-none" title="点击切换规则类型">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="w-max min-w-(--anchor-width) max-w-(--available-width)">
           <SelectGroup>
             {ruleTypes.map((t) => {
               const meta = getRuleTypeMeta(t)

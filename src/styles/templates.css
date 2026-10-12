@@ -304,9 +304,10 @@
     flex-shrink: 0;
     color: var(--muted-foreground);
     transition: transform 0.2s ease;
+    transform: rotate(-90deg);
   }
   .template-collapse-icon.expanded {
-    transform: rotate(180deg);
+    transform: rotate(0deg);
   }
   .template-group-summary {
     margin-left: 4px;

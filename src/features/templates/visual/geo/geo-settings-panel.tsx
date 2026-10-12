@@ -73,7 +73,7 @@ export function GeoSettingsPanel({
   issues: VisualIssue[]
   onChange: (value: GeoSettingsDraft) => void
 }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
 
   const update = (patch: Partial<GeoSettingsDraft>) => onChange({ ...value, ...patch, geoxUrl: { ...value.geoxUrl } })
 

@@ -12,6 +12,19 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 assert.equal(config.style, 'base-nova')
 assert.ok(!Object.keys(pkg.dependencies).some((name) => /radix/.test(name)))
 
+for (const [file, prefix] of [
+  ['templates.css', 'template'],
+  ['profile-editor.css', 'profile'],
+]) {
+  const styles = readFileSync(`${root}src/styles/${file}`, 'utf8')
+  assert.match(styles, new RegExp(`\\.${prefix}-collapse-icon \\{[^}]*transform: rotate\\(-90deg\\)`), '折叠箭头朝右')
+  assert.match(
+    styles,
+    new RegExp(`\\.${prefix}-collapse-icon\\.expanded \\{[^}]*transform: rotate\\(0deg\\)`),
+    '展开箭头朝下',
+  )
+}
+
 // Catch incompatible call sites before they become silent runtime regressions.
 for (const file of readdirSync(`${root}src`, { recursive: true }).filter((file) => file.endsWith('.tsx'))) {
   const text = readFileSync(`${root}src/${file}`, 'utf8')

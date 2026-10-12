@@ -84,7 +84,7 @@ export function SnifferSettingsPanel({
   issues: VisualIssue[]
   onChange: (value: SnifferSettingsDraft) => void
 }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
 
   // 端口文本与输入错误本地状态
   const sniffKey = PROTOCOL_CONFIGS.map(({ key }) => `${key}:${(value.sniff[key]?.ports ?? []).join(',')}`).join('|')

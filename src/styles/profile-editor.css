@@ -112,10 +112,11 @@
     flex-shrink: 0;
     color: var(--muted-foreground);
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: rotate(-90deg);
   }
 
   .profile-collapse-icon.expanded {
-    transform: rotate(180deg);
+    transform: rotate(0deg);
   }
 
   .profile-section-badges {
