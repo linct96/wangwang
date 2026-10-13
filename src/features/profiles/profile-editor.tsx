@@ -53,7 +53,7 @@ function validRegex(value: string | null) {
   }
 }
 
-const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '全部节点' }
+const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '全部节点', type: 'nodes' as const }
 
 function emptyNodeBinding(): ProfileNodeBinding {
   return { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }

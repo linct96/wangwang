@@ -7,7 +7,6 @@ import { slotProviderName, sourceProviderName } from '../../../shared/source-slo
 export type ResolvedProxyGroup = {
   name: string
   type: string
-  proxies: string[]
   filter?: string
   excludeFilter?: string
   nodes: (NodeOption & { slotKey?: string })[]
@@ -170,7 +169,6 @@ export function useProfilePreview(
       return {
         name: String(g.name || '未命名策略组'),
         type: String(g.type || 'select'),
-        proxies: proxiesList.map(String),
         filter: typeof g.filter === 'string' ? g.filter : undefined,
         excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
         nodes: resolvedNodes,

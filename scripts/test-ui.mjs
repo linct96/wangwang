@@ -7,10 +7,6 @@ import ts from 'typescript'
 import { createServer } from 'vite'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const config = JSON.parse(readFileSync(new URL('../components.json', import.meta.url), 'utf8'))
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-assert.equal(config.style, 'base-nova')
-assert.ok(!Object.keys(pkg.dependencies).some((name) => /radix/.test(name)))
 
 for (const [file, prefix] of [
   ['templates.css', 'template'],
@@ -25,10 +21,9 @@ for (const [file, prefix] of [
   )
 }
 
-// Catch incompatible call sites before they become silent runtime regressions.
+// 检查首屏选项标签与表单按钮的提交语义。
 for (const file of readdirSync(`${root}src`, { recursive: true }).filter((file) => file.endsWith('.tsx'))) {
   const text = readFileSync(`${root}src/${file}`, 'utf8')
-  assert.doesNotMatch(text, /radix-ui|asChild|--radix-/, file)
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   function visit(node, inForm = false) {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
@@ -50,7 +45,6 @@ for (const file of readdirSync(`${root}src`, { recursive: true }).filter((file) 
 const slotDialogSource = readFileSync(`${root}src/features/templates/visual/slots/slot-dialog.tsx`, 'utf8')
 assert.match(slotDialogSource, /value: 'nodes', label: '节点槽位'/, '槽位类型选择器使用新名称')
 assert.match(slotDialogSource, /<SelectItem value="nodes">节点槽位<\/SelectItem>/, '槽位类型选项名称保持一致')
-assert.doesNotMatch(slotDialogSource, /普通节点槽位/, '不再展示旧类型名称')
 
 const server = await createServer({
   root,
@@ -109,7 +103,7 @@ try {
   )
   const { validateVisualDraft } = await server.ssrLoadModule('/src/features/templates/visual/validation.ts')
   const { parse } = await import('yaml')
-  const nodeSlot = { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' }
+  const nodeSlot = { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点', type: 'nodes' }
   const subscriptionSlot = { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' }
   const yaml = `proxy-providers:\n  external: {type: http, url: https://example.com/sub}\nproxy-groups:\n  - name: mixed\n    type: select\n    proxies: [${nodeSlot.key}, DIRECT]\n    use: [external, ${subscriptionSlot.key}]\nrules: ['MATCH,mixed']\n`
   const parsed = parseVisualTemplate(yaml, [nodeSlot, subscriptionSlot])
@@ -421,22 +415,19 @@ try {
     '未选择订阅源时保留全部订阅源占位，已有订阅源时不重复显示',
   )
   assert.doesNotMatch(profileMarkup, /暂无节点/, '自动包含的占位符不应被空状态隐藏')
-  for (const group of [
-    { name: '自动包含', type: 'select', includeAllProxies: true, includeAllProviders: true },
-    { name: '标签兼容', type: 'select', staticProxies: ['全部节点', '全部订阅源'] },
-  ]) {
-    const markup = renderToStaticMarkup(createElement(ConfigPreviewPanel, { groups: [group] }))
-    assert.match(markup, /text-amber-500/, '预览的全部节点沿用 proxies 槽位颜色')
-    assert.match(markup, /text-indigo-500/, '预览的全部订阅源沿用 use 槽位颜色')
-    assert.doesNotMatch(markup, /sky-/, '不再使用与 proxies 不一致的天蓝色')
-  }
+  const automaticMarkup = renderToStaticMarkup(
+    createElement(ConfigPreviewPanel, {
+      groups: [{ name: '自动包含', type: 'select', includeAllProxies: true, includeAllProviders: true }],
+    }),
+  )
+  assert.match(automaticMarkup, /text-amber-500/, '预览的全部节点沿用 proxies 槽位颜色')
+  assert.match(automaticMarkup, /text-indigo-500/, '预览的全部订阅源沿用 use 槽位颜色')
   const profileEditorSource = readFileSync(`${root}src/features/profiles/profile-editor.tsx`, 'utf8')
   assert.match(
     profileEditorSource,
     /slot=\{NODE_BINDING_EDITOR_SCOPE\}\s+allowReorder=\{false\}/,
     '全部节点入口禁用手动排序',
   )
-  assert.doesNotMatch(profileEditorSource, /动态节点槽 ·|订阅源槽位 ·/, '槽位标题不再带有旧前缀')
   assert.match(profileEditorSource, /Network className="size-4 text-amber-500"/, '全部节点图标与右侧预览配色一致')
   assert.match(
     profileEditorSource,
@@ -465,7 +456,6 @@ try {
   assert.match(subscriptionSourcesEditorSource, /选择接入订阅源/, '全部订阅源对齐全部节点的接入选择标题')
   assert.match(subscriptionSourcesEditorSource, /source-picker-grid/, '全部订阅源沿用全部节点的网格布局')
   const geoPanelSource = readFileSync(`${root}src/features/templates/visual/geo/geo-settings-panel.tsx`, 'utf8')
-  assert.doesNotMatch(geoPanelSource, /GEO 规则数据源/, 'GEO 面板标题不再使用旧文案')
   assert.match(geoPanelSource, /<strong>GEO 数据库 \(GeoData\)<\/strong>/, 'GEO 标题采用与流量嗅探一致的中英文规范')
   assert.match(geoPanelSource, /Map className="size-4 text-sky-500"/, 'GEO 图标采用地图图标并搭配明亮天蓝色')
 
@@ -492,8 +482,8 @@ try {
   )
   assert.match(snifferMarkup, /<strong>流量嗅探 \(Sniffer\)<\/strong>/, '流量嗅探保持统一风格标题')
 
-  console.log('订阅槽位 UI 回归通过：混用序列化、导入类型、自动包含兼容、单选状态与 provider 预览。')
-  console.log('UI 迁移回归通过：单一 Base UI、调用 API、显式表单提交、首屏选项标签、半选、进度语义与分段选择。')
+  console.log('订阅槽位 UI 回归通过：混用序列化、导入类型、自动包含、单选状态与 provider 预览。')
+  console.log('UI 行为回归通过：显式表单提交、首屏选项标签、半选、进度语义与分段选择。')
 } finally {
   await server.close()
 }

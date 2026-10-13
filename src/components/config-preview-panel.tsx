@@ -33,7 +33,6 @@ export type ConfigPreviewGroupNode = {
 export type ConfigPreviewGroup = {
   name: string
   type: string
-  proxies?: string[]
   filter?: string
   excludeFilter?: string
   nodes?: ConfigPreviewGroupNode[]
@@ -396,40 +395,12 @@ export function ConfigPreviewPanel({
                                   return (
                                     <SourceSlotTag
                                       key={sp}
-                                      slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位' }}
+                                      slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位', type: 'nodes' }}
                                       placeholder
                                     />
                                   )
                                 }
-                                const isAllProxies = sp === '全部节点' || sp === 'include-all-proxies'
-                                const isAllProviders = sp === '全部订阅源' || sp === 'include-all-providers'
                                 const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
-
-                                if (isAllProxies) {
-                                  return (
-                                    <div
-                                      key={sp}
-                                      className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
-                                      title="全部节点"
-                                    >
-                                      <Network className="size-3 text-amber-500 shrink-0" />
-                                      <span className="preview-node-tag-name">全部节点</span>
-                                    </div>
-                                  )
-                                }
-
-                                if (isAllProviders) {
-                                  return (
-                                    <div
-                                      key={sp}
-                                      className="preview-node-tag border-dashed border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                                      title="全部订阅源"
-                                    >
-                                      <Boxes className="size-3 text-indigo-500 shrink-0" />
-                                      <span className="preview-node-tag-name">全部订阅源</span>
-                                    </div>
-                                  )
-                                }
 
                                 return (
                                   <div key={sp} className="preview-node-tag" title={sp}>

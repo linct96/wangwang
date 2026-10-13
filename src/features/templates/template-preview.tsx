@@ -73,7 +73,6 @@ export function TemplatePreview({
           type: String(g?.type || 'select'),
           filter: typeof g?.filter === 'string' ? g.filter : undefined,
           excludeFilter: typeof g?.['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
-          proxies: Array.isArray(g?.proxies) ? g.proxies.map(String) : [],
           staticProxies: Array.isArray(g?.proxies) ? g.proxies.map(String) : [],
           nodes: [],
           use: Array.isArray(g.use) ? g.use.map(String) : [],

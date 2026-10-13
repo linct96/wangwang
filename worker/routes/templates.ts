@@ -29,7 +29,7 @@ const sourceSlotsSchema = z
       .object({
         key: z.string().regex(SOURCE_SLOT_KEY_PATTERN, '节点源槽位 key 格式无效'),
         name: z.string().trim().min(1, '节点源槽位名称不能为空').max(40),
-        type: z.enum(['nodes', 'subscription']).default('nodes'),
+        type: z.enum(['nodes', 'subscription']),
       })
       .strict(),
   )
@@ -57,7 +57,7 @@ async function replaceTemplateSlots(env: Env, templateId: string, sourceSlots: T
     ...sourceSlots.map(({ key, name, type }, position) =>
       env.DB.prepare(
         'INSERT INTO template_slots (template_id, `key`, name, type, position) VALUES (?, ?, ?, ?, ?)',
-      ).bind(templateId, key, name, type || 'nodes', position),
+      ).bind(templateId, key, name, type, position),
     ),
   ])
 }
@@ -247,7 +247,7 @@ templatesRouter.patch('/:id', async (c) => {
   try {
     const lockedSlot = current.sourceSlots.find((slot) => {
       const next = nextSlots.find(({ key }) => key === slot.key)
-      return boundSlotKeys.includes(slot.key) && next && (slot.type || 'nodes') !== (next.type || 'nodes')
+      return boundSlotKeys.includes(slot.key) && next && slot.type !== next.type
     })
     if (lockedSlot)
       return fail(c, 409, 'TEMPLATE_SOURCE_SLOTS_LOCKED', `槽位“${lockedSlot.name}”已被配置绑定，不能修改槽位类型`)

@@ -345,7 +345,7 @@ try {
     '全部节点禁用拖拽传感器，普通槽位保留拖拽',
   )
   const previewSlots = [
-    { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' },
+    { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点', type: 'nodes' },
     { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' },
   ]
   const templateYaml = `proxy-groups:\n  - name: 模板组\n    type: select\n    proxies: [${previewSlots[0].key}, DIRECT]\n    use: [${previewSlots[1].key}, external]\n    include-all: true\nrules: ['MATCH,模板组']\n`
@@ -813,7 +813,7 @@ const profileForm = { Field: 'Field', Subscribe: 'Subscribe', store: {}, state: 
 const profileEditor = harness(profilePath, 'ProfileEditor', {
   z,
   revalidateLogic,
-  NODE_BINDING_EDITOR_SCOPE: { key: 'profile-node-binding', name: '全部节点' },
+  NODE_BINDING_EDITOR_SCOPE: { key: 'profile-node-binding', name: '全部节点', type: 'nodes' },
   emptyNodeBinding: profileHelper('emptyNodeBinding'),
   validRegex: profileHelper('validRegex'),
   hasConfiguration: profileHelper('hasConfiguration'),

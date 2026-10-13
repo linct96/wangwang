@@ -16,9 +16,8 @@ export function validateTemplateSourceSlots(value: unknown): TemplateSourceSlot[
       throw new Error('节点源槽位 key 格式无效')
     if (typeof source.name !== 'string' || !source.name.trim()) throw new Error('节点源槽位名称不能为空')
     if (source.name.trim().length > 40) throw new Error('节点源槽位名称不能超过 40 个字符')
-    if (source.type !== undefined && source.type !== 'nodes' && source.type !== 'subscription')
-      throw new Error('槽位类型无效')
-    return { key: source.key, name: source.name.trim(), type: source.type || 'nodes' }
+    if (source.type !== 'nodes' && source.type !== 'subscription') throw new Error('槽位类型无效')
+    return { key: source.key, name: source.name.trim(), type: source.type }
   })
   if (new Set(slots.map(({ key }) => key)).size !== slots.length) throw new Error('节点源槽位 key 不能重复')
   if (new Set(slots.map(({ name }) => name)).size !== slots.length) throw new Error('节点源槽位名称不能重复')

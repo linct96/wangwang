@@ -165,6 +165,7 @@ export function GroupCard({
                             sourceSlots.find(({ key }) => key === member.slotKey) ?? {
                               key: member.slotKey,
                               name: label,
+                              type: 'nodes',
                             }
                           }
                         />
