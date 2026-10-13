@@ -762,27 +762,37 @@ const subscriptionEditor = harness(
   'features/profiles/subscription-slot-binding-editor.tsx',
   'SubscriptionSlotBindingEditor',
 )
+const subscriptionSourcePicker = harness(
+  'features/profiles/subscription-sources-editor.tsx',
+  'SubscriptionSourcesEditor',
+  {
+    cn: (...names) => names.filter(Boolean).join(' '),
+  },
+)
+const subscriptionChoices = (tree) => subscriptionSourcePicker.render(find(tree, 'SubscriptionSourcesEditor')[0].props)
 let subscriptionValue = { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
 const subscriptionProps = () => ({
   slot: { key: 'subscription', name: '机场', type: 'subscription' },
   value: subscriptionValue,
-  sources: [{ id: 'airport', name: '机场', kind: 'url', enabled: true, url: 'https://example.com/sub' }],
+  sources: [
+    { id: 'airport', name: '机场', kind: 'url', enabled: true, url: 'https://example.com/sub' },
+    { id: 'airport2', name: '机场二', kind: 'url', enabled: true, url: 'https://example.com/sub2' },
+  ],
   onChange(next) {
     subscriptionValue = next
   },
 })
 let subscriptionTree = subscriptionEditor.render(subscriptionProps())
 assert.equal(find(subscriptionTree, 'FieldError').length, 0, '空订阅槽位初始不报错')
-find(subscriptionTree, 'Select')[0].props.onOpenChange(true)
-assert.equal(find(subscriptionEditor.render(subscriptionProps()), 'FieldError').length, 0, '打开选择器不立即报错')
-find(subscriptionTree, 'Select')[0].props.onOpenChange(false)
-subscriptionTree = subscriptionEditor.render(subscriptionProps())
-assert.equal(find(subscriptionTree, 'FieldError').length, 1, '关闭空选择器后显示必填错误')
-find(subscriptionTree, 'Select')[0].props.onValueChange('airport')
+assert.equal(find(subscriptionChoices(subscriptionTree), 'SelectionActionButton').length, 0, '单选槽位不显示全选')
+find(subscriptionChoices(subscriptionTree), 'Checkbox')[0].props.onCheckedChange(true)
 subscriptionTree = subscriptionEditor.render(subscriptionProps())
 assert.equal(find(subscriptionTree, 'FieldError').length, 0, '选择有效订阅后消除错误')
 assert.equal(subscriptionValue.sourceIds[0], 'airport')
-find(subscriptionTree, 'Select')[0].props.onValueChange(null)
+find(subscriptionChoices(subscriptionTree), 'Checkbox')[1].props.onCheckedChange(true)
+subscriptionTree = subscriptionEditor.render(subscriptionProps())
+assert.deepEqual(Array.from(subscriptionValue.sourceIds), ['airport2'], '选择另一个订阅源替换旧选择，始终只选一个')
+find(subscriptionChoices(subscriptionTree), 'SelectionActionButton')[0].props.onClear()
 assert.equal(find(subscriptionEditor.render(subscriptionProps()), 'FieldError').length, 1, '清空已操作槽位后报错')
 assert.equal(subscriptionValue.sourceIds.length, 0)
 

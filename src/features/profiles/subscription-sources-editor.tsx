@@ -10,10 +10,16 @@ export function SubscriptionSourcesEditor({
   sourceIds,
   sources,
   onChange,
+  single = false,
+  idPrefix = 'subscription-source',
+  invalid = false,
 }: {
   sourceIds: string[]
   sources: Source[]
   onChange: (sourceIds: string[]) => void
+  single?: boolean
+  idPrefix?: string
+  invalid?: boolean
 }) {
   const subscriptions = sources.filter(({ kind }) => kind === 'url')
   const available = subscriptions.filter(({ enabled, url }) => enabled && url)
@@ -27,48 +33,58 @@ export function SubscriptionSourcesEditor({
   return (
     <div className="slot-workspace">
       <div className="slot-source-form">
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2 min-h-8">
             <div className="flex items-center gap-2 flex-wrap">
-              <FieldLabel className="mb-0 text-sm font-medium">选择接入订阅源</FieldLabel>
+              <FieldLabel id={`${idPrefix}-label`} className="mb-0 text-sm font-medium">
+                选择接入订阅源{single && '（单选）'}
+              </FieldLabel>
               <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
-                已选 {sourceIds.length} / {subscriptions.length} 个源
+                已选 {sourceIds.length} / {single ? 1 : subscriptions.length} 个源
                 {sourceIds.length > 0 ? `，共 ${totalNodesInSelectedSubscriptions} 个节点` : ''}
               </Badge>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <SelectionActionButton
-                count={sourceIds.length}
-                disabled={!available.length}
-                onSelectAll={() => onChange(available.slice(0, 20).map(({ id }) => id))}
-                onClear={() => onChange([])}
-              />
-            </div>
+            {(!single || sourceIds.length > 0) && (
+              <div className="flex items-center gap-1.5">
+                <SelectionActionButton
+                  count={sourceIds.length}
+                  disabled={!available.length}
+                  onSelectAll={() => onChange(available.slice(0, 20).map(({ id }) => id))}
+                  onClear={() => onChange([])}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="source-picker-grid">
+          <div className="source-picker-grid" role="group" aria-labelledby={`${idPrefix}-label`} aria-invalid={invalid}>
             {subscriptions.map((source) => {
               const checked = sourceIds.includes(source.id)
-              const invalid = !source.enabled || !source.url
+              const sourceInvalid = !source.enabled || !source.url
               return (
                 <label
                   key={source.id}
-                  htmlFor={`subscription-source-${source.id}`}
+                  htmlFor={`${idPrefix}-${source.id}`}
                   className={cn(
                     'source-picker-item',
                     checked && 'source-picker-item-selected',
-                    invalid && !checked && 'source-picker-item-disabled',
+                    sourceInvalid && !checked && 'source-picker-item-disabled',
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <Checkbox
-                      id={`subscription-source-${source.id}`}
+                      id={`${idPrefix}-${source.id}`}
                       checked={checked}
-                      disabled={invalid && !checked}
-                      aria-invalid={checked && invalid}
+                      disabled={sourceInvalid && !checked}
+                      aria-invalid={invalid || (checked && sourceInvalid)}
                       onCheckedChange={(next) =>
-                        onChange(next ? [...sourceIds, source.id] : sourceIds.filter((id) => id !== source.id))
+                        onChange(
+                          next
+                            ? single
+                              ? [source.id]
+                              : [...sourceIds, source.id]
+                            : sourceIds.filter((id) => id !== source.id),
+                        )
                       }
                       className="size-4"
                     />
@@ -76,7 +92,7 @@ export function SubscriptionSourcesEditor({
                       <span className="font-medium text-xs truncate" title={source.name}>
                         {source.name}
                       </span>
-                      {invalid && (
+                      {sourceInvalid && (
                         <span className="text-[11px] text-destructive">
                           {!source.enabled ? '已停用' : '缺少订阅 URL'}
                         </span>
@@ -100,8 +116,12 @@ export function SubscriptionSourcesEditor({
           </div>
         </div>
 
-        {!subscriptions.length && <FieldDescription>暂无订阅源，请先在「节点源」页面添加订阅链接。</FieldDescription>}
-        {unavailable && <FieldError>已选订阅源不存在、已停用或缺少 URL，请取消选择或清空后重新选择。</FieldError>}
+        {!single && !subscriptions.length && (
+          <FieldDescription>暂无订阅源，请先在「节点源」页面添加订阅链接。</FieldDescription>
+        )}
+        {!single && unavailable && (
+          <FieldError>已选订阅源不存在、已停用或缺少 URL，请取消选择或清空后重新选择。</FieldError>
+        )}
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ProfileNodeBinding, Source, TemplateSourceSlot } from '@/api/types'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Field, FieldDescription, FieldError, FieldGroup } from '@/components/ui/field'
+import { SubscriptionSourcesEditor } from './subscription-sources-editor'
 
 export function SubscriptionSlotBindingEditor({
   slot,
@@ -33,35 +33,18 @@ export function SubscriptionSlotBindingEditor({
           : ''
   return (
     <FieldGroup>
-      <Field data-invalid={Boolean(error)}>
-        <FieldLabel htmlFor={`subscription-${slot.key}`}>订阅源</FieldLabel>
-        <Select
-          value={sourceId || null}
-          items={subscriptions.map((source) => ({
-            value: source.id,
-            label: source.name,
-          }))}
-          onOpenChange={(open) => {
-            if (!open) setTouched(true)
-          }}
-          onValueChange={(id) => {
+      <Field data-invalid={Boolean(error)} aria-label={slot.name}>
+        <SubscriptionSourcesEditor
+          single
+          idPrefix={`subscription-${slot.key}`}
+          invalid={Boolean(error)}
+          sourceIds={sourceId ? [sourceId] : []}
+          sources={sources}
+          onChange={(sourceIds) => {
             setTouched(true)
-            onChange({ mode: 'source', sourceIds: id ? [id] : [], includeRegex: null, excludeRegex: null })
+            onChange({ mode: 'source', sourceIds, includeRegex: null, excludeRegex: null })
           }}
-        >
-          <SelectTrigger id={`subscription-${slot.key}`} aria-invalid={Boolean(error)} className="w-full">
-            <SelectValue placeholder="选择一个订阅节点源" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {subscriptions.map((source) => (
-                <SelectItem key={source.id} value={source.id} disabled={!source.enabled || !source.url}>
-                  {source.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        />
         {error && <FieldError>{error}</FieldError>}
         {!subscriptions.length && (
           <FieldDescription>暂无订阅节点源，请先到“节点源”页面添加。手动节点源不支持此槽位。</FieldDescription>
