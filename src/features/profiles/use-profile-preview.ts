@@ -10,7 +10,7 @@ export type ResolvedProxyGroup = {
   proxies: string[]
   filter?: string
   excludeFilter?: string
-  nodes: NodeOption[]
+  nodes: (NodeOption & { slotKey?: string })[]
   staticProxies: string[]
   use?: string[]
   includeAllProxies?: boolean
@@ -150,14 +150,15 @@ export function useProfilePreview(
       const matchesGroup = (node: NodeOption) =>
         (!includeFilters.length || includeFilters.some((reg) => reg.test(node.name))) &&
         !excludeFilters.some((reg) => reg.test(node.name))
-      const resolvedNodes: NodeOption[] = []
+      const resolvedNodes: ResolvedProxyGroup['nodes'] = []
       const staticProxies: string[] = []
       const proxiesList = Array.isArray(g.proxies) ? g.proxies : []
 
       for (const proxyItem of proxiesList) {
         const itemKey = String(proxyItem)
         const slotNodes = slotMap.get(itemKey)
-        if (slotNodes?.length) resolvedNodes.push(...slotNodes.filter(matchesGroup))
+        if (slotNodes?.length)
+          resolvedNodes.push(...slotNodes.filter(matchesGroup).map((node) => ({ ...node, slotKey: itemKey })))
         else staticProxies.push(itemKey)
       }
       const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
@@ -177,7 +178,7 @@ export function useProfilePreview(
         use: includeAllProviders
           ? [...providerNames].sort(compareMihomoNames)
           : Array.isArray(g.use)
-            ? g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name)))
+            ? [...new Set(g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name))))]
             : [],
         includeAllProxies,
         includeAllProviders,

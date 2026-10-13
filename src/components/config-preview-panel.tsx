@@ -27,6 +27,7 @@ export type ConfigPreviewGroupNode = {
   id: string
   name: string
   sourceName?: string
+  slotKey?: string
 }
 
 export type ConfigPreviewGroup = {
@@ -292,12 +293,22 @@ export function ConfigPreviewPanel({
                     (showIncludeAllTags || (!group.includeAllProviders && !providerNames?.[name]))
                   const renderProvider = (name: string) => {
                     const slot = providerSlotMap.get(name)
+                    const title = `${group.includeAllProviders ? 'include-all-providers' : 'use'}: ${name}`
                     if (!showIncludeAllTags && (group.includeAllProviders || providerNames?.[name])) {
+                      if (slot && !group.includeAllProviders)
+                        return (
+                          <SourceSlotTag
+                            key={name}
+                            slot={slot}
+                            resolvedName={providerNames?.[name] ?? slot.name}
+                            title={title}
+                          />
+                        )
                       return (
                         <div
                           key={name}
                           className="preview-node-tag border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                          title={`use: ${name}`}
+                          title={title}
                         >
                           <Boxes className="size-3 text-indigo-500 shrink-0" />
                           <span className="preview-node-tag-name">{providerNames?.[name] ?? slot?.name ?? name}</span>
@@ -305,9 +316,9 @@ export function ConfigPreviewPanel({
                       )
                     }
                     return slot ? (
-                      <SourceSlotTag key={name} slot={slot} title={`use: ${name}`} placeholder />
+                      <SourceSlotTag key={name} slot={slot} title={title} placeholder />
                     ) : (
-                      <Badge key={name} variant="outline" title={`use: ${name}`}>
+                      <Badge key={name} variant="outline" title={title}>
                         <Boxes data-icon="inline-start" />
                         {`订阅源 · ${providerNames?.[name] ?? name}`}
                       </Badge>
@@ -427,25 +438,38 @@ export function ConfigPreviewPanel({
                                   </div>
                                 )
                               })}
-                              {groupNodes.slice(0, 80).map((node, index) => (
-                                <div
-                                  key={`${node.id}-${index}`}
-                                  className={cn(
-                                    'preview-node-tag',
-                                    !showIncludeAllTags &&
-                                      group.includeAllProxies &&
-                                      'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200',
-                                  )}
-                                  title={`${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`}
-                                >
-                                  {!showIncludeAllTags && group.includeAllProxies ? (
-                                    <Network className="size-3 text-amber-500 shrink-0" />
-                                  ) : (
-                                    <Server className="size-3 text-muted-foreground shrink-0" />
-                                  )}
-                                  <span className="preview-node-tag-name">{node.name}</span>
-                                </div>
-                              ))}
+                              {groupNodes.slice(0, 80).map((node, index) => {
+                                const slot = node.slotKey ? slotMap.get(node.slotKey) : undefined
+                                const title = `${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`
+                                if (slot)
+                                  return (
+                                    <SourceSlotTag
+                                      key={`${node.id}-${index}`}
+                                      slot={slot}
+                                      resolvedName={node.name}
+                                      title={title}
+                                    />
+                                  )
+                                return (
+                                  <div
+                                    key={`${node.id}-${index}`}
+                                    className={cn(
+                                      'preview-node-tag',
+                                      !showIncludeAllTags &&
+                                        group.includeAllProxies &&
+                                        'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200',
+                                    )}
+                                    title={title}
+                                  >
+                                    {!showIncludeAllTags && group.includeAllProxies ? (
+                                      <Network className="size-3 text-amber-500 shrink-0" />
+                                    ) : (
+                                      <Server className="size-3 text-muted-foreground shrink-0" />
+                                    )}
+                                    <span className="preview-node-tag-name">{node.name}</span>
+                                  </div>
+                                )
+                              })}
                               {groupNodes.length > 80 && (
                                 <span className="text-[11px] text-muted-foreground self-center px-1">
                                   +{groupNodes.length - 80} 更多
