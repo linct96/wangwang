@@ -17,12 +17,11 @@ await mkdir(path.join(stage, 'assets'), { recursive: true })
 await mkdir(path.join(stage, 'migrations'), { recursive: true })
 await cp(path.join(root, 'dist/admin/wangwang/index.js'), path.join(stage, 'worker.js'))
 await cp(path.join(root, 'dist/admin/client'), path.join(stage, 'assets'), { recursive: true })
-await cp(path.join(root, 'drizzle'), path.join(stage, 'migrations'), { recursive: true })
-
-const drizzleEntries = await readdir(path.join(root, 'drizzle'))
-const initialMigration =
-  drizzleEntries.find((file) => file.startsWith('0000_') && file.endsWith('.sql')) || '0000_initial.sql'
-await cp(path.join(root, 'drizzle', initialMigration), path.join(stage, 'migration.sql'))
+await cp(path.join(root, 'drizzle'), path.join(stage, 'migrations'), {
+  recursive: true,
+  filter: (source) => path.basename(source) !== 'meta',
+})
+await cp(path.join(root, 'drizzle/0000_initial.sql'), path.join(stage, 'migration.sql'))
 
 const assets = {}
 async function collect(dir, prefix = '') {

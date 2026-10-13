@@ -111,22 +111,6 @@ async function templateSlots(env: Env, templateId: string) {
   return template?.sourceSlots || null
 }
 
-async function indexedSubscriptionToken(
-  env: Env,
-  profile: Pick<typeof profiles.$inferSelect, 'id' | 'tokenVersion' | 'subscriptionTokenHash'>,
-) {
-  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
-  const hash = await subscriptionTokenHash(token)
-  if (profile.subscriptionTokenHash !== hash) {
-    // 回填或更换密钥时修复索引；不能覆盖并发轮换后的版本。
-    await db(env)
-      .update(profiles)
-      .set({ subscriptionTokenHash: hash })
-      .where(and(eq(profiles.id, profile.id), eq(profiles.tokenVersion, profile.tokenVersion)))
-  }
-  return token
-}
-
 export async function profileView(
   env: Env,
   profile: typeof profiles.$inferSelect,
@@ -141,7 +125,7 @@ export async function profileView(
     profileTagViews(env, profile.id),
   ])
   const bySlot = new Map(bindings.map((binding) => [binding.slotKey, binding]))
-  const token = await indexedSubscriptionToken(env, profile)
+  const token = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
   return {
     ...profile,
     subscriptionTokenHash: undefined,
@@ -172,7 +156,18 @@ profilesRouter.post('/reindex-tokens', async (c) => {
       subscriptionTokenHash: profiles.subscriptionTokenHash,
     })
     .from(profiles)
-  await Promise.all(rows.map((profile) => indexedSubscriptionToken(c.env, profile)))
+  await Promise.all(
+    rows.map(async (profile) => {
+      const token = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
+      const hash = await subscriptionTokenHash(token)
+      if (profile.subscriptionTokenHash === hash) return
+      // 更换密钥后显式重建索引；不能覆盖并发轮换后的版本。
+      await db(c.env)
+        .update(profiles)
+        .set({ subscriptionTokenHash: hash })
+        .where(and(eq(profiles.id, profile.id), eq(profiles.tokenVersion, profile.tokenVersion)))
+    }),
+  )
   return ok(c, { count: rows.length })
 })
 

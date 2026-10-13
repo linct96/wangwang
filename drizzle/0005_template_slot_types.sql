@@ -1,1 +1,0 @@
-ALTER TABLE `template_slots` ADD `type` text DEFAULT 'nodes' NOT NULL;

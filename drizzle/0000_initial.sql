@@ -21,10 +21,19 @@ CREATE TABLE `jobs` (
 	`error` text,
 	`created_at` integer NOT NULL,
 	`started_at` integer,
-	`finished_at` integer
+	`finished_at` integer,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`lease_token` text,
+	`lease_until` integer,
+	`dispatched_at` integer,
+	`parent_job_id` text,
+	`source_version` integer,
+	`refresh_commit_token` text
 );
 --> statement-breakpoint
 CREATE INDEX `jobs_entity_idx` ON `jobs` (`type`,`entity_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `jobs_parent_idx` ON `jobs` (`parent_job_id`);--> statement-breakpoint
+CREATE INDEX `jobs_recovery_idx` ON `jobs` (`status`,`lease_until`,`dispatched_at`);--> statement-breakpoint
 CREATE TABLE `node_tags` (
 	`node_id` text NOT NULL,
 	`tag_id` text NOT NULL,
@@ -68,8 +77,8 @@ CREATE TABLE `profile_node_binding` (
 	`include_regex` text,
 	`exclude_regex` text,
 	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "profile_node_binding_mode_check" CHECK("profile_node_binding"."mode" IN ('source', 'node')),
-	CONSTRAINT "profile_node_binding_node_regex_check" CHECK("profile_node_binding"."mode" = 'source' OR ("profile_node_binding"."include_regex" IS NULL AND "profile_node_binding"."exclude_regex" IS NULL))
+	CONSTRAINT "profile_node_binding_mode_check" CHECK("profile_node_binding"."mode" IN ('source', 'node', 'tag')),
+	CONSTRAINT "profile_node_binding_node_regex_check" CHECK("profile_node_binding"."mode" IN ('source', 'tag') OR ("profile_node_binding"."include_regex" IS NULL AND "profile_node_binding"."exclude_regex" IS NULL))
 );
 --> statement-breakpoint
 CREATE TABLE `profile_node_nodes` (
@@ -91,6 +100,15 @@ CREATE TABLE `profile_node_sources` (
 );
 --> statement-breakpoint
 CREATE INDEX `profile_node_sources_source_idx` ON `profile_node_sources` (`source_id`,`profile_id`);--> statement-breakpoint
+CREATE TABLE `profile_node_tags` (
+	`profile_id` text NOT NULL,
+	`tag_id` text NOT NULL,
+	PRIMARY KEY(`profile_id`, `tag_id`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profile_node_binding`(`profile_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_node_tags_tag_idx` ON `profile_node_tags` (`tag_id`,`profile_id`);--> statement-breakpoint
 CREATE TABLE `profile_slot_bindings` (
 	`profile_id` text NOT NULL,
 	`slot_key` text NOT NULL,
@@ -99,8 +117,8 @@ CREATE TABLE `profile_slot_bindings` (
 	`exclude_regex` text,
 	PRIMARY KEY(`profile_id`, `slot_key`),
 	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "profile_slot_bindings_mode_check" CHECK("profile_slot_bindings"."mode" IN ('source', 'node')),
-	CONSTRAINT "profile_slot_bindings_node_regex_check" CHECK("profile_slot_bindings"."mode" = 'source' OR ("profile_slot_bindings"."include_regex" IS NULL AND "profile_slot_bindings"."exclude_regex" IS NULL))
+	CONSTRAINT "profile_slot_bindings_mode_check" CHECK("profile_slot_bindings"."mode" IN ('source', 'node', 'tag')),
+	CONSTRAINT "profile_slot_bindings_node_regex_check" CHECK("profile_slot_bindings"."mode" IN ('source', 'tag') OR ("profile_slot_bindings"."include_regex" IS NULL AND "profile_slot_bindings"."exclude_regex" IS NULL))
 );
 --> statement-breakpoint
 CREATE TABLE `profile_slot_nodes` (
@@ -124,6 +142,26 @@ CREATE TABLE `profile_slot_sources` (
 );
 --> statement-breakpoint
 CREATE INDEX `profile_slot_sources_source_idx` ON `profile_slot_sources` (`source_id`,`profile_id`);--> statement-breakpoint
+CREATE TABLE `profile_slot_tags` (
+	`profile_id` text NOT NULL,
+	`slot_key` text NOT NULL,
+	`tag_id` text NOT NULL,
+	PRIMARY KEY(`profile_id`, `slot_key`, `tag_id`),
+	FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`profile_id`,`slot_key`) REFERENCES `profile_slot_bindings`(`profile_id`,`slot_key`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_slot_tags_tag_idx` ON `profile_slot_tags` (`tag_id`,`profile_id`);--> statement-breakpoint
+CREATE TABLE `profile_subscription_sources` (
+	`profile_id` text NOT NULL,
+	`source_id` text NOT NULL,
+	`position` integer NOT NULL,
+	PRIMARY KEY(`profile_id`, `source_id`),
+	FOREIGN KEY (`profile_id`) REFERENCES `profiles`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`source_id`) REFERENCES `sources`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `profile_subscription_sources_source_idx` ON `profile_subscription_sources` (`source_id`,`profile_id`);--> statement-breakpoint
 CREATE TABLE `profile_tag_filters` (
 	`profile_id` text NOT NULL,
 	`tag_id` text NOT NULL,
@@ -139,6 +177,7 @@ CREATE TABLE `profiles` (
 	`enabled` integer DEFAULT true NOT NULL,
 	`template_id` text DEFAULT 'builtin:minimal' NOT NULL,
 	`token_version` integer DEFAULT 1 NOT NULL,
+	`subscription_token_hash` text,
 	`revision` integer DEFAULT 0 NOT NULL,
 	`compiled_yaml` text,
 	`compiled_at` integer,
@@ -148,6 +187,7 @@ CREATE TABLE `profiles` (
 );
 --> statement-breakpoint
 CREATE INDEX `profiles_template_id_idx` ON `profiles` (`template_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `profiles_subscription_token_hash_idx` ON `profiles` (`subscription_token_hash`);--> statement-breakpoint
 CREATE TABLE `source_tags` (
 	`source_id` text NOT NULL,
 	`tag_id` text NOT NULL,
@@ -173,6 +213,7 @@ CREATE TABLE `sources` (
 	`warning` text,
 	`error` text,
 	`node_count` integer DEFAULT 0 NOT NULL,
+	`version` integer DEFAULT 0 NOT NULL,
 	`upload_bytes` integer,
 	`download_bytes` integer,
 	`total_bytes` integer,
@@ -198,6 +239,7 @@ CREATE TABLE `template_slots` (
 	`template_id` text NOT NULL,
 	`key` text NOT NULL,
 	`name` text NOT NULL,
+	`type` text DEFAULT 'nodes' NOT NULL,
 	`position` integer NOT NULL,
 	PRIMARY KEY(`template_id`, `key`),
 	FOREIGN KEY (`template_id`) REFERENCES `templates`(`id`) ON UPDATE no action ON DELETE cascade

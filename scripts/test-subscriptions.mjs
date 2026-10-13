@@ -102,12 +102,18 @@ async function subscription(token, status, expectedSigns, expectedQueries = 1) {
   }
   return response
 }
-function fixture(id, enabled = 1) {
+async function fixture(id, enabled = 1) {
   sqlite
     .prepare(
-      'INSERT INTO profiles (id,name,enabled,token_version,compiled_yaml,created_at,updated_at) VALUES (?,?,?,4,?,1,1)',
+      'INSERT INTO profiles (id,name,enabled,token_version,subscription_token_hash,compiled_yaml,created_at,updated_at) VALUES (?,?,?,4,?,?,1,1)',
     )
-    .run(id, `${id} 配置`, enabled, `proxies: [] # ${id}`)
+    .run(
+      id,
+      `${id} 配置`,
+      enabled,
+      await subscriptionTokenHash(await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, id, 4)),
+      `proxies: [] # ${id}`,
+    )
   sqlite.prepare("INSERT INTO profile_node_binding (profile_id,mode) VALUES (?,'tag')").run(id)
 }
 function row(id) {
@@ -119,13 +125,9 @@ try {
   const migrations = readdirSync(migrationsDir)
     .filter((file) => file.endsWith('.sql'))
     .sort()
-  for (const file of migrations) {
-    if (file === '0003_subscription_token_index.sql') {
-      fixture('legacy')
-      fixture('disabled', 0)
-    }
-    sqlite.exec(readFileSync(new URL(file, migrationsDir), 'utf8'))
-  }
+  for (const file of migrations) sqlite.exec(readFileSync(new URL(file, migrationsDir), 'utf8'))
+  await fixture('indexed')
+  await fixture('disabled', 0)
   // 从真实 scheduled 入口验证 Cron 分流和到期源入队，全程不访问外网。
   const { config, error } = parseConfigFileTextToJson(
     'wrangler.jsonc',
@@ -222,16 +224,14 @@ try {
     globalThis.fetch = originalFetch
     sqlite.exec("DELETE FROM jobs WHERE entity_id LIKE 'cron-%'; DELETE FROM sources WHERE id LIKE 'cron-%'")
   }
-  assert.equal(row('legacy').subscription_token_hash, null, '迁移保留已有数据')
   sqlite
     .prepare('INSERT INTO admin_sessions VALUES (?,?,?)')
     .run(await sessionHash('offline-admin'), Date.now() + 60_000, Date.now())
-  const oldToken = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, 'legacy', 4)
+  const initialToken = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, 'indexed', 4)
 
-  // 无效格式零查询；未回填/不存在的 token 不回退全表扫描。
+  // 无效格式零查询；不存在的 token 不回退全表扫描。
   await subscription('bad', 404, 0, 0)
   await subscription('A'.repeat(22), 404, 0)
-  await subscription(oldToken, 404, 0)
   assert.equal(
     (await app.fetch(new Request(`${origin}/api/profiles/reindex-tokens`, { method: 'POST' }), env)).status,
     401,
@@ -252,16 +252,20 @@ try {
   const reindexed = await admin('/reindex-tokens', 'POST')
   assert.equal(reindexed.status, 200)
   assert.equal((await reindexed.json()).data.count, 2)
-  assert.equal(row('legacy').subscription_token_hash, await subscriptionTokenHash(oldToken))
-  const response = await subscription(oldToken, 200, 1)
-  assert.equal(await response.text(), row('legacy').compiled_yaml)
+  assert.equal(row('indexed').subscription_token_hash, await subscriptionTokenHash(initialToken))
+  const response = await subscription(initialToken, 200, 1)
+  assert.equal(await response.text(), row('indexed').compiled_yaml)
   assert.equal(response.headers.get('Cache-Control'), 'no-store')
   assert.equal(response.headers.get('Content-Type'), 'text/yaml; charset=utf-8')
-  assert.match(response.headers.get('Content-Disposition'), /filename\*=UTF-8''legacy%20/)
+  assert.match(response.headers.get('Content-Disposition'), /filename\*=UTF-8''indexed%20/)
   await subscription(await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, 'disabled', 4), 404, 0)
   queries = []
   await admin('/reindex-tokens', 'POST')
-  assert.equal(queries.filter(({ sql }) => sql.startsWith('update "profiles"')).length, 0, '回填可重复执行且不重复写入')
+  assert.equal(
+    queries.filter(({ sql }) => sql.startsWith('update "profiles"')).length,
+    0,
+    '索引重建可重复执行且不重复写入',
+  )
 
   // 创建即写入摘要；编译和返回均只使用 D1 中的最新 YAML。
   sqlite
@@ -322,7 +326,7 @@ try {
     )
   const slotA = { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' }
   const slotB = { key: '__WANGWANG_SOURCE_SLOT_AirptB__', name: '机场 B', type: 'subscription' }
-  const nodeSlot = { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' }
+  const nodeSlot = { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点', type: 'nodes' }
   const providerYaml = `proxy-groups:
   - name: 全部
     type: select
@@ -394,7 +398,6 @@ rules:
   assert.equal(providerCreated.status, 202, await providerCreated.clone().text())
   const providerProfile = (await providerCreated.json()).data.profile
   assert.deepEqual(providerProfile.slotBindings, draft.slotBindings)
-  assert.equal(Object.hasOwn(providerProfile, 'proxySourceIds'), false, '不暴露旧的 proxySourceIds 字段')
   await compileProfile(env, providerProfile.id)
   const compiled = parse(row(providerProfile.id).compiled_yaml)
   assert.deepEqual(compiled.proxies, [], '订阅节点不展开，provider-only 配置可生成')
@@ -442,14 +445,14 @@ rules:
   )
   const boundDetail = (await (await request('templates', `/${providerTemplate.id}`)).json()).data
   assert.deepEqual(boundDetail.boundSlotKeys.sort(), [slotA.key, slotB.key].sort())
-  // 模拟旧数据中模板在用但某个槽位尚未绑定；其他模板的同名 key 不应锁住它。
+  // 仅绑定的槽位锁定类型；其他模板的同名 key 不应锁住未绑定槽位。
   sqlite
     .prepare('DELETE FROM profile_slot_sources WHERE profile_id=? AND slot_key=?')
     .run(providerProfile.id, slotB.key)
   sqlite
     .prepare('DELETE FROM profile_slot_bindings WHERE profile_id=? AND slot_key=?')
     .run(providerProfile.id, slotB.key)
-  fixture('other-template-binding')
+  await fixture('other-template-binding')
   sqlite
     .prepare("INSERT INTO profile_slot_bindings (profile_id,slot_key,mode) VALUES (?,?,'node')")
     .run('other-template-binding', slotB.key)
@@ -631,7 +634,7 @@ rules:
   })
   assert.equal(mixedResponse.status, 201, await mixedResponse.clone().text())
   const mixedTemplate = (await mixedResponse.json()).data
-  assert.equal(mixedTemplate.sourceSlots[0].type, 'nodes', '旧槽位缺省为节点槽位类型')
+  assert.equal(mixedTemplate.sourceSlots[0].type, 'nodes', '节点槽位类型显式保存')
   const mixedDraft = {
     ...draft,
     templateId: mixedTemplate.id,
@@ -678,9 +681,13 @@ rules:
   // 密钥变更及错误的索引映射不能绕过单次 HMAC 校验。
   env.SUBSCRIPTION_TOKEN_SECRET = 'new-offline-secret'
   await subscription(nextToken, 404, 1)
+  queries = []
   const refreshed = await admin(`/${profile.id}`)
   assert.equal(refreshed.status, 200)
   const secretToken = new URL((await refreshed.json()).data.subscriptionUrl).pathname.split('/')[2]
+  assert.equal(queries.filter(({ sql }) => sql.startsWith('update')).length, 0, '读取配置不隐式修复索引')
+  await subscription(secretToken, 404, 0)
+  await admin('/reindex-tokens', 'POST')
   await subscription(nextToken, 404, 0)
   await subscription(secretToken, 200, 1)
   sqlite
@@ -689,8 +696,10 @@ rules:
   await subscription('A'.repeat(22), 404, 1)
   await admin('/reindex-tokens', 'POST')
 
-  // 回填与轮换交错时不能覆盖新版本；同时轮换返回冲突而非回退版本。
-  sqlite.prepare('UPDATE profiles SET subscription_token_hash = NULL WHERE id = ?').run(profile.id)
+  // 索引重建与轮换交错时不能覆盖新版本；同时轮换返回冲突而非回退版本。
+  sqlite
+    .prepare('UPDATE profiles SET subscription_token_hash = ? WHERE id = ?')
+    .run(await subscriptionTokenHash(nextToken), profile.id)
   const concurrentVersion = row(profile.id).token_version + 1
   const concurrentToken = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, profile.id, concurrentVersion)
   const concurrentHash = await subscriptionTokenHash(concurrentToken)
@@ -716,22 +725,22 @@ rules:
   await admin('/reindex-tokens', 'POST')
 
   // 更多 Profile 不增加分发查询数、返回行数或 HMAC 次数。
-  for (let index = 0; index < 20; index++) fixture(`extra-${index}`)
+  for (let index = 0; index < 20; index++) await fixture(`extra-${index}`)
   await admin('/reindex-tokens', 'POST')
-  await subscription(oldToken, 404, 0)
-  const indexedToken = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, 'legacy', 4)
+  await subscription(initialToken, 404, 0)
+  const indexedToken = await subscriptionToken(env.SUBSCRIPTION_TOKEN_SECRET, 'indexed', 4)
   await subscription(indexedToken, 200, 1)
   assert.throws(
     () =>
       sqlite
         .prepare('UPDATE profiles SET subscription_token_hash = ? WHERE id = ?')
-        .run(row('legacy').subscription_token_hash, 'disabled'),
+        .run(row('indexed').subscription_token_hash, 'disabled'),
     /UNIQUE constraint failed/,
   )
-  assert.equal((await admin('/legacy', 'DELETE')).status, 200)
+  assert.equal((await admin('/indexed', 'DELETE')).status, 200)
   await subscription(indexedToken, 404, 0)
   // 正则复用覆盖已保存/草稿的全局源、标签以及源/标签槽位；复用仅限单个绑定和本次选择。
-  fixture('regex-test')
+  await fixture('regex-test')
   sqlite.prepare('UPDATE nodes SET alias = ? WHERE id = ?').run('regex-keep', 'node-test')
   for (const [id, originalName, alias] of [
     ['regex-alias', 'other-name', 'regex-keep-2'],
@@ -819,7 +828,7 @@ rules:
   } finally {
     globalThis.RegExp = OriginalRegExp
   }
-  console.log('订阅索引回归通过：迁移/回填、单行索引查询、一次 HMAC、创建/编译、禁用/删除/轮换、密钥变更及并发保护。')
+  console.log('订阅索引回归通过：显式重建、单行索引查询、一次 HMAC、创建/编译、禁用/删除/轮换、密钥变更及并发保护。')
 } finally {
   crypto.subtle.sign = originalSign
   sqlite.close()
