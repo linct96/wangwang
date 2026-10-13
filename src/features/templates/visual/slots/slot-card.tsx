@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/react/sortable'
-import { ChevronDown, CircleAlert, Edit2, GripVertical, Network, Plug, Trash2 } from 'lucide-react'
+import { ChevronDown, CircleAlert, Edit2, GripVertical, Plug, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/app-primitives'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -116,7 +116,6 @@ export function SlotCard({
               <div className="template-node-ref-tags">
                 {referencingGroups.map((group) => (
                   <div key={group.id} className="template-node-tag">
-                    <Network className="template-node-ref-icon text-blue-500" />
                     <span className="template-node-tag-name">{group.name}</span>
                   </div>
                 ))}

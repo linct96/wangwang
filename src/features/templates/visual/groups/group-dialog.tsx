@@ -382,7 +382,7 @@ export function GroupDialog({
               </Field>
               <Field>
                 <FieldLabel className="items-center gap-1.5">
-                  <span>包含全部代理集合</span>
+                  <span>包含全部订阅源</span>
                   <FieldHelp name="include-all-providers" />
                 </FieldLabel>
                 <Select
@@ -515,7 +515,7 @@ export function GroupDialog({
               {form.includeAllProviders && hasExplicitUse && (
                 <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100">
                   <AlertTriangle />
-                  <AlertDescription>「包含全部代理集合」开启后将会覆盖use选择</AlertDescription>
+                  <AlertDescription>「包含全部订阅源」开启后将会覆盖use选择</AlertDescription>
                 </Alert>
               )}
             </MemberEditor>

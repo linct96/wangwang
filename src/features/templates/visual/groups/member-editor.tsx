@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { nanoid } from 'nanoid'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable'
-import { CircleHelp, GripVertical, Network, Plug, Plus, Radio, X } from 'lucide-react'
+import { CircleHelp, GripVertical, Plug, Plus, Radio, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -58,7 +58,6 @@ export function MemberTag({
             )}
           />
         )}
-        {member.kind === 'group' && <Network className="template-node-ref-icon text-blue-500 shrink-0" />}
         {member.kind === 'builtin' && <Radio className="template-node-ref-icon text-emerald-500 shrink-0" />}
         <span className="template-member-tag-name" title={label}>
           {label}
@@ -203,7 +202,6 @@ export function MemberEditor({
                 <DropdownMenuGroup>
                   {unselectedGroups.map((group) => (
                     <DropdownMenuItem key={`group:${group.id}`} onClick={() => addMember(`group:${group.id}`)}>
-                      <Network className="size-3.5 text-blue-500 shrink-0" />
                       <span>{group.name}</span>
                     </DropdownMenuItem>
                   ))}

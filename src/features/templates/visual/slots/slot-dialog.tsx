@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
-import { Network } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -149,7 +148,6 @@ export function SlotDialog({
                   <div className="template-node-ref-tags">
                     {referencingGroups.map((g) => (
                       <div key={g.id} className="template-node-tag">
-                        <Network className="template-node-ref-icon text-blue-500" />
                         <span className="template-node-tag-name">{g.name}</span>
                       </div>
                     ))}

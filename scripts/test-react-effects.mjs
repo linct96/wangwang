@@ -566,14 +566,11 @@ try {
     if (group.kind === 'raw') continue
     if (group.includeAllProxies)
       assert.ok(
-        find(expanded, 'Globe')[0].props.className.includes('text-amber-500'),
-        '包含全部节点与 proxies 槽位颜色一致',
+        find(expanded, 'Network')[0].props.className.includes('text-amber-500'),
+        '全部节点与 proxies 槽位颜色一致',
       )
     if (group.includeAllProviders)
-      assert.ok(
-        find(expanded, 'Boxes')[0].props.className.includes('text-indigo-500'),
-        '包含全部代理集合与 use 槽位颜色一致',
-      )
+      assert.ok(find(expanded, 'Boxes')[0].props.className.includes('text-indigo-500'), '全部订阅源与 use 槽位颜色一致')
     for (const [index, member] of group.members.filter((member) => member.kind === 'source-slot').entries()) {
       const expectedColor = member.slotKey === subscriptionFixture.key ? 'text-indigo-500' : 'text-amber-500'
       const sharedTag = find(expanded, 'SourceSlotTag')[index]
@@ -646,7 +643,7 @@ try {
     assert.equal(find(opened, 'Alert').length, Number(expectedWarning), '覆盖 use 仅在编辑代理组弹窗中提示')
     if (expectedWarning) {
       assert.notEqual(find(opened, 'Alert')[0].props.variant, 'destructive', '提示不是阻断性错误')
-      assert.equal(find(opened, 'AlertDescription')[0].props.children[0], '「包含全部代理集合」开启后将会覆盖use选择')
+      assert.equal(find(opened, 'AlertDescription')[0].props.children[0], '「包含全部订阅源」开启后将会覆盖use选择')
     }
     const providerSelect = (tree) =>
       find(tree, 'Select').filter(({ props }) => props.items.length === 2 && props.items[0].value === 'false')[1]
