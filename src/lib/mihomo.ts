@@ -1,3 +1,13 @@
+// Mihomo 按 UTF-8 字节序排序，等价于 Unicode 码点序，而非本地化或自然排序。
+export function compareMihomoNames(left: string, right: string): number {
+  const a = Array.from(left, (char) => char.codePointAt(0)!)
+  const b = Array.from(right, (char) => char.codePointAt(0)!)
+  for (let index = 0; index < Math.min(a.length, b.length); index++) {
+    if (a[index] !== b[index]) return a[index] - b[index]
+  }
+  return a.length - b.length
+}
+
 /**
  * 解析单个 include-all 子开关（proxies 或 providers）的最终状态。
  *

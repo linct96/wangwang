@@ -634,6 +634,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                           <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
                             <SlotBindingEditor
                               slot={NODE_BINDING_EDITOR_SCOPE}
+                              allowReorder={false}
                               value={field.state.value}
                               sources={sources}
                               nodes={nodes}

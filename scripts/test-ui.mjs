@@ -186,6 +186,85 @@ try {
     assert.match(invalid, /template-rule-issue/)
     assert.match(invalid, /text-destructive/, '其他槽位错误仍然标红')
   }
+  const { compareMihomoNames } = await server.ssrLoadModule('/src/lib/mihomo.ts')
+  const nodeNames = ['😀', '香港', '🇭🇰 HK', 'Z2', 'Z10', 'a', 'A1', 'A', '\uE000']
+  const expectedNames = [...nodeNames].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
+  assert.deepEqual([...nodeNames].sort(compareMihomoNames), expectedNames, '名称排序与 Mihomo UTF-8 字节序一致')
+  assert.equal(compareMihomoNames('香港', '香港'), 0)
+  const directNodes = nodeNames.map((name, index) => ({
+    id: `node-${index}`,
+    physicalNodeId: `physical-${index}`,
+    name,
+    sourceId: 'source',
+    sourceName: '节点源',
+    enabled: true,
+    sourceEnabled: true,
+    tags: [],
+  }))
+  const directBinding = { mode: 'node', nodeIds: directNodes.map(({ id }) => id), missingNodeIds: [] }
+  const { SlotBindingEditor } = await server.ssrLoadModule('/src/features/profiles/slot-binding-editor.tsx')
+  const directPicker = (allowReorder, value = directBinding, nodes = directNodes) =>
+    renderToStaticMarkup(
+      createElement(SlotBindingEditor, {
+        slot: nodeSlot,
+        value,
+        nodes,
+        sources: [],
+        tags: [],
+        allowReorder,
+        onChange() {},
+      }),
+    )
+  const selectedNames = (markup) =>
+    [...markup.matchAll(/class="selected-node-name"[^>]*>([^<]*)<\/span>/g)].map((match) => match[1])
+  const automaticPicker = directPicker(false)
+  assert.deepEqual(selectedNames(automaticPicker), expectedNames, '全部节点按名称展示，忽略选择顺序')
+  assert.doesNotMatch(
+    automaticPicker,
+    /selected-node-drag-handle|已选及排序|勾选顺序即输出顺序|点击箭头|不支持手动排序|上下拖拽手柄/,
+  )
+  const regularPicker = directPicker(undefined)
+  assert.deepEqual(selectedNames(regularPicker), nodeNames, '普通节点槽位保留指定顺序')
+  assert.match(regularPicker, /selected-node-drag-handle/)
+  assert.doesNotMatch(regularPicker, /不支持手动排序|上下拖拽手柄/)
+  assert.match(directPicker(false, { ...directBinding, nodeIds: [] }), /已选节点自动按名称排序/)
+  const unavailablePicker = directPicker(false, { ...directBinding, nodeIds: ['missing', 'node-0'] }, [
+    { ...directNodes[0], enabled: false },
+  ])
+  assert.match(unavailablePicker, /2<\/strong> 个节点当前已停用或失效/)
+  assert.match(unavailablePicker, /一键清除失效节点/)
+  assert.match(unavailablePicker, /未知或已失效节点/)
+  assert.equal((automaticPicker.match(/aria-label="移除该节点"/g) || []).length, nodeNames.length)
+  assert.deepEqual(
+    directBinding.nodeIds,
+    directNodes.map(({ id }) => id),
+    '展示排序不改写已保存的绑定顺序',
+  )
+  const { useProfilePreview } = await server.ssrLoadModule('/src/features/profiles/use-profile-preview.ts')
+  function PreviewOrderCheck() {
+    const automaticPreview = useProfilePreview(
+      {
+        yaml: `proxy-groups: [{name: 自动组, type: select, include-all-proxies: true}, {name: 槽位组, type: select, proxies: [${nodeSlot.key}]}]`,
+        sourceSlots: [nodeSlot],
+      },
+      directBinding,
+      [{ ...directBinding, slotKey: nodeSlot.key }],
+      directNodes,
+    )
+    assert.deepEqual(
+      automaticPreview.groups[0].nodes.map(({ name }) => name),
+      expectedNames,
+      '右侧全部节点预览与已选列表同序',
+    )
+    assert.deepEqual(
+      automaticPreview.groups[1].nodes.map(({ name }) => name),
+      nodeNames,
+      '显式 proxies 槽位预览保留原顺序',
+    )
+    return null
+  }
+  renderToStaticMarkup(createElement(PreviewOrderCheck))
+
   const { SubscriptionSlotBindingEditor } = await server.ssrLoadModule(
     '/src/features/profiles/subscription-slot-binding-editor.tsx',
   )
@@ -352,6 +431,11 @@ try {
     assert.doesNotMatch(markup, /sky-/, '不再使用与 proxies 不一致的天蓝色')
   }
   const profileEditorSource = readFileSync(`${root}src/features/profiles/profile-editor.tsx`, 'utf8')
+  assert.match(
+    profileEditorSource,
+    /slot=\{NODE_BINDING_EDITOR_SCOPE\}\s+allowReorder=\{false\}/,
+    '全部节点入口禁用手动排序',
+  )
   assert.doesNotMatch(profileEditorSource, /动态节点槽 ·|订阅源槽位 ·/, '槽位标题不再带有旧前缀')
   assert.match(profileEditorSource, /Network className="size-4 text-amber-500"/, '全部节点图标与右侧预览配色一致')
   assert.match(

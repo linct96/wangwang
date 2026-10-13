@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { compareMihomoNames } from '@/lib/mihomo'
 import { cn } from '@/lib/utils'
 import { SelectionActionButton } from './selection-action-button'
 import { SortableSelectedNode } from './sortable-selected-node'
@@ -18,10 +19,17 @@ type DirectNodeBindingEditorProps = {
   slot: TemplateSourceSlot
   value: Extract<ProfileNodeBinding, { mode: 'node' }>
   nodes: NodeOption[]
+  allowReorder?: boolean
   onChange: (value: ProfileNodeBinding) => void
 }
 
-export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: DirectNodeBindingEditorProps) {
+export function DirectNodeBindingEditor({
+  slot,
+  value,
+  nodes,
+  allowReorder = true,
+  onChange,
+}: DirectNodeBindingEditorProps) {
   const [query, setQuery] = useState('')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [mobilePane, setMobilePane] = useState<'available' | 'selected'>('available')
@@ -47,6 +55,15 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
 
   const sourceOptions = useMemo(() => [...new Map(nodes.map((node) => [node.sourceId, node.sourceName]))], [nodes])
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
+  const selectedNodeIds = useMemo(
+    () =>
+      allowReorder
+        ? value.nodeIds
+        : [...value.nodeIds].sort((left, right) =>
+            compareMihomoNames(nodesById.get(left)?.name || left, nodesById.get(right)?.name || right),
+          ),
+    [allowReorder, value.nodeIds, nodesById],
+  )
 
   const unavailable = useMemo(
     () =>
@@ -58,7 +75,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
   )
 
   function moveNode(from: number, to: number) {
-    if (to < 0 || to >= value.nodeIds.length) return
+    if (!allowReorder || to < 0 || to >= value.nodeIds.length) return
     const next = [...value.nodeIds]
     const [moved] = next.splice(from, 1)
     next.splice(to, 0, moved)
@@ -121,7 +138,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
         value={mobilePane}
         options={[
           { value: 'available', label: `可选节点 (${visible.length})` },
-          { value: 'selected', label: `已选及排序 (${value.nodeIds.length})` },
+          { value: 'selected', label: `${allowReorder ? '已选及排序' : '已选节点'} (${value.nodeIds.length})` },
         ]}
         onChange={setMobilePane}
       />
@@ -254,7 +271,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
           </div>
         </section>
 
-        {/* 右栏：已选节点及拖拽排序 */}
+        {/* 右栏：已选节点 */}
         <section
           className={cn(
             'direct-node-pane direct-node-selected',
@@ -263,7 +280,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
         >
           <div className="direct-node-pane-header">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">输出排序</span>
+              <span className="font-semibold text-sm">{allowReorder ? '输出排序' : '已选节点'}</span>
               <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
                 已选 {value.nodeIds.length}
               </Badge>
@@ -283,10 +300,6 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
           </div>
 
           <div className="flex-1 min-h-0 flex flex-col gap-0">
-            <div className="direct-node-sort-hint">
-              <span>上下拖拽手柄或点击箭头调整节点在订阅中的先后顺序</span>
-            </div>
-
             <div className="direct-node-scroll-area flex-1">
               <DragDropProvider
                 onDragEnd={(event) => {
@@ -295,19 +308,24 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
                 }}
               >
                 <div className="selected-nodes-stack">
-                  {value.nodeIds.map((nodeId, index) => (
+                  {selectedNodeIds.map((nodeId, index) => (
                     <SortableSelectedNode
                       key={nodeId}
                       nodeId={nodeId}
                       node={nodesById.get(nodeId)}
                       index={index}
+                      allowReorder={allowReorder}
                       onRemove={() => onChange({ ...value, nodeIds: value.nodeIds.filter((id) => id !== nodeId) })}
                     />
                   ))}
                   {!value.nodeIds.length && (
                     <div className="rounded-md border border-dashed px-4 py-8 text-center">
                       <p className="text-sm font-medium text-foreground">尚未选择任何节点</p>
-                      <p className="mt-1 text-xs text-muted-foreground">在左侧勾选需要包含的节点，勾选顺序即输出顺序</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {allowReorder
+                          ? '在左侧勾选需要包含的节点，勾选顺序即输出顺序'
+                          : '在左侧勾选需要包含的节点，已选节点自动按名称排序'}
+                      </p>
                     </div>
                   )}
                 </div>

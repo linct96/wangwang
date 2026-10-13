@@ -71,6 +71,7 @@ export function SlotBindingEditor({
   sources,
   nodes,
   tags,
+  allowReorder = true,
   onChange,
 }: {
   slot: TemplateSourceSlot
@@ -78,6 +79,7 @@ export function SlotBindingEditor({
   sources: Source[]
   nodes: NodeOption[]
   tags: TagOption[]
+  allowReorder?: boolean
   onChange: (value: ProfileNodeBinding) => void
 }) {
   const includeInvalid = (value.mode === 'source' || value.mode === 'tag') && regexError(value.includeRegex)
@@ -341,7 +343,13 @@ export function SlotBindingEditor({
           />
         </div>
       ) : (
-        <DirectNodeBindingEditor slot={slot} value={value} nodes={nodes} onChange={onChange} />
+        <DirectNodeBindingEditor
+          slot={slot}
+          value={value}
+          nodes={nodes}
+          allowReorder={allowReorder}
+          onChange={onChange}
+        />
       )}
     </div>
   )

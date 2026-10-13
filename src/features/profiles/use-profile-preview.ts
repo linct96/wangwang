@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { parse } from 'yaml'
 import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
-import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
+import { compareMihomoNames, resolveProxyGroupIncludeAll } from '@/lib/mihomo'
 import { slotProviderName, sourceProviderName } from '../../../shared/source-slots'
 
 export type ResolvedProxyGroup = {
@@ -163,9 +163,7 @@ export function useProfilePreview(
       const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
       if (includeAllProxies)
         resolvedNodes.push(
-          ...selectedNodes
-            .filter(matchesGroup)
-            .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+          ...selectedNodes.filter(matchesGroup).sort((left, right) => compareMihomoNames(left.name, right.name)),
         )
 
       return {
@@ -177,7 +175,7 @@ export function useProfilePreview(
         nodes: resolvedNodes,
         staticProxies,
         use: includeAllProviders
-          ? [...providerNames].sort()
+          ? [...providerNames].sort(compareMihomoNames)
           : Array.isArray(g.use)
             ? g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name)))
             : [],

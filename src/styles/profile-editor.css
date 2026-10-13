@@ -313,15 +313,6 @@
     cursor: not-allowed;
   }
 
-  .direct-node-sort-hint {
-    padding: 6px 8px;
-    font-size: 11px;
-    color: var(--muted-foreground);
-    background: color-mix(in oklch, var(--muted) 40%, transparent);
-    border-radius: 4px;
-    margin-bottom: 8px;
-  }
-
   .selected-nodes-stack {
     display: flex;
     flex-direction: column;

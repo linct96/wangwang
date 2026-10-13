@@ -268,7 +268,81 @@ try {
   assert.equal(timers.size, 0)
 
   const { parse } = await import('yaml')
-  const { resolveProxyGroupIncludeAll } = await server.ssrLoadModule('/src/lib/mihomo.ts')
+  const { compareMihomoNames, resolveProxyGroupIncludeAll } = await server.ssrLoadModule('/src/lib/mihomo.ts')
+  const directNodes = ['z', 'A', '香港', '😀'].map((name, index) => ({
+    id: `direct-${index}`,
+    name,
+    sourceId: 'source',
+    sourceName: '节点源',
+    enabled: true,
+    sourceEnabled: true,
+  }))
+  let directValue = { mode: 'node', nodeIds: directNodes.map(({ id }) => id), missingNodeIds: [] }
+  const direct = harness('features/profiles/direct-node-binding-editor.tsx', 'DirectNodeBindingEditor', {
+    compareMihomoNames,
+    cn: (...classes) => classes.filter(Boolean).join(' '),
+    isSortableOperation: () => true,
+  })
+  const directProps = {
+    slot: { key: 'global' },
+    nodes: directNodes,
+    allowReorder: false,
+    onChange(next) {
+      directValue = next
+    },
+  }
+  const directTree = () => direct.render({ ...directProps, value: directValue })
+  const selectedIds = (tree) => find(tree, 'SortableSelectedNode').map(({ props }) => props.nodeId)
+  let directTreeValue = directTree()
+  assert.deepEqual(selectedIds(directTreeValue), ['direct-1', 'direct-0', 'direct-2', 'direct-3'])
+  assert.ok(find(directTreeValue, 'SortableSelectedNode').every(({ props }) => props.allowReorder === false))
+  const originalValue = directValue
+  find(directTreeValue, 'DragDropProvider')[0].props.onDragEnd({
+    operation: { source: { initialIndex: 0, index: 2 } },
+  })
+  assert.equal(directValue, originalValue, '全部节点即使收到拖拽事件也不修改顺序')
+  find(directTreeValue, 'SortableSelectedNode')[0].props.onRemove()
+  assert.deepEqual(
+    Array.from(directValue.nodeIds),
+    ['direct-0', 'direct-2', 'direct-3'],
+    '名称排序后按 ID 移除，不按显示索引移除',
+  )
+  directTreeValue = directTree()
+  find(directTreeValue, 'Checkbox')[1].props.onCheckedChange()
+  assert.deepEqual(selectedIds(directTree()), ['direct-1', 'direct-0', 'direct-2', 'direct-3'], '重新选择仍按名称排序')
+  directTreeValue = direct.render({ ...directProps, value: directValue, allowReorder: true })
+  assert.deepEqual(selectedIds(directTreeValue), ['direct-0', 'direct-2', 'direct-3', 'direct-1'])
+  find(directTreeValue, 'DragDropProvider')[0].props.onDragEnd({
+    operation: { source: { initialIndex: 0, index: 2 } },
+  })
+  assert.deepEqual(
+    Array.from(directValue.nodeIds),
+    ['direct-2', 'direct-3', 'direct-0', 'direct-1'],
+    '普通槽位仍允许手动排序',
+  )
+  const sortableCalls = []
+  const selectedRow = harness('features/profiles/sortable-selected-node.tsx', 'SortableSelectedNode', {
+    useSortable(input) {
+      sortableCalls.push(input)
+      return { ref: 'sortable-ref' }
+    },
+    cn: (...classes) => classes.filter(Boolean).join(' '),
+  })
+  const automaticRow = selectedRow.render({
+    node: directNodes[0],
+    nodeId: 'direct-0',
+    index: 0,
+    allowReorder: false,
+    onRemove() {},
+  })
+  const manualRow = selectedRow.render({ node: directNodes[0], nodeId: 'direct-0', index: 0, onRemove() {} })
+  assert.equal(automaticRow.props.ref, undefined, '自动排序行不挂载拖拽 DOM 属性，移除按钮保持可用')
+  assert.equal(manualRow.props.ref, 'sortable-ref')
+  assert.deepEqual(
+    sortableCalls.map(({ disabled }) => disabled),
+    [true, false],
+    '全部节点禁用拖拽传感器，普通槽位保留拖拽',
+  )
   const previewSlots = [
     { key: '__WANGWANG_SOURCE_SLOT_Nodes1__', name: '普通节点' },
     { key: '__WANGWANG_SOURCE_SLOT_AirptA__', name: '机场 A', type: 'subscription' },
