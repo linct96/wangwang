@@ -79,7 +79,7 @@ async function validateReferences(env: Env, sourceIds: string[], nodeIds: string
 export async function validateProfileNodeBinding(env: Env, binding: ProfileNodeBindingInput, allowEmptySource = false) {
   if (binding.mode === 'source') {
     const sourceIds = [...new Set(binding.sourceIds)]
-    if (!sourceIds.length && !allowEmptySource) throw new Error('请至少选择一个普通节点源或绑定订阅源槽位')
+    if (!sourceIds.length && !allowEmptySource) throw new Error('请选择全部节点、全部订阅源或绑定订阅源槽位')
     const normalized = {
       mode: 'source' as const,
       sourceIds,
@@ -109,6 +109,7 @@ export async function validateProfileSlotBindings(
   env: Env,
   slots: TemplateSourceSlot[],
   bindings: ProfileSlotBindingInput[],
+  subscriptionSourceIds: string[] = [],
 ) {
   const slotKeys = new Set(slots.map(({ key }) => key))
   const bindingMap = new Map(bindings.map((binding) => [binding.slotKey, binding]))
@@ -150,7 +151,7 @@ export async function validateProfileSlotBindings(
   const sourceIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])))]
   const nodeIds = [...new Set(normalized.flatMap((binding) => (binding.mode === 'node' ? binding.nodeIds : [])))]
   await validateReferences(env, sourceIds, nodeIds)
-  await resolveProfileProxyProviders(env, slots, normalized)
+  await resolveProfileProxyProviders(env, slots, normalized, subscriptionSourceIds)
   return normalized
 }
 
@@ -263,6 +264,8 @@ export async function sourceRequiredByProfile(env: Env, sourceId: string, enable
   const alternative = enabledOnly ? sql`AND s.enabled = 1` : sql``
   const row = await db(env).get(sql`
     SELECT 1 FROM (
+      SELECT profile_id FROM profile_subscription_sources WHERE source_id = ${sourceId}
+      UNION ALL
       SELECT target.profile_id
       FROM profile_node_sources target
       WHERE target.source_id = ${sourceId}

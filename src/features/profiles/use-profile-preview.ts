@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { parse } from 'yaml'
 import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
 import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
-import { slotProviderName } from '../../../shared/source-slots'
+import { slotProviderName, sourceProviderName } from '../../../shared/source-slots'
 
 export type ResolvedProxyGroup = {
   name: string
@@ -47,6 +47,7 @@ export function useProfilePreview(
   nodeBinding: ProfileNodeBinding,
   slotBindings: ProfileSlotBinding[],
   allNodes: NodeOption[],
+  subscriptionSourceIds: string[] = [],
 ): ProfilePreviewResult {
   return useMemo(() => {
     if (!template?.yaml) {
@@ -112,6 +113,22 @@ export function useProfilePreview(
     const subscriptionKeys = new Set(
       template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
     )
+    const subscriptionBindings = slotBindings.filter(
+      (binding) => subscriptionKeys.has(binding.slotKey) && binding.mode === 'source' && binding.sourceIds.length === 1,
+    )
+    const slotSourceIds = new Set(
+      subscriptionBindings.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])),
+    )
+    const staticProviders = config['proxy-providers']
+    const providerNames = new Set([
+      ...Object.keys(
+        staticProviders && typeof staticProviders === 'object' && !Array.isArray(staticProviders)
+          ? staticProviders
+          : {},
+      ),
+      ...subscriptionBindings.map(({ slotKey }) => slotProviderName(slotKey)),
+      ...subscriptionSourceIds.filter((id) => !slotSourceIds.has(id)).map(sourceProviderName),
+    ])
     const resolvedSlots = new Map(
       slotBindings
         .filter(({ slotKey }) => !subscriptionKeys.has(slotKey))
@@ -139,7 +156,8 @@ export function useProfilePreview(
 
       for (const proxyItem of proxiesList) {
         const itemKey = String(proxyItem)
-        if (slotMap.has(itemKey)) resolvedNodes.push(...(slotMap.get(itemKey) || []).filter(matchesGroup))
+        const slotNodes = slotMap.get(itemKey)
+        if (slotNodes?.length) resolvedNodes.push(...slotNodes.filter(matchesGroup))
         else staticProxies.push(itemKey)
       }
       const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
@@ -158,9 +176,11 @@ export function useProfilePreview(
         excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
         nodes: resolvedNodes,
         staticProxies,
-        use: Array.isArray(g.use)
-          ? g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name)))
-          : [],
+        use: includeAllProviders
+          ? [...providerNames].sort()
+          : Array.isArray(g.use)
+            ? g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name)))
+            : [],
         includeAllProxies,
         includeAllProviders,
       }
@@ -180,5 +200,5 @@ export function useProfilePreview(
       totalUniqueNodes: allUniqueNodeIds.size,
       emptyGroupCount,
     }
-  }, [template, nodeBinding, slotBindings, allNodes])
+  }, [template, nodeBinding, slotBindings, allNodes, subscriptionSourceIds])
 }

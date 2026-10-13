@@ -2,7 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useForm, useStore } from '@tanstack/react-form'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { ArrowLeft, CheckCircle2, ChevronDown, Globe, PanelRightOpen, Plug, RefreshCw, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  Boxes,
+  CheckCircle2,
+  ChevronDown,
+  Network,
+  PanelRightOpen,
+  Plug,
+  RefreshCw,
+  Zap,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { api } from '@/api/client'
@@ -37,6 +47,7 @@ import {
 import { cn } from '@/lib/utils'
 import { SlotBindingEditor } from './slot-binding-editor'
 import { SubscriptionSlotBindingEditor } from './subscription-slot-binding-editor'
+import { SubscriptionSourcesEditor } from './subscription-sources-editor'
 import { ProfilePreviewPanel } from './profile-preview-panel'
 import { useProfilePreview } from './use-profile-preview'
 import '@/styles/profile-editor.css'
@@ -112,6 +123,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
   const [basicExpanded, setBasicExpanded] = useState(true)
   const [nodesExpanded, setNodesExpanded] = useState(true)
+  const [subscriptionsExpanded, setSubscriptionsExpanded] = useState(true)
 
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail>()
   const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
@@ -125,12 +137,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       name: '',
       templateId: initialTemplateId || ('builtin:minimal' as TemplateId),
       nodeBinding: emptyNodeBinding(),
+      subscriptionSourceIds: [] as string[],
       slotBindings: [] as ProfileSlotBinding[],
     },
     validators: {
       onSubmit: z
         .object({
           name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
+          subscriptionSourceIds: z.array(z.string()).max(20, '最多选择 20 个订阅源'),
           nodeBinding: z.discriminatedUnion('mode', [
             z.object({
               mode: z.literal('source'),
@@ -183,10 +197,11 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           (value) =>
             value.nodeBinding.mode !== 'source' ||
             value.nodeBinding.sourceIds.length > 0 ||
+            value.subscriptionSourceIds.length > 0 ||
             templates
               .find(({ id }) => id === value.templateId)
               ?.sourceSlots.some(({ type }) => type === 'subscription'),
-          { message: '请至少选择一个普通节点源或绑定订阅源槽位', path: ['nodeBinding', 'sourceIds'] },
+          { message: '请选择全部节点、全部订阅源或绑定订阅源槽位', path: ['nodeBinding', 'sourceIds'] },
         ),
     },
     onSubmit: async ({ value }) => {
@@ -199,6 +214,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             name: value.name,
             tags: [],
             templateId: value.templateId,
+            subscriptionSourceIds: value.subscriptionSourceIds,
             nodeBinding:
               value.nodeBinding.mode === 'node'
                 ? { mode: value.nodeBinding.mode, nodeIds: value.nodeBinding.nodeIds }
@@ -262,12 +278,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             name: profile.name,
             templateId: profile.templateId,
             nodeBinding: profile.nodeBinding,
+            subscriptionSourceIds: profile.subscriptionSourceIds,
             slotBindings: profile.slotBindings,
           }
         : {
             name: '',
             templateId: selectedTemplate?.id || 'builtin:minimal',
             nodeBinding: emptyNodeBinding(),
+            subscriptionSourceIds: [],
             slotBindings: initialBindings,
           },
       { keepDefaultValues: true },
@@ -517,11 +535,68 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                 </form.Subscribe>
               </section>
 
-              {/* 模块 2：全部节点 */}
+              <section className="profile-section">
+                <form.Field name="subscriptionSourceIds">
+                  {(field) => (
+                    <div className="flex flex-col gap-0">
+                      <div className="profile-section-header">
+                        <div
+                          className="profile-section-header-trigger"
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={subscriptionsExpanded}
+                          aria-controls="profile-subscription-sources"
+                          onClick={() => setSubscriptionsExpanded((prev) => !prev)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setSubscriptionsExpanded((prev) => !prev)
+                            }
+                          }}
+                        >
+                          <ChevronDown className={cn('profile-collapse-icon', subscriptionsExpanded && 'expanded')} />
+                          <div className="flex items-center gap-2">
+                            <Boxes className="size-4 text-indigo-500" />
+                            <strong className="text-sm font-semibold text-foreground">全部订阅源</strong>
+                          </div>
+                        </div>
+                        <div className="profile-section-actions">
+                          {field.state.value.length > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                              <CheckCircle2 className="size-3.5" />
+                              <span className="hidden sm:inline">已配置</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground hidden sm:inline">未配置</span>
+                          )}
+                        </div>
+                      </div>
+                      {subscriptionsExpanded && (
+                        <div
+                          id="profile-subscription-sources"
+                          className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border"
+                        >
+                          <SubscriptionSourcesEditor
+                            sourceIds={field.state.value}
+                            sources={sources}
+                            onChange={field.handleChange}
+                          />
+                          {!field.state.meta.isValid && (
+                            <div className="pt-2">
+                              <FieldError errors={field.state.meta.errors} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+              </section>
+
+              {/* 全部节点 */}
               <section className="profile-section">
                 <form.Field name="nodeBinding">
                   {(field) => {
-                    const binding = field.state.value
                     return (
                       <div className="flex flex-col gap-0">
                         <div className="profile-section-header">
@@ -539,53 +614,18 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                           >
                             <ChevronDown className={cn('profile-collapse-icon', nodesExpanded && 'expanded')} />
                             <div className="flex items-center gap-2">
-                              <Globe className="size-4 text-amber-500" />
+                              <Network className="size-4 text-amber-500" />
                               <strong className="text-sm font-semibold text-foreground">全部节点</strong>
                             </div>
-
-                            {!nodesExpanded && (
-                              <div className="profile-section-badges hidden sm:flex items-center gap-1.5 ml-1">
-                                {binding.mode === 'source' ? (
-                                  <>
-                                    <Badge
-                                      variant={binding.sourceIds.length > 0 ? 'default' : 'secondary'}
-                                      className="text-xs"
-                                    >
-                                      {binding.sourceIds.length > 0
-                                        ? `${binding.sourceIds.length} 个节点源`
-                                        : '未选节点源'}
-                                    </Badge>
-                                    {(binding.includeRegex || binding.excludeRegex) && (
-                                      <Badge variant="outline" className="text-xs">
-                                        正则已启用
-                                      </Badge>
-                                    )}
-                                  </>
-                                ) : binding.mode === 'tag' ? (
-                                  <>
-                                    <Badge
-                                      variant={binding.tags.length > 0 ? 'default' : 'secondary'}
-                                      className="text-xs"
-                                    >
-                                      {binding.tags.length > 0 ? `${binding.tags.length} 个节点标签` : '未选节点标签'}
-                                    </Badge>
-                                    {(binding.includeRegex || binding.excludeRegex) && (
-                                      <Badge variant="outline" className="text-xs">
-                                        正则已启用
-                                      </Badge>
-                                    )}
-                                  </>
-                                ) : (
-                                  <Badge
-                                    variant={binding.nodeIds.length > 0 ? 'default' : 'secondary'}
-                                    className="text-xs"
-                                  >
-                                    {binding.nodeIds.length > 0
-                                      ? `${binding.nodeIds.length} 个指定节点`
-                                      : '未选指定节点'}
-                                  </Badge>
-                                )}
-                              </div>
+                          </div>
+                          <div className="profile-section-actions">
+                            {hasConfiguration(field.state.value) ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                <CheckCircle2 className="size-3.5" />
+                                <span className="hidden sm:inline">已配置</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground hidden sm:inline">未配置</span>
                             )}
                           </div>
                         </div>
@@ -613,8 +653,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                 </form.Field>
               </section>
 
-              {/* 模块 3：动态节点槽 */}
-              {/* 模块 3：动态节点槽（直接平铺为独立折叠卡片） */}
+              {/* 动态节点槽保持独立绑定。 */}
               <form.Subscribe
                 selector={(state) =>
                   [state.values.templateId, state.values.slotBindings, state.submissionAttempts] as const
@@ -664,9 +703,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                       <strong className="text-sm font-semibold text-foreground truncate">
                                         {slot.name}
                                       </strong>
-                                      <Badge variant="outline">
-                                        {slot.type === 'subscription' ? 'use' : 'proxies'}
-                                      </Badge>
                                     </div>
 
                                     {(binding.mode === 'source' || binding.mode === 'tag') &&
@@ -757,10 +793,15 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             >
               <form.Subscribe
                 selector={(state) =>
-                  [state.values.templateId, state.values.nodeBinding, state.values.slotBindings] as const
+                  [
+                    state.values.templateId,
+                    state.values.nodeBinding,
+                    state.values.subscriptionSourceIds,
+                    state.values.slotBindings,
+                  ] as const
                 }
               >
-                {([templateId, nodeBinding, slotBindings]) => (
+                {([templateId, nodeBinding, subscriptionSourceIds, slotBindings]) => (
                   <LivePreviewWrapper
                     templateDetail={templateDetail}
                     templateDetailLoading={templateDetailLoading}
@@ -772,8 +813,10 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                     }}
                     templateId={templateId}
                     nodeBinding={nodeBinding}
+                    subscriptionSourceIds={subscriptionSourceIds}
                     slotBindings={slotBindings}
                     nodes={nodes}
+                    sources={sources}
                     onToggleCollapse={() => setPreviewCollapsed((prev) => !prev)}
                   />
                 )}
@@ -798,6 +841,10 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                     })
                   const unavailable =
                     unavailableSubscription ||
+                    values.subscriptionSourceIds.some((id) => {
+                      const source = sources.find((source) => source.id === id)
+                      return !source || source.kind !== 'url' || !source.enabled || !source.url
+                    }) ||
                     [values.nodeBinding, ...values.slotBindings].some(
                       (binding) =>
                         binding.mode === 'node' &&
@@ -870,8 +917,10 @@ function LivePreviewWrapper({
   onRetryTemplateDetail,
   templateId,
   nodeBinding,
+  subscriptionSourceIds,
   slotBindings,
   nodes,
+  sources,
   onToggleCollapse,
 }: {
   templateDetail: TemplateDetail | undefined
@@ -880,13 +929,15 @@ function LivePreviewWrapper({
   onRetryTemplateDetail: () => void
   templateId: TemplateId
   nodeBinding: ProfileNodeBinding
+  subscriptionSourceIds: string[]
   slotBindings: ProfileSlotBinding[]
   nodes: NodeOption[]
+  sources: Source[]
   onToggleCollapse?: () => void
 }) {
   const currentTemplate = templateDetail?.id === templateId ? templateDetail : undefined
   const currentError = templateDetailError?.id === templateId ? templateDetailError.message : ''
-  const preview = useProfilePreview(currentTemplate, nodeBinding, slotBindings, nodes)
+  const preview = useProfilePreview(currentTemplate, nodeBinding, slotBindings, nodes, subscriptionSourceIds)
 
   return (
     <>
@@ -925,6 +976,8 @@ function LivePreviewWrapper({
           loading={templateDetailLoading || (!currentTemplate && !currentError)}
           templateId={templateId}
           nodeBinding={nodeBinding}
+          subscriptionSourceIds={subscriptionSourceIds}
+          sources={sources}
           slotBindings={slotBindings}
           onToggleCollapse={onToggleCollapse}
         />

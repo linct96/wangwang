@@ -15,7 +15,11 @@ import {
   validateProfileSlotBindings,
 } from '../profile-slot-bindings'
 import { readProfileNodeBinding, replaceProfileNodeBinding } from '../profile-node-binding'
-import { resolveProfileProxyProviders } from '../profile-proxy-providers'
+import {
+  readProfileSubscriptionSources,
+  replaceProfileSubscriptionSources,
+  resolveProfileProxyProviders,
+} from '../profile-proxy-providers'
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
@@ -89,6 +93,7 @@ export const profileSchema = z
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
     nodeBinding: nodeBindingSchema,
+    subscriptionSourceIds: z.array(z.string().min(1)).max(20).default([]),
     slotBindings: slotBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
     templateId: templateIdSchema.default('builtin:minimal'),
@@ -101,6 +106,7 @@ export const profileUpdateSchema = profileSchema
     templateId: templateIdSchema.optional(),
     enabled: z.boolean().optional(),
     tags: profileSchema.shape.tags.removeDefault().optional(),
+    subscriptionSourceIds: profileSchema.shape.subscriptionSourceIds.removeDefault().optional(),
   })
   .strict()
 
@@ -132,8 +138,9 @@ export async function profileView(
   includeYaml = false,
 ) {
   const slots = (await templateSlots(env, profile.templateId)) || []
-  const [nodeBinding, bindings, tags] = await Promise.all([
+  const [nodeBinding, subscriptionSourceIds, bindings, tags] = await Promise.all([
     readProfileNodeBinding(env, profile.id),
+    readProfileSubscriptionSources(env, profile.id),
     readProfileSlotBindings(env, profile.id),
     profileTagViews(env, profile.id),
   ])
@@ -145,6 +152,7 @@ export async function profileView(
     tags: tags.map(({ name }) => name),
     compiledYaml: includeYaml ? profile.compiledYaml : undefined,
     nodeBinding,
+    subscriptionSourceIds,
     slotBindings: slots.flatMap(({ key }) => {
       const binding = bySlot.get(key)
       return binding ? [binding] : []
@@ -182,14 +190,15 @@ profilesRouter.post('/', async (c) => {
 
   let nodeBinding
   let bindings
+  const subscriptionSourceIds = [...new Set(input.subscriptionSourceIds)]
   try {
     ;[nodeBinding, bindings] = await Promise.all([
       validateProfileNodeBinding(
         c.env,
         input.nodeBinding,
-        slots.some(({ type }) => type === 'subscription'),
+        subscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
       ),
-      validateProfileSlotBindings(c.env, slots, input.slotBindings),
+      validateProfileSlotBindings(c.env, slots, input.slotBindings, subscriptionSourceIds),
     ])
   } catch (error) {
     return fail(c, 400, 'PROFILE_BINDINGS_INVALID', error instanceof Error ? error.message : '节点绑定无效')
@@ -210,6 +219,7 @@ profilesRouter.post('/', async (c) => {
   await database.insert(profiles).values(profile)
   await Promise.all([
     replaceProfileNodeBinding(c.env, profile.id, nodeBinding),
+    replaceProfileSubscriptionSources(c.env, profile.id, subscriptionSourceIds),
     replaceProfileSlotBindings(c.env, profile.id, bindings),
     replaceProfileTagFilters(c.env, profile.id, normalizeTagInputs(input.tags, 20)),
   ])
@@ -224,6 +234,7 @@ profilesRouter.post('/', async (c) => {
 const previewProfileSchema = z.object({
   templateId: templateIdSchema,
   nodeBinding: nodeBindingSchema,
+  subscriptionSourceIds: profileSchema.shape.subscriptionSourceIds,
   slotBindings: slotBindingsSchema.default([]),
   tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
 })
@@ -235,8 +246,18 @@ profilesRouter.post('/preview', async (c) => {
 
   const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
   try {
-    const bindings = await validateProfileSlotBindings(c.env, template.sourceSlots, input.slotBindings)
-    const proxyProviders = await resolveProfileProxyProviders(c.env, template.sourceSlots, bindings)
+    const bindings = await validateProfileSlotBindings(
+      c.env,
+      template.sourceSlots,
+      input.slotBindings,
+      input.subscriptionSourceIds,
+    )
+    const proxyProviders = await resolveProfileProxyProviders(
+      c.env,
+      template.sourceSlots,
+      bindings,
+      input.subscriptionSourceIds,
+    )
     const providerSlotKeys = new Set(
       template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
     )
@@ -270,13 +291,16 @@ profilesRouter.patch('/:id', async (c) => {
 
   const slots = await templateSlots(c.env, input.templateId || current.templateId)
   if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const subscriptionSourceIds =
+    input.subscriptionSourceIds === undefined ? undefined : [...new Set(input.subscriptionSourceIds)]
+  const nextSubscriptionSourceIds = subscriptionSourceIds ?? (await readProfileSubscriptionSources(c.env, id))
   let nodeBinding
-  if (input.nodeBinding || input.templateId || input.slotBindings) {
+  if (input.nodeBinding || input.templateId || input.slotBindings || subscriptionSourceIds) {
     try {
       nodeBinding = await validateProfileNodeBinding(
         c.env,
         input.nodeBinding || (await readProfileNodeBinding(c.env, id)),
-        slots.some(({ type }) => type === 'subscription'),
+        nextSubscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
       )
     } catch (error) {
       return fail(c, 400, 'PROFILE_NODE_BINDING_INVALID', error instanceof Error ? error.message : '节点选择无效')
@@ -284,9 +308,14 @@ profilesRouter.patch('/:id', async (c) => {
   }
 
   let bindings
-  if (input.slotBindings) {
+  if (input.slotBindings || subscriptionSourceIds) {
     try {
-      bindings = await validateProfileSlotBindings(c.env, slots, input.slotBindings)
+      bindings = await validateProfileSlotBindings(
+        c.env,
+        slots,
+        input.slotBindings || (await readProfileSlotBindings(c.env, id)),
+        nextSubscriptionSourceIds,
+      )
     } catch (error) {
       return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', error instanceof Error ? error.message : '槽位绑定无效')
     }
@@ -303,6 +332,7 @@ profilesRouter.patch('/:id', async (c) => {
     .where(eq(profiles.id, id))
   await Promise.all([
     nodeBinding ? replaceProfileNodeBinding(c.env, id, nodeBinding) : Promise.resolve(),
+    subscriptionSourceIds ? replaceProfileSubscriptionSources(c.env, id, subscriptionSourceIds) : Promise.resolve(),
     bindings ? replaceProfileSlotBindings(c.env, id, bindings) : Promise.resolve(),
     input.tags === undefined
       ? Promise.resolve()

@@ -59,7 +59,9 @@ pnpm cf-typegen
 
 迁移不删除或重写旧数据。若要回滚到不理解任务进度的旧消费代码，需先暂停消费并处理完待分发任务，不应直接对在途任务热回滚。
 
-## 订阅源槽位
+## 全部订阅源与订阅源槽位
+
+订阅配置的「全部订阅源」支持多选已有订阅节点源，每个源生成一个 HTTP `proxy-providers`，供 `include-all` / `include-all-providers` 引入。它独立于「全部节点」，不展开本地缓存节点；不依赖模板声明订阅源槽位。仅允许已启用且有 URL 的订阅源，沿用源的更新间隔、User-Agent 和名称排除过滤。与订阅源槽位选择同一源时复用槽位 provider；已选源须先解除配置绑定才能停用或删除。原始订阅 URL 会写入最终配置，应按敏感信息保护。
 
 模板的“节点源槽位”支持两种类型：节点槽位按源 / 标签 / 指定节点筛选并展开到 `proxies`；订阅源槽位由配置单选绑定一个已启用且有 URL 的订阅节点源，生成 HTTP `proxy-providers`，由代理组 `use` 引用，不展开本地缓存节点。同一模板和代理组可以混用，两种槽位的绑定彼此独立；同一订阅槽位被多组引用时复用一个 provider。
 
@@ -69,7 +71,7 @@ pnpm cf-typegen
 
 **最终 YAML 包含原始订阅 URL（可能含订阅密钥），请勿公开分享。** Mihomo 直接拉取上游，内容必须兼容其 provider；不自动转换订阅格式，本地节点别名、单节点停用与本地标签筛选不会同步。
 
-升级时先运行 `pnpm db:migrate:remote`（本地为 `pnpm db:migrate:local`），应用 `0005_template_slot_types.sql`，再部署 Worker。迁移仅为 `template_slots` 增加带默认值的类型字段，不重写现有绑定。
+升级时先运行 `pnpm db:migrate:remote`（本地为 `pnpm db:migrate:local`），应用 `0005_template_slot_types.sql` 与 `0006_profile_subscription_sources.sql`，再部署 Worker。迁移增加槽位类型字段及配置与订阅源的关联表，不重写现有绑定；旧配置的「全部订阅源」默认为空。
 
 ## 验证与部署
 

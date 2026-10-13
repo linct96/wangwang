@@ -218,7 +218,8 @@ try {
   assert.match(picker(['missing']), /绑定的节点源不存在/)
   assert.match(picker(['airport'], false, { enabled: false }), /绑定的节点源已停用/)
   assert.match(picker(['airport'], false, { url: null }), /绑定源的订阅 URL 不可用/)
-  assert.match(picker(['airport']), /机场 · 已启用/)
+  assert.match(picker(['airport']), /机场/)
+  assert.doesNotMatch(picker(['airport']), /已启用|不可用/, '订阅源选项仅显示名称')
   assert.doesNotMatch(picker(['airport'], true), /aria-invalid="true"/, '有效选择消除提交错误')
   const { SourceSlotTag } = await server.ssrLoadModule('/src/components/source-slot-tag.tsx')
   const { ConfigPreviewPanel } = await server.ssrLoadModule('/src/components/config-preview-panel.tsx')
@@ -249,8 +250,10 @@ try {
       groups: [{ name: '节点槽位', type: 'select', staticProxies: [nodeSlot.key, 'DIRECT', '子组'] }],
     }),
   )
-  assert.ok(nodePreview.includes(renderToStaticMarkup(createElement(SourceSlotTag, { slot: nodeSlot }))))
-  assert.doesNotMatch(nodePreview, /border-dashed|普通节点示例/, '普通槽位复用左侧标签，不显示示例节点或额外底色')
+  assert.ok(
+    nodePreview.includes(renderToStaticMarkup(createElement(SourceSlotTag, { slot: nodeSlot, placeholder: true }))),
+  )
+  assert.doesNotMatch(nodePreview, /普通节点示例/, '普通槽位显示占位标签，不显示示例节点')
   assert.match(nodePreview, /lucide-radio/, '内建策略图标不变')
   assert.match(nodePreview, /lucide-network/, '子组图标不变')
   const tagStyles = readFileSync(`${root}src/styles/components.css`, 'utf8')
@@ -277,45 +280,106 @@ try {
     assert.match(markup, new RegExp(`use: ${reference}`), '提示保留真实引用标识')
     assert.ok(
       markup.includes(
-        renderToStaticMarkup(createElement(SourceSlotTag, { slot: subscriptionSlot, title: `use: ${reference}` })),
+        renderToStaticMarkup(
+          createElement(SourceSlotTag, { slot: subscriptionSlot, title: `use: ${reference}`, placeholder: true }),
+        ),
       ),
-      '订阅槽位复用左侧标签的图标、颜色、名称和尺寸',
+      '订阅槽位保留插头图标与槽位名称，并使用右侧占位标签样式',
     )
   }
   const { ProfilePreviewPanel } = await server.ssrLoadModule('/src/features/profiles/profile-preview-panel.tsx')
   const profileMarkup = renderToStaticMarkup(
     createElement(ProfilePreviewPanel, {
       sourceSlots: [subscriptionSlot],
+      sources: [
+        { id: 'airport', name: '真实订阅源' },
+        { id: 'bound-airport', name: '槽位绑定订阅源' },
+      ],
+      slotBindings: [{ slotKey: subscriptionSlot.key, mode: 'source', sourceIds: ['bound-airport'] }],
       preview: {
-        groups: [{ name: '配置槽位', type: 'select', use: ['wangwang-AirptA'] }],
-        totalUniqueNodes: 0,
+        groups: [
+          { name: '配置槽位', type: 'select', use: ['wangwang-AirptA'] },
+          {
+            name: '全部成员',
+            type: 'select',
+            nodes: [{ id: 'node', name: '真实节点' }],
+            use: ['wangwang-source-airport', 'wangwang-AirptA'],
+            includeAllProxies: true,
+            includeAllProviders: true,
+          },
+          { name: '未选择成员', type: 'select', includeAllProxies: true, includeAllProviders: true },
+        ],
+        totalUniqueNodes: 1,
         emptyGroupCount: 0,
       },
     }),
   )
-  assert.match(profileMarkup.replace(/<[^>]*>/g, ''), /机场 A/, '配置预览也传递槽位名称映射')
+  assert.equal(
+    (profileMarkup.match(/preview-node-tag-name">槽位绑定订阅源<\/span>/g) || []).length,
+    2,
+    '单独引用与自动包含的已绑定槽位都展示真实订阅源名称',
+  )
+  assert.match(
+    profileMarkup,
+    /class="preview-node-tag border-amber-500\/40[^>]*>[\s\S]*?preview-node-tag-name">真实节点/,
+    '全部节点展示真实节点，使用实线边框并沿用橙色样式',
+  )
+  assert.match(
+    profileMarkup,
+    /class="preview-node-tag border-indigo-500\/40[^>]*>[\s\S]*?preview-node-tag-name">真实订阅源/,
+    '全部订阅源展示源名称，使用实线边框并沿用靛蓝样式',
+  )
+  assert.match(profileMarkup, /preview-node-tag-name">槽位绑定订阅源/, '复用槽位 provider 时仍展示真实源名')
+  assert.doesNotMatch(profileMarkup, /订阅源 · 真实订阅源/, '实际配置不显示额外前缀')
+  assert.equal(
+    (profileMarkup.match(/preview-node-tag-name">全部节点<\/span>/g) || []).length,
+    1,
+    '未选择节点时保留全部节点占位，已有节点时不重复显示',
+  )
+  assert.equal(
+    (profileMarkup.match(/preview-node-tag-name">全部订阅源<\/span>/g) || []).length,
+    1,
+    '未选择订阅源时保留全部订阅源占位，已有订阅源时不重复显示',
+  )
+  assert.doesNotMatch(profileMarkup, /暂无节点/, '自动包含的占位符不应被空状态隐藏')
   for (const group of [
     { name: '自动包含', type: 'select', includeAllProxies: true, includeAllProviders: true },
-    { name: '标签兼容', type: 'select', staticProxies: ['包含全部节点', '包含全部代理集合'] },
+    { name: '标签兼容', type: 'select', staticProxies: ['全部节点', '全部订阅源'] },
   ]) {
     const markup = renderToStaticMarkup(createElement(ConfigPreviewPanel, { groups: [group] }))
     assert.match(markup, /text-amber-500/, '预览的全部节点沿用 proxies 槽位颜色')
-    assert.match(markup, /text-indigo-500/, '预览的全部代理集合沿用 use 槽位颜色')
+    assert.match(markup, /text-indigo-500/, '预览的全部订阅源沿用 use 槽位颜色')
     assert.doesNotMatch(markup, /sky-/, '不再使用与 proxies 不一致的天蓝色')
   }
   const profileEditorSource = readFileSync(`${root}src/features/profiles/profile-editor.tsx`, 'utf8')
   assert.doesNotMatch(profileEditorSource, /动态节点槽 ·|订阅源槽位 ·/, '槽位标题不再带有旧前缀')
-  assert.match(profileEditorSource, /Globe className="size-4 text-amber-500"/, '全部节点图标与右侧预览配色一致')
+  assert.match(profileEditorSource, /Network className="size-4 text-amber-500"/, '全部节点图标与右侧预览配色一致')
+  assert.match(
+    profileEditorSource,
+    /Boxes className="size-4 text-indigo-500"/,
+    '全部订阅源图标与右侧预览全部订阅源配色一致',
+  )
   assert.match(
     profileEditorSource,
     /slot\.type === 'subscription' \? 'text-indigo-500' : 'text-amber-500'/,
     '槽位图标配色与模板保持一致',
   )
-  assert.match(
+  assert.doesNotMatch(
     profileEditorSource,
-    /slot\.type === 'subscription' \? 'use' : 'proxies'/,
-    '槽位标题带有与模板一致的类型 Badge',
+    /<Badge\b[^>]*>\s*(?:proxy-providers|\{slot\.type === 'subscription' \? 'use' : 'proxies'\})\s*<\/Badge>/,
+    '订阅配置模块标题不展示配置字段类型 Badge',
   )
+  const subscriptionSourcesEditorSource = readFileSync(
+    `${root}src/features/profiles/subscription-sources-editor.tsx`,
+    'utf8',
+  )
+  assert.doesNotMatch(
+    subscriptionSourcesEditorSource,
+    /由客户端拉取和更新，不展开本地节点/,
+    '全部订阅源不再展示冗余的更新说明文案',
+  )
+  assert.match(subscriptionSourcesEditorSource, /选择接入订阅源/, '全部订阅源对齐全部节点的接入选择标题')
+  assert.match(subscriptionSourcesEditorSource, /source-picker-grid/, '全部订阅源沿用全部节点的网格布局')
   const geoPanelSource = readFileSync(`${root}src/features/templates/visual/geo/geo-settings-panel.tsx`, 'utf8')
   assert.doesNotMatch(geoPanelSource, /GEO 规则数据源/, 'GEO 面板标题不再使用旧文案')
   assert.match(geoPanelSource, /<strong>GEO 数据库 \(GeoData\)<\/strong>/, 'GEO 标题采用与流量嗅探一致的中英文规范')

@@ -393,7 +393,7 @@ rules:
   assert.equal(providerCreated.status, 202, await providerCreated.clone().text())
   const providerProfile = (await providerCreated.json()).data.profile
   assert.deepEqual(providerProfile.slotBindings, draft.slotBindings)
-  assert.equal(Object.hasOwn(providerProfile, 'proxySourceIds'), false, '不保留配置级 provider 多选方案')
+  assert.equal(Object.hasOwn(providerProfile, 'proxySourceIds'), false, '不暴露旧的 proxySourceIds 字段')
   await compileProfile(env, providerProfile.id)
   const compiled = parse(row(providerProfile.id).compiled_yaml)
   assert.deepEqual(compiled.proxies, [], '订阅节点不展开，provider-only 配置可生成')

@@ -16,7 +16,7 @@ import { parseProxyText } from './proxy/index'
 import { assertRemoteUrl } from './security'
 import { matchesAnyTag, mergeTagViews, normalizeTagName } from './tag-model'
 import { readProfileNodeBinding } from './profile-node-binding'
-import { resolveProfileProxyProviders } from './profile-proxy-providers'
+import { readProfileSubscriptionSources, resolveProfileProxyProviders } from './profile-proxy-providers'
 import {
   readProfileSlotBindings,
   type ProfileNodeBinding,
@@ -53,6 +53,7 @@ const affectedSourceProfilesSql = `
   SELECT p.id FROM profiles p WHERE
     EXISTS (SELECT 1 FROM profile_node_sources b WHERE b.profile_id=p.id AND b.source_id=?)
     OR EXISTS (SELECT 1 FROM profile_slot_sources b WHERE b.profile_id=p.id AND b.source_id=?)
+    OR EXISTS (SELECT 1 FROM profile_subscription_sources b WHERE b.profile_id=p.id AND b.source_id=?)
     OR EXISTS (SELECT 1 FROM profile_node_nodes b JOIN nodes n ON n.id=b.node_id WHERE b.profile_id=p.id AND n.source_id=?)
     OR EXISTS (SELECT 1 FROM profile_slot_nodes b JOIN nodes n ON n.id=b.node_id WHERE b.profile_id=p.id AND n.source_id=?)
     OR EXISTS (SELECT 1 FROM profile_node_binding b WHERE b.profile_id=p.id AND b.mode='tag')
@@ -265,7 +266,7 @@ async function commitSourceRefresh(
        SELECT ? || ':' || affected.id, 'compile_profile', affected.id, 'pending', ?, ?
        FROM (${affectedSourceProfilesSql}) affected JOIN profiles p ON p.id = affected.id
        WHERE ${guard} ON CONFLICT(id) DO NOTHING`,
-      ).bind(lease.id, now, lease.id, source.id, source.id, source.id, source.id, ...guardValues),
+      ).bind(lease.id, now, lease.id, source.id, source.id, source.id, source.id, source.id, ...guardValues),
     )
     statements.push(
       env.DB.prepare(
@@ -365,7 +366,7 @@ async function sourceModeProfileIds(env: Env, sourceIds: string[]) {
 
 export async function affectedProfileIdsForSource(env: Env, sourceId: string) {
   const rows = await env.DB.prepare(affectedSourceProfilesSql)
-    .bind(sourceId, sourceId, sourceId, sourceId)
+    .bind(sourceId, sourceId, sourceId, sourceId, sourceId)
     .all<{ id: string }>()
   return rows.results.map(({ id }) => id)
 }
@@ -892,8 +893,16 @@ export async function compileProfile(env: Env, profileId: string, lease?: JobLea
   const selected = await selectProfileNodes(env, profile, slotNames, providerSlotKeys)
   let yaml: string
   try {
-    const bindings = await readProfileSlotBindings(env, profile.id)
-    const proxyProviders = await resolveProfileProxyProviders(env, template.sourceSlots, bindings)
+    const [bindings, subscriptionSourceIds] = await Promise.all([
+      readProfileSlotBindings(env, profile.id),
+      readProfileSubscriptionSources(env, profile.id),
+    ])
+    const proxyProviders = await resolveProfileProxyProviders(
+      env,
+      template.sourceSlots,
+      bindings,
+      subscriptionSourceIds,
+    )
     yaml = renderMihomoConfig({ ...selected, template, proxyProviders })
   } catch (error) {
     throw new PermanentJobError(error instanceof Error ? error.message : '配置生成失败')

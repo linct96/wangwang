@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { body, fail, ok } from '../http'
-import { profileNodeSources, profileSlotSources, sources } from '../db'
+import { profileNodeSources, profileSlotSources, profileSubscriptionSources, sources } from '../db'
 import {
   affectedProfileIdsForSource,
   cleanupOrphanPhysicalNodes,
@@ -82,7 +82,7 @@ sourcesRouter.get('/', async (c) => {
   )
   const views = await Promise.all(
     result.map(async (source) => {
-      const [globalProfiles, slotProfiles] = await Promise.all([
+      const [globalProfiles, slotProfiles, subscriptionProfiles] = await Promise.all([
         database
           .select({ id: profileNodeSources.profileId })
           .from(profileNodeSources)
@@ -91,8 +91,13 @@ sourcesRouter.get('/', async (c) => {
           .select({ id: profileSlotSources.profileId })
           .from(profileSlotSources)
           .where(eq(profileSlotSources.sourceId, source.id)),
+        database
+          .select({ id: profileSubscriptionSources.profileId })
+          .from(profileSubscriptionSources)
+          .where(eq(profileSubscriptionSources.sourceId, source.id)),
       ])
-      const profileCount = new Set([...globalProfiles, ...slotProfiles].map(({ id }) => id)).size
+      const profileCount = new Set([...globalProfiles, ...slotProfiles, ...subscriptionProfiles].map(({ id }) => id))
+        .size
       return sourceView(source, profileCount, tagsBySource.get(source.id)?.map((tag) => tag.name) ?? [])
     }),
   )
@@ -138,7 +143,7 @@ sourcesRouter.patch('/:id', async (c) => {
   if (current.kind !== 'url') return fail(c, 403, 'SYSTEM_SOURCE', '系统节点源不能修改')
   const disabling = input.enabled === false && current.enabled
   if (disabling && (await sourceRequiredByProfile(c.env, current.id, true)))
-    return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源是某个槽位的唯一可用源，无法停用')
+    return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源仍被订阅配置引用，请先解除绑定后再停用')
   if (input.url) assertRemoteUrl(input.url)
   const nodeNameFilter =
     input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
@@ -194,7 +199,7 @@ sourcesRouter.delete('/:id', async (c) => {
   if (!current) return fail(c, 404, 'SOURCE_NOT_FOUND', '节点源不存在')
   if (current.kind !== 'url') return fail(c, 403, 'SYSTEM_SOURCE', '系统节点源不能删除')
   if (await sourceRequiredByProfile(c.env, id, false))
-    return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源是某个槽位的唯一绑定，无法删除')
+    return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源仍被订阅配置引用，请先解除绑定后再删除')
   const profileIds = await affectedProfileIdsForSource(c.env, id)
   await db(c.env).delete(sources).where(eq(sources.id, id))
   await cleanupOrphanPhysicalNodes(c.env)

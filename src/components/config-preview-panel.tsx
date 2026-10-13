@@ -9,7 +9,6 @@ import {
   Eye,
   FileCode2,
   Filter,
-  Globe,
   Layers,
   Network,
   PanelRightClose,
@@ -62,6 +61,8 @@ export type ConfigPreviewPanelProps = {
   groupsEmptyText?: string
   groupsEmptySubText?: string
   sourceSlots?: ConfigPreviewSourceSlot[]
+  providerNames?: Record<string, string>
+  showIncludeAllTags?: boolean
 
   // YAML 数据
   yaml?: string
@@ -93,6 +94,8 @@ export function ConfigPreviewPanel({
   groupsEmptyText = '暂无策略组数据',
   groupsEmptySubText = '在左侧配置规则与节点源后，此处将自动呈现',
   sourceSlots,
+  providerNames,
+  showIncludeAllTags = true,
   yaml = '',
   yamlLoading = false,
   yamlError = null,
@@ -273,13 +276,43 @@ export function ConfigPreviewPanel({
                   const groupNodes = group.nodes ?? []
                   const groupStatics = group.staticProxies ?? []
                   const groupProviders = group.use ?? []
+                  const showAllProxiesTag = group.includeAllProxies && (showIncludeAllTags || !groupNodes.length)
+                  const showAllProvidersTag =
+                    group.includeAllProviders && (showIncludeAllTags || !groupProviders.length)
                   const totalMembers =
                     groupNodes.length +
                     groupStatics.length +
                     groupProviders.length +
-                    (group.includeAllProxies ? 1 : 0) +
-                    (group.includeAllProviders ? 1 : 0)
+                    (showAllProxiesTag ? 1 : 0) +
+                    (showAllProvidersTag ? 1 : 0)
                   const isEmpty = totalMembers === 0
+
+                  const isPlaceholderProvider = (name: string) =>
+                    providerSlotMap.has(name) &&
+                    (showIncludeAllTags || (!group.includeAllProviders && !providerNames?.[name]))
+                  const renderProvider = (name: string) => {
+                    const slot = providerSlotMap.get(name)
+                    if (!showIncludeAllTags && (group.includeAllProviders || providerNames?.[name])) {
+                      return (
+                        <div
+                          key={name}
+                          className="preview-node-tag border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
+                          title={`use: ${name}`}
+                        >
+                          <Boxes className="size-3 text-indigo-500 shrink-0" />
+                          <span className="preview-node-tag-name">{providerNames?.[name] ?? slot?.name ?? name}</span>
+                        </div>
+                      )
+                    }
+                    return slot ? (
+                      <SourceSlotTag key={name} slot={slot} title={`use: ${name}`} placeholder />
+                    ) : (
+                      <Badge key={name} variant="outline" title={`use: ${name}`}>
+                        <Boxes data-icon="inline-start" />
+                        {`订阅源 · ${providerNames?.[name] ?? name}`}
+                      </Badge>
+                    )
+                  }
 
                   return (
                     <div key={group.name} className="preview-group-card">
@@ -328,43 +361,37 @@ export function ConfigPreviewPanel({
                           {/* 静态代理引用与节点 Tag 列表 */}
                           {totalMembers > 0 ? (
                             <div className="preview-node-ref-tags">
-                              {group.includeAllProxies && (
-                                <div
-                                  className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
-                                  title="包含全部节点 (include-all-proxies)"
-                                >
-                                  <Globe className="size-3 text-amber-500 shrink-0" />
-                                  <span className="preview-node-tag-name">包含全部节点</span>
-                                </div>
-                              )}
-                              {group.includeAllProviders && (
+                              {showAllProvidersTag && (
                                 <div
                                   className="preview-node-tag border-dashed border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                                  title="包含全部代理集合 (include-all-providers)"
+                                  title="全部订阅源 (include-all-providers)"
                                 >
                                   <Boxes className="size-3 text-indigo-500 shrink-0" />
-                                  <span className="preview-node-tag-name">包含全部代理集合</span>
+                                  <span className="preview-node-tag-name">全部订阅源</span>
                                 </div>
                               )}
-                              {groupProviders.map((name) => {
-                                const slot = providerSlotMap.get(name)
-                                return slot ? (
-                                  <SourceSlotTag key={name} slot={slot} title={`use: ${name}`} />
-                                ) : (
-                                  <Badge key={name} variant="outline" title={`use: ${name}`}>
-                                    <Boxes data-icon="inline-start" />
-                                    {`订阅源 · ${name}`}
-                                  </Badge>
-                                )
-                              })}
+                              {showAllProxiesTag && (
+                                <div
+                                  className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
+                                  title="全部节点 (include-all-proxies)"
+                                >
+                                  <Network className="size-3 text-amber-500 shrink-0" />
+                                  <span className="preview-node-tag-name">全部节点</span>
+                                </div>
+                              )}
+                              {groupProviders.filter(isPlaceholderProvider).map(renderProvider)}
                               {groupStatics.map((sp) => {
                                 if (sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')) {
                                   return (
-                                    <SourceSlotTag key={sp} slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位' }} />
+                                    <SourceSlotTag
+                                      key={sp}
+                                      slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位' }}
+                                      placeholder
+                                    />
                                   )
                                 }
-                                const isAllProxies = sp === '包含全部节点' || sp === 'include-all-proxies'
-                                const isAllProviders = sp === '包含全部代理集合' || sp === 'include-all-providers'
+                                const isAllProxies = sp === '全部节点' || sp === 'include-all-proxies'
+                                const isAllProviders = sp === '全部订阅源' || sp === 'include-all-providers'
                                 const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
 
                                 if (isAllProxies) {
@@ -372,10 +399,10 @@ export function ConfigPreviewPanel({
                                     <div
                                       key={sp}
                                       className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
-                                      title="包含全部节点"
+                                      title="全部节点"
                                     >
-                                      <Globe className="size-3 text-amber-500 shrink-0" />
-                                      <span className="preview-node-tag-name">包含全部节点</span>
+                                      <Network className="size-3 text-amber-500 shrink-0" />
+                                      <span className="preview-node-tag-name">全部节点</span>
                                     </div>
                                   )
                                 }
@@ -385,32 +412,37 @@ export function ConfigPreviewPanel({
                                     <div
                                       key={sp}
                                       className="preview-node-tag border-dashed border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                                      title="包含全部代理集合"
+                                      title="全部订阅源"
                                     >
                                       <Boxes className="size-3 text-indigo-500 shrink-0" />
-                                      <span className="preview-node-tag-name">包含全部代理集合</span>
+                                      <span className="preview-node-tag-name">全部订阅源</span>
                                     </div>
                                   )
                                 }
 
                                 return (
                                   <div key={sp} className="preview-node-tag" title={sp}>
-                                    {isBuiltin ? (
-                                      <Radio className="size-3 text-emerald-500 shrink-0" />
-                                    ) : (
-                                      <Network className="size-3 text-blue-500 shrink-0" />
-                                    )}
-                                    <span className="preview-node-tag-name font-mono">{sp}</span>
+                                    {isBuiltin && <Radio className="size-3 text-emerald-500 shrink-0" />}
+                                    <span className="preview-node-tag-name">{sp}</span>
                                   </div>
                                 )
                               })}
                               {groupNodes.slice(0, 80).map((node, index) => (
                                 <div
                                   key={`${node.id}-${index}`}
-                                  className="preview-node-tag"
+                                  className={cn(
+                                    'preview-node-tag',
+                                    !showIncludeAllTags &&
+                                      group.includeAllProxies &&
+                                      'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200',
+                                  )}
                                   title={`${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`}
                                 >
-                                  <Server className="size-3 text-purple-500 shrink-0" />
+                                  {!showIncludeAllTags && group.includeAllProxies ? (
+                                    <Network className="size-3 text-amber-500 shrink-0" />
+                                  ) : (
+                                    <Server className="size-3 text-muted-foreground shrink-0" />
+                                  )}
                                   <span className="preview-node-tag-name">{node.name}</span>
                                 </div>
                               ))}
@@ -419,6 +451,7 @@ export function ConfigPreviewPanel({
                                   +{groupNodes.length - 80} 更多
                                 </span>
                               )}
+                              {groupProviders.filter((name) => !isPlaceholderProvider(name)).map(renderProvider)}
                             </div>
                           ) : (
                             <div className="preview-empty-group-note">

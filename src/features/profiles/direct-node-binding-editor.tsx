@@ -162,7 +162,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
             </div>
             <Select
               items={[
-                { value: 'all', label: '全部节点源' },
+                { value: 'all', label: '全部订阅源' },
                 ...sourceOptions.map(([value, label]) => ({ value, label })),
               ]}
               value={sourceFilter}
@@ -173,7 +173,7 @@ export function DirectNodeBindingEditor({ slot, value, nodes, onChange }: Direct
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="all">全部节点源</SelectItem>
+                  <SelectItem value="all">全部订阅源</SelectItem>
                   {sourceOptions.map(([sourceId, sourceName]) => (
                     <SelectItem key={sourceId} value={sourceId}>
                       {sourceName}

@@ -13,7 +13,11 @@ import { SOURCE_SLOT_KEY_PATTERN, type TemplateSourceSlot } from '../templates/s
 import { MAX_TEMPLATE_BYTES, parseTemplateYaml } from '../templates/validator'
 import { slotProviderName } from '../templates/source-slots'
 import { readProfileSlotBindings } from '../profile-slot-bindings'
-import { resolveProfileProxyProviders, type ProfileProxyProviders } from '../profile-proxy-providers'
+import {
+  readProfileSubscriptionSources,
+  resolveProfileProxyProviders,
+  type ProfileProxyProviders,
+} from '../profile-proxy-providers'
 
 const yamlSchema = z
   .string()
@@ -184,6 +188,7 @@ templatesRouter.post('/preview', async (c) => {
         c.env,
         slots,
         await readProfileSlotBindings(c.env, profile.id),
+        await readProfileSubscriptionSources(c.env, profile.id),
       )
     }
     return ok(c, {

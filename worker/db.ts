@@ -195,6 +195,23 @@ export const profiles = sqliteTable(
   ],
 )
 
+export const profileSubscriptionSources = sqliteTable(
+  'profile_subscription_sources',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.sourceId] }),
+    index('profile_subscription_sources_source_idx').on(table.sourceId, table.profileId),
+  ],
+)
+
 export const profileNodeBinding = sqliteTable(
   'profile_node_binding',
   {

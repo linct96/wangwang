@@ -163,6 +163,7 @@ export type Profile = {
   compiledAt: string | null
   error: string | null
   nodeBinding: ProfileNodeBinding
+  subscriptionSourceIds: string[]
   slotBindings: ProfileSlotBinding[]
   subscriptionUrl: string
 }

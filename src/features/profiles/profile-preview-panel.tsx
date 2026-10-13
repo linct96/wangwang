@@ -4,11 +4,13 @@ import type {
   ProfileNodeBinding,
   ProfileSlotBinding,
   ProfileYamlPreview,
+  Source,
   TemplateId,
   TemplateSourceSlot,
 } from '@/api/types'
 import { ConfigPreviewPanel } from '@/components/config-preview-panel'
 import type { ProfilePreviewResult } from './use-profile-preview'
+import { slotProviderName, sourceProviderName } from '../../../shared/source-slots'
 
 export type ProfilePreviewPanelProps = {
   preview: ProfilePreviewResult
@@ -16,6 +18,8 @@ export type ProfilePreviewPanelProps = {
   className?: string
   templateId?: TemplateId
   nodeBinding?: ProfileNodeBinding
+  subscriptionSourceIds?: string[]
+  sources?: Source[]
   slotBindings?: ProfileSlotBinding[]
   sourceSlots?: TemplateSourceSlot[]
   onToggleCollapse?: () => void
@@ -27,6 +31,8 @@ export function ProfilePreviewPanel({
   className,
   templateId,
   nodeBinding,
+  subscriptionSourceIds,
+  sources,
   slotBindings,
   sourceSlots,
   onToggleCollapse,
@@ -38,6 +44,13 @@ export function ProfilePreviewPanel({
   const [refreshTick, setRefreshTick] = useState(0)
 
   const effectiveYamlError = !templateId ? '请先在左侧选择订阅模板' : yamlError
+  const providerNames = Object.fromEntries((sources || []).map(({ id, name }) => [sourceProviderName(id), name]))
+  for (const slot of sourceSlots || []) {
+    if (slot.type !== 'subscription') continue
+    const binding = slotBindings?.find(({ slotKey }) => slotKey === slot.key)
+    const source = binding?.mode === 'source' ? sources?.find(({ id }) => id === binding.sourceIds[0]) : undefined
+    if (source) providerNames[slotProviderName(slot.key)] = source.name
+  }
 
   useEffect(() => {
     if (viewMode !== 'yaml' || !templateId) return
@@ -51,6 +64,7 @@ export function ProfilePreviewPanel({
           method: 'POST',
           body: JSON.stringify({
             templateId,
+            subscriptionSourceIds: subscriptionSourceIds || [],
             nodeBinding:
               nodeBinding?.mode === 'node'
                 ? { mode: nodeBinding.mode, nodeIds: nodeBinding.nodeIds }
@@ -84,7 +98,7 @@ export function ProfilePreviewPanel({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [viewMode, templateId, nodeBinding, slotBindings, refreshTick])
+  }, [viewMode, templateId, nodeBinding, subscriptionSourceIds, slotBindings, refreshTick])
 
   return (
     <ConfigPreviewPanel
@@ -93,6 +107,8 @@ export function ProfilePreviewPanel({
       onViewModeChange={setViewMode}
       groups={preview.groups}
       sourceSlots={sourceSlots}
+      providerNames={providerNames}
+      showIncludeAllTags={false}
       groupsLoading={loading}
       groupsEmptyText="暂无策略组数据"
       groupsEmptySubText="在左侧选择规则模板并配置节点源，此处将自动呈现"

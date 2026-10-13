@@ -34,12 +34,12 @@ export function SubscriptionSlotBindingEditor({
   return (
     <FieldGroup>
       <Field data-invalid={Boolean(error)}>
-        <FieldLabel htmlFor={`subscription-${slot.key}`}>订阅节点源（单选）</FieldLabel>
+        <FieldLabel htmlFor={`subscription-${slot.key}`}>订阅源</FieldLabel>
         <Select
           value={sourceId || null}
           items={subscriptions.map((source) => ({
             value: source.id,
-            label: `${source.name} · ${source.enabled && source.url ? '已启用' : '不可用'}`,
+            label: source.name,
           }))}
           onOpenChange={(open) => {
             if (!open) setTouched(true)
@@ -56,7 +56,7 @@ export function SubscriptionSlotBindingEditor({
             <SelectGroup>
               {subscriptions.map((source) => (
                 <SelectItem key={source.id} value={source.id} disabled={!source.enabled || !source.url}>
-                  {source.name} · {source.enabled && source.url ? '已启用' : '不可用'}
+                  {source.name}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -70,10 +70,6 @@ export function SubscriptionSlotBindingEditor({
           不展开本地节点，由 Mihomo 动态加载；更新间隔、User-Agent 和名称排除过滤沿用节点源设置。
         </FieldDescription>
       </Field>
-      <FieldDescription>
-        原始订阅必须兼容 Mihomo provider，不自动转换格式。最终 YAML
-        含订阅地址及可能的密钥，请勿公开分享；本地别名与单节点停用不会同步。
-      </FieldDescription>
     </FieldGroup>
   )
 }
