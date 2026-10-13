@@ -1,22 +1,32 @@
 ---
-name: 精简规则模板-防DNS污染
+name: 精简规则模板
 description: 基础 DNS / 国内直连 / 自动选择
 order: 1
 ---
 mixed-port: 7890
 allow-lan: false
 mode: rule
-log-level: info
+log-level: warning
 ipv6: false
 unified-delay: true
+
+# 并发尝试解析得到的多个 IP，采用先成功的连接
+tcp-concurrent: true
+
+# 持久化选中节点和 Fake-IP 映射
+profile:
+  store-selected: true
+  store-fake-ip: true
 dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
   enhanced-mode: fake-ip
-  respect-rules: true
-  prefer-h3: false
   fake-ip-range: 198.18.0.1/16
+
+  # 极速模式：DNS 查询不强制遵循分流规则
+  respect-rules: false
+
   fake-ip-filter:
     - +.lan
     - +.local
@@ -34,25 +44,33 @@ dns:
     - +.n.n.srv.nintendo.net
     - +.stun.playstation.net
     - +.xboxlive.com
+
+  # DNS 引导服务器
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
+
+  # 使用本地 UDP DNS，减少加密 DNS 连接开销
   nameserver:
-    - https://cloudflare-dns.com/dns-query
-    - https://dns.google/dns-query
+    - 223.5.5.5
+    - 119.29.29.29
+
+  # 代理节点域名使用本地 DNS
   proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
+    - 223.5.5.5
+    - 119.29.29.29
+
+  # 直连出口使用本地 DNS
   direct-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
+    - 223.5.5.5
+    - 119.29.29.29
+
   direct-nameserver-follow-policy: true
+
   nameserver-policy:
     'geosite:private':
       - system
-    'geosite:cn':
-      - https://dns.alidns.com/dns-query
-      - https://doh.pub/dns-query
+
 proxy-groups:
   - name: 🚀 节点选择
     type: select
@@ -102,5 +120,5 @@ rules:
   - RULE-SET,private-domain,DIRECT
   - RULE-SET,private-ip,DIRECT,no-resolve
   - RULE-SET,cn-domain,DIRECT
-  - RULE-SET,cn-ip,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
   - MATCH,🚀 节点选择
