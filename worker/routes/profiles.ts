@@ -23,11 +23,7 @@ import {
 import { normalizeTagInputs } from '../tag-model'
 import { profileTagViews, replaceProfileTagFilters } from '../tag-store'
 
-const templateIdSchema = z
-  .string()
-  .refine((value) => /^(builtin:(minimal|standard|full)|[A-Za-z0-9_-]{12})$/.test(value), {
-    message: '订阅模板 ID 无效',
-  })
+const templateIdSchema = z.string().regex(/^[A-Za-z0-9_-]{12}$/, '请选择自定义模板，内置模板需先复制后使用')
 const regexSchema = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim() || null : value),
   z.string().max(200).nullable(),
@@ -96,7 +92,7 @@ export const profileSchema = z
     subscriptionSourceIds: z.array(z.string().min(1)).max(20).default([]),
     slotBindings: slotBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
-    templateId: templateIdSchema.default('builtin:minimal'),
+    templateId: templateIdSchema,
   })
   .strict()
 

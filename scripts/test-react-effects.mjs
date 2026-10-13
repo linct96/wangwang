@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { z } from 'zod'
+import { revalidateLogic } from '@tanstack/react-form'
 import { createServer } from 'vite'
 
 // Deterministic hook/event checks against actual source, not a React scheduler or DOM simulation.
@@ -805,24 +806,26 @@ const profileHelper = (name) =>
     {},
   )
 const subscriptionSlot = { key: 'subscription', name: '机场', type: 'subscription' }
-const profileTemplates = [{ id: 'builtin:minimal', name: '模板', kind: 'builtin', sourceSlots: [subscriptionSlot] }]
+const profileTemplates = [{ id: 'customtpl001', name: '模板副本', kind: 'custom', sourceSlots: [subscriptionSlot] }]
 let profileFormOptions
 let profileValues
 const profileForm = { Field: 'Field', Subscribe: 'Subscribe', store: {}, state: {} }
 const profileEditor = harness(profilePath, 'ProfileEditor', {
   z,
+  revalidateLogic,
   NODE_BINDING_EDITOR_SCOPE: { key: 'profile-node-binding', name: '全部节点' },
   emptyNodeBinding: profileHelper('emptyNodeBinding'),
   validRegex: profileHelper('validRegex'),
   hasConfiguration: profileHelper('hasConfiguration'),
   cn: (...names) => names.filter(Boolean).join(' '),
   useApi: (path) => ({ data: path === '/templates' ? profileTemplates : subscriptionProps().sources, loading: false }),
-  useStore: () => 'builtin:minimal',
+  useStore: () => 'customtpl001',
   useForm(options) {
     profileFormOptions = options
     profileValues ||= {
       ...options.defaultValues,
       name: '配置',
+      templateId: profileTemplates[0].id,
       slotBindings: [{ ...subscriptionValue, slotKey: subscriptionSlot.key }],
     }
     profileForm.state.values = profileValues
@@ -838,13 +841,17 @@ const submitButton = () =>
     ({ props }) => props.type === 'submit',
   )
 assert.equal(submitButton().props.disabled, false, '空订阅槽位允许点击创建以触发校验')
-assert.equal(profileFormOptions.validators.onSubmit.safeParse(profileValues).success, false, '空槽位仍无法通过保存校验')
+assert.equal(
+  profileFormOptions.validators.onDynamic.safeParse(profileValues).success,
+  false,
+  '空槽位仍无法通过保存校验',
+)
 profileValues.slotBindings[0].sourceIds = ['missing']
 assert.equal(submitButton().props.disabled, true, '已失效的绑定仍禁止保存')
 profileValues.slotBindings[0].sourceIds = ['airport']
 assert.equal(submitButton().props.disabled, false)
 assert.equal(
-  profileFormOptions.validators.onSubmit.safeParse(profileValues).success,
+  profileFormOptions.validators.onDynamic.safeParse(profileValues).success,
   true,
   '有效订阅允许仅 provider 配置',
 )

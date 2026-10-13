@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useForm, useStore } from '@tanstack/react-form'
+import { revalidateLogic, useForm, useStore } from '@tanstack/react-form'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -32,18 +32,10 @@ import { AppConfirmDialog, IconButton, PageState } from '@/components/app-primit
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { SlotBindingEditor } from './slot-binding-editor'
 import { SubscriptionSlotBindingEditor } from './subscription-slot-binding-editor'
@@ -102,6 +94,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     error: templateError,
     loading: templatesLoading,
   } = useApi<TemplateSummary[]>('/templates')
+  const custom = useMemo(() => templates.filter((template) => template.kind === 'custom'), [templates])
   const {
     data: sources = [],
     error: sourceError,
@@ -124,6 +117,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const [basicExpanded, setBasicExpanded] = useState(true)
   const [nodesExpanded, setNodesExpanded] = useState(true)
   const [subscriptionsExpanded, setSubscriptionsExpanded] = useState(true)
+  const [validationTarget, setValidationTarget] = useState<{ sectionId: string; field: string }>()
 
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail>()
   const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
@@ -135,13 +129,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const form = useForm({
     defaultValues: {
       name: '',
-      templateId: initialTemplateId || ('builtin:minimal' as TemplateId),
+      templateId: initialTemplateId && !initialTemplateId.startsWith('builtin:') ? initialTemplateId : '',
       nodeBinding: emptyNodeBinding(),
       subscriptionSourceIds: [] as string[],
       slotBindings: [] as ProfileSlotBinding[],
     },
+    validationLogic: revalidateLogic(),
     validators: {
-      onSubmit: z
+      onDynamic: z
         .object({
           name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
           subscriptionSourceIds: z.array(z.string()).max(20, '最多选择 20 个订阅源'),
@@ -189,8 +184,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             ]),
           ),
           templateId: z.custom<TemplateId>(
-            (value) => typeof value === 'string' && value.length > 0,
-            '请选择订阅规则模板',
+            (value) => custom.some((template) => template.id === value),
+            '请选择自定义模板，内置模板需先复制后使用',
           ),
         })
         .refine(
@@ -203,6 +198,28 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               ?.sourceSlots.some(({ type }) => type === 'subscription'),
           { message: '请选择全部节点、全部订阅源或绑定订阅源槽位', path: ['nodeBinding', 'sourceIds'] },
         ),
+    },
+    onSubmitInvalid: ({ value, formApi }) => {
+      const field = Object.keys(formApi.state.errorMap.onDynamic ?? {})[0]
+      if (!field) return
+      let sectionId = 'profile-basic-section'
+      if (field.startsWith('slotBindings[')) {
+        const index = Number(field.match(/^slotBindings\[(\d+)\]/)?.[1])
+        const slotKey = value.slotBindings[index]?.slotKey
+        if (!slotKey) return
+        setCollapsedSlotKeys((previous) => ({ ...previous, [slotKey]: false }))
+        sectionId = `profile-slot-${slotKey}`
+      } else if (field.startsWith('nodeBinding')) {
+        setNodesExpanded(true)
+        sectionId = 'profile-nodes-section'
+      } else if (field.startsWith('subscriptionSourceIds')) {
+        setSubscriptionsExpanded(true)
+        sectionId = 'profile-subscriptions-section'
+      } else {
+        setBasicExpanded(true)
+      }
+      setMobileTab('form')
+      setValidationTarget({ sectionId, field })
     },
     onSubmit: async ({ value }) => {
       setError('')
@@ -243,6 +260,21 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   })
 
   useEffect(() => {
+    if (!validationTarget) return
+    const section = document.getElementById(validationTarget.sectionId)
+    if (!section) return
+    section.scrollIntoView({ block: 'center', behavior: 'instant' })
+    const control =
+      (validationTarget.field === 'templateId' ? document.getElementById('profile-template') : null) ??
+      section.querySelector<HTMLElement>('[aria-invalid="true"]:not(:disabled)') ??
+      section.querySelector<HTMLElement>(
+        '.profile-section-body input:not(:disabled), .profile-section-body button:not(:disabled)',
+      )
+    const focusTarget = control ?? section
+    focusTarget.focus({ preventScroll: true })
+  }, [validationTarget])
+
+  useEffect(() => {
     if (!id) return
     const controller = new AbortController()
     setProfileLoading(true)
@@ -265,10 +297,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   useEffect(() => {
     if (initialized.current || !formMounted || !templates.length || (id && !profile)) return
     initialized.current = true
-    const selectedTemplate =
-      templates.find(({ id: templateId }) => templateId === initialTemplateId) ||
-      templates.find(({ id: templateId }) => templateId === 'builtin:minimal') ||
-      templates[0]
+    const selectedTemplate = custom.find(({ id: templateId }) => templateId === initialTemplateId) || custom[0]
 
     const initialBindings = profile ? profile.slotBindings : emptyBindings(selectedTemplate)
 
@@ -283,14 +312,14 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           }
         : {
             name: '',
-            templateId: selectedTemplate?.id || 'builtin:minimal',
+            templateId: selectedTemplate?.id || '',
             nodeBinding: emptyNodeBinding(),
             subscriptionSourceIds: [],
             slotBindings: initialBindings,
           },
       { keepDefaultValues: true },
     )
-  }, [form, id, initialTemplateId, profile, templates, formMounted])
+  }, [form, id, initialTemplateId, profile, templates, custom, formMounted])
 
   const selectedTemplateId = useStore(form.store, (state) => state.values.templateId)
 
@@ -325,8 +354,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     return () => controller.abort()
   }, [selectedTemplateId, templateDetailAttempt])
 
-  const builtin = useMemo(() => templates.filter((template) => template.kind === 'builtin'), [templates])
-  const custom = useMemo(() => templates.filter((template) => template.kind === 'custom'), [templates])
   const loading = profileLoading || templatesLoading || sourcesLoading || tagsLoading || nodesLoading
   const loadError = profileError || templateError || sourceError || tagError || nodesError
 
@@ -415,7 +442,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           <div className={cn('profile-editor-layout', previewCollapsed && 'profile-editor-layout-collapsed')}>
             <main className={cn('profile-editor-main', mobileTab !== 'form' && 'profile-pane-mobile-hidden')}>
               {/* 模块 1：基础信息 */}
-              <section className="profile-section">
+              <section id="profile-basic-section" className="profile-section" tabIndex={-1} aria-label="基础信息">
                 <form.Subscribe selector={(state) => [state.values.name, state.values.templateId] as const}>
                   {([name, templateId]) => {
                     const selectedTemplate = templates.find((t) => t.id === templateId)
@@ -485,7 +512,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
 
                               <form.Field name="templateId">
                                 {(field) => (
-                                  <Field>
+                                  <Field data-invalid={field.state.meta.isTouched && !field.state.meta.isValid}>
                                     <FieldLabel htmlFor="profile-template" className="text-sm font-medium">
                                       规则模板 <span className="text-destructive">*</span>
                                     </FieldLabel>
@@ -499,30 +526,40 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                                         value !== null && requestTemplateChange(value as TemplateId)
                                       }
                                     >
-                                      <SelectTrigger id="profile-template" className="w-full">
+                                      <SelectTrigger
+                                        id="profile-template"
+                                        className="w-full"
+                                        onBlur={field.handleBlur}
+                                        aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
+                                      >
                                         <SelectValue placeholder="选择规则模板" />
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectGroup>
-                                          <SelectLabel>内置预设模板</SelectLabel>
-                                          {builtin.map((template) => (
+                                          {custom.map((template) => (
                                             <SelectItem key={template.id} value={template.id}>
                                               {template.name}
                                             </SelectItem>
                                           ))}
                                         </SelectGroup>
-                                        {custom.length > 0 && (
-                                          <SelectGroup>
-                                            <SelectLabel>我的自定义模板</SelectLabel>
-                                            {custom.map((template) => (
-                                              <SelectItem key={template.id} value={template.id}>
-                                                {template.name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectGroup>
-                                        )}
                                       </SelectContent>
                                     </Select>
+                                    {(!custom.length || field.state.value.startsWith('builtin:')) && (
+                                      <FieldDescription>
+                                        内置模板需先复制后使用。
+                                        <Button
+                                          type="button"
+                                          variant="link"
+                                          size="sm"
+                                          onClick={() => void navigate({ to: '/templates' })}
+                                        >
+                                          前往模板库
+                                        </Button>
+                                      </FieldDescription>
+                                    )}
+                                    {field.state.meta.isTouched && !field.state.meta.isValid && (
+                                      <FieldError errors={field.state.meta.errors} />
+                                    )}
                                   </Field>
                                 )}
                               </form.Field>
@@ -535,7 +572,12 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                 </form.Subscribe>
               </section>
 
-              <section className="profile-section">
+              <section
+                id="profile-subscriptions-section"
+                className="profile-section"
+                tabIndex={-1}
+                aria-label="全部订阅源"
+              >
                 <form.Field name="subscriptionSourceIds">
                   {(field) => (
                     <div className="flex flex-col gap-0">
@@ -594,7 +636,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
               </section>
 
               {/* 全部节点 */}
-              <section className="profile-section">
+              <section id="profile-nodes-section" className="profile-section" tabIndex={-1} aria-label="全部节点">
                 <form.Field name="nodeBinding">
                   {(field) => {
                     return (
@@ -679,7 +721,13 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                             const isExpanded = isSlotExpanded(slot.key)
 
                             return (
-                              <section key={slot.key} className="profile-section">
+                              <section
+                                key={slot.key}
+                                id={`profile-slot-${slot.key}`}
+                                className="profile-section"
+                                tabIndex={-1}
+                                aria-label={slot.name}
+                              >
                                 <div className="profile-section-header">
                                   <div
                                     className="profile-section-header-trigger"
