@@ -1,14 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-
-// 与现有 Worker 测试一致，使用 Node 24 原生 TS 和项目的无扩展名相对导入。
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') && context.parentURL?.includes('/worker/') && !specifier.endsWith('.ts'))
-      specifier += '.ts'
-    return nextResolve(specifier, context)
-  },
-})
+import './register-worker-test-hooks.mjs'
 const { assertRemoteUrl } = await import('../worker/security.ts')
 const { fetchSource } = await import('../worker/tasks.ts')
 

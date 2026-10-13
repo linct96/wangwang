@@ -1,17 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { createRequire, registerHooks } from 'node:module'
+import { createRequire } from 'node:module'
+import './register-worker-test-hooks.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { stringify } from 'yaml'
 import { parseConfigFileTextToJson } from 'typescript'
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') && context.parentURL?.includes('/worker/') && !specifier.endsWith('.ts'))
-      specifier += '.ts'
-    return nextResolve(specifier, context)
-  },
-})
 const { default: worker } = await import('../worker/index.ts')
 const { createJob, compileProfile, cleanupOrphanPhysicalNodes, MAX_JOB_ATTEMPTS } = await import('../worker/tasks.ts')
 const { parseProxyText } = await import('../worker/proxy/index.ts')

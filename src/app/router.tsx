@@ -7,6 +7,7 @@ import {
   Outlet,
 } from '@tanstack/react-router'
 import { Layout } from './layout'
+import type { NewTemplateSource } from '@/features/templates/editor'
 
 const DashboardPage = lazyRouteComponent(() => import('@/features/dashboard/page'), 'DashboardPage')
 const SourcesPage = lazyRouteComponent(() => import('@/features/sources/page'), 'SourcesPage')
@@ -47,8 +48,8 @@ const newTemplateRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/templates/new',
   validateSearch: (search: Record<string, unknown>) => ({
-    source: ['builtin:minimal', 'builtin:standard', 'builtin:full', 'import', 'blank'].includes(String(search.source))
-      ? (String(search.source) as 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank')
+    source: /^(builtin:[a-z0-9][a-z0-9_-]*|import|blank)$/.test(String(search.source))
+      ? (String(search.source) as NewTemplateSource)
       : ('blank' as const),
   }),
   component: NewTemplatePage,

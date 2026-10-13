@@ -23,7 +23,7 @@ import '@/styles/templates.css'
 
 const YamlCodeEditor = lazy(() => import('@/components/yaml-code-editor'))
 
-type NewTemplateSource = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank'
+export type NewTemplateSource = `builtin:${string}` | 'import' | 'blank'
 const blankSourceSlots: TemplateDetail['sourceSlots'] = []
 const blankTemplate = `proxy-groups:
   - name: 🚀 节点选择

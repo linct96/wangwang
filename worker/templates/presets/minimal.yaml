@@ -1,0 +1,106 @@
+---
+name: 精简规则模板-防DNS污染
+description: 基础 DNS / 国内直连 / 自动选择
+order: 1
+---
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+unified-delay: true
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  respect-rules: true
+  prefer-h3: false
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - +.localdomain
+    - localhost
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - localhost.weixin.qq.com
+    - localhost.*.weixin.qq.com
+    - +.ntp.org
+    - +.stun.*.*
+    - +.stun.*.*.*
+    - +.stun.*.*.*.*
+    - +.stun.*.*.*.*.*
+    - +.n.n.srv.nintendo.net
+    - +.stun.playstation.net
+    - +.xboxlive.com
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+  proxy-server-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
+  nameserver-policy:
+    'geosite:private':
+      - system
+    'geosite:cn':
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - ⚡ 自动选择
+      - DIRECT
+  - name: ⚡ 自动选择
+    type: url-test
+    include-all-proxies: true
+    include-all-providers: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+rule-providers:
+  private-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs'
+    path: ./ruleset/private-domain.mrs
+    interval: 86400
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs'
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+  cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs'
+    path: ./ruleset/cn-domain.mrs
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs'
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+rules:
+  - DOMAIN,services.googleapis.cn,🚀 节点选择
+  - RULE-SET,private-domain,DIRECT
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,cn-domain,DIRECT
+  - RULE-SET,cn-ip,DIRECT
+  - MATCH,🚀 节点选择

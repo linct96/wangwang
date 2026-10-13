@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDate } from '@/lib/format'
 import { TemplatePreview } from './template-preview'
+import type { NewTemplateSource } from './editor'
 import '@/styles/templates.css'
 
 const builtinTemplateIcons = {
@@ -18,42 +19,6 @@ const builtinTemplateIcons = {
   'builtin:standard': { icon: Layers, color: 'text-blue-500 bg-blue-500/10' },
   'builtin:full': { icon: Globe, color: 'text-indigo-500 bg-indigo-500/10' },
 } as const
-
-const builtinFallback: TemplateSummary[] = [
-  {
-    id: 'builtin:minimal',
-    name: '精简规则模板',
-    description: '基础 DNS / 国内直连 / 自动选择',
-    kind: 'builtin',
-    readOnly: true,
-    profileCount: 0,
-    sourceSlots: [],
-    createdAt: null,
-    updatedAt: null,
-  },
-  {
-    id: 'builtin:standard',
-    name: '标准规则模板',
-    description: '常用分流 / 国内直连 / AI 与流媒体',
-    kind: 'builtin',
-    readOnly: true,
-    profileCount: 0,
-    sourceSlots: [],
-    createdAt: null,
-    updatedAt: null,
-  },
-  {
-    id: 'builtin:full',
-    name: '完全规则模板',
-    description: '标准超集 / 多服务分流 / IP 规则',
-    kind: 'builtin',
-    readOnly: true,
-    profileCount: 0,
-    sourceSlots: [],
-    createdAt: null,
-    updatedAt: null,
-  },
-]
 
 export function TemplatesPage() {
   const navigate = useNavigate()
@@ -63,7 +28,7 @@ export function TemplatesPage() {
   const [choosingSource, setChoosingSource] = useState(false)
   const [busy, setBusy] = useState('')
   const initialLoading = loading && !templates
-  const builtin = templates?.filter((template) => template.kind === 'builtin') ?? builtinFallback
+  const builtin = templates?.filter((template) => template.kind === 'builtin') ?? []
   const custom = templates?.filter((template) => template.kind === 'custom') ?? []
 
   async function duplicate(template: TemplateSummary) {
@@ -94,7 +59,7 @@ export function TemplatesPage() {
     }
   }
 
-  function create(source: 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | 'import' | 'blank') {
+  function create(source: NewTemplateSource) {
     setChoosingSource(false)
     void navigate({ to: '/templates/new', search: { source } })
   }
@@ -137,20 +102,11 @@ export function TemplatesPage() {
                           <h3 title={template.name}>{template.name}</h3>
                           <Badge variant="secondary">内置</Badge>
                         </div>
-                        <p>{template.description || '开箱即用的预设规则模板'}</p>
+                        <p>{template.description || '复制后使用的预设规则模板'}</p>
                       </div>
                     </header>
                   </div>
                   <footer className="template-card-footer">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void navigate({ to: '/profiles/new', search: { templateId: template.id } })}
-                    >
-                      <Zap className="size-3.5" />
-                      使用
-                    </Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
                       <Eye className="size-3.5" />
                       预览
@@ -283,35 +239,28 @@ export function TemplatesPage() {
       {choosingSource && (
         <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
           <div className="template-source-grid">
-            <button type="button" className="template-source-card" onClick={() => create('builtin:minimal')}>
-              <div className="template-source-icon text-amber-500 bg-amber-500/10">
-                <Zap className="size-4.5" />
-              </div>
-              <div className="template-source-text">
-                <strong>从精简规则模板创建</strong>
-                <p>基础分流与快速节点选择，轻量高效</p>
-              </div>
-            </button>
-
-            <button type="button" className="template-source-card" onClick={() => create('builtin:standard')}>
-              <div className="template-source-icon text-blue-500 bg-blue-500/10">
-                <Layers className="size-4.5" />
-              </div>
-              <div className="template-source-text">
-                <strong>从标准规则模板创建</strong>
-                <p>MRS 常用分流，国内直连、AI 与流媒体独立选择</p>
-              </div>
-            </button>
-
-            <button type="button" className="template-source-card" onClick={() => create('builtin:full')}>
-              <div className="template-source-icon text-indigo-500 bg-indigo-500/10">
-                <Globe className="size-4.5" />
-              </div>
-              <div className="template-source-text">
-                <strong>从完全规则模板创建</strong>
-                <p>标准规则超集，增加 GitHub、Google、Telegram、Microsoft、Apple、游戏分流</p>
-              </div>
-            </button>
+            {builtin.map((template) => {
+              const iconConfig =
+                builtinTemplateIcons[template.id as keyof typeof builtinTemplateIcons] ||
+                builtinTemplateIcons['builtin:minimal']
+              const TemplateIcon = iconConfig.icon
+              return (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="template-source-card"
+                  onClick={() => create(template.id as NewTemplateSource)}
+                >
+                  <div className={`template-source-icon ${iconConfig.color}`}>
+                    <TemplateIcon className="size-4.5" />
+                  </div>
+                  <div className="template-source-text">
+                    <strong>从{template.name}创建</strong>
+                    <p>{template.description || '复制预设规则，创建自定义模板'}</p>
+                  </div>
+                </button>
+              )
+            })}
 
             <button type="button" className="template-source-card" onClick={() => create('import')}>
               <div className="template-source-icon text-emerald-500 bg-emerald-500/10">

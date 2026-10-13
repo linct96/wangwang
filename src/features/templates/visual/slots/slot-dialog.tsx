@@ -118,9 +118,6 @@ export function SlotDialog({
                   ? '绑定一个 URL 订阅节点源，通过代理组 use 动态加载，不展开本地节点。'
                   : '根据节点源、标签或指定节点筛选并注入，通过 proxies 引用。'}
               </FieldDescription>
-              {typeLocked && value && (
-                <FieldDescription>此槽位已被配置绑定，不能修改类型；代理组引用与配置绑定相互独立。</FieldDescription>
-              )}
             </Field>
             <Field>
               <FieldLabel htmlFor="slot-name">槽位名称</FieldLabel>

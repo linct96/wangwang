@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { registerHooks } from 'node:module'
+import './register-worker-test-hooks.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { parseConfigFileTextToJson } from 'typescript'
 import { parse } from 'yaml'
-
-// Node 24 原生执行 Worker TS；仅补齐项目使用的无扩展名相对导入。
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') && context.parentURL?.includes('/worker/') && !specifier.endsWith('.ts'))
-      specifier += '.ts'
-    return nextResolve(specifier, context)
-  },
-})
 
 const { app } = await import('../worker/app.ts')
 const { default: worker } = await import('../worker/index.ts')
@@ -296,8 +287,18 @@ try {
       "INSERT INTO nodes (id,source_id,physical_node_id,original_name,position,created_at,updated_at) VALUES ('node-test','system-manual','physical-test','测试节点',0,1,1)",
     )
     .run()
+  const copied = await app.fetch(
+    new Request(`${origin}/api/templates/builtin:minimal/duplicate`, {
+      method: 'POST',
+      headers: { Cookie: cookie, Origin: origin },
+    }),
+    env,
+  )
+  assert.equal(copied.status, 201, await copied.clone().text())
+  const copiedTemplate = (await copied.json()).data
   const created = await admin('', 'POST', {
     name: '新配置',
+    templateId: copiedTemplate.id,
     nodeBinding: { mode: 'source', sourceIds: ['system-manual'], includeRegex: null, excludeRegex: null },
     slotBindings: [],
   })

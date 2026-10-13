@@ -135,7 +135,7 @@ export type NodeOption = {
   tags: string[]
 }
 
-export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
+export type TemplateId = `builtin:${string}` | (string & {})
 
 export type TemplateSummary = {
   id: TemplateId

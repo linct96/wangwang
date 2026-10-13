@@ -146,7 +146,7 @@ export const sourceTags = sqliteTable(
   ],
 )
 
-export type TemplateId = 'builtin:minimal' | 'builtin:standard' | 'builtin:full' | (string & {})
+export type TemplateId = `builtin:${string}` | (string & {})
 
 export const templates = sqliteTable('templates', {
   id: text('id').primaryKey(),
