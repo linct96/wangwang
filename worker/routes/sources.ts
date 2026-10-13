@@ -32,7 +32,9 @@ const userAgentSchema = z
 export const sourceCreateSchema = z.object({
   name: z.string().trim().max(60).optional().default(''),
   url: z.string().trim().min(1).max(2048),
-  refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).default(6),
+  refreshIntervalHours: z
+    .union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24), z.literal(48)])
+    .default(24),
   nodeNameFilter: nodeNameFilterSchema.optional().default(''),
   nodeTags: nodeTagsSchema.optional().default([]),
   userAgent: userAgentSchema.optional().default('clash-verge/v2.5.2'),
@@ -42,7 +44,9 @@ export const sourceUpdateSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   url: z.string().trim().min(1).max(2048).optional(),
   enabled: z.boolean().optional(),
-  refreshIntervalHours: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]).optional(),
+  refreshIntervalHours: z
+    .union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24), z.literal(48)])
+    .optional(),
   nodeNameFilter: nodeNameFilterSchema.optional(),
   nodeTags: nodeTagsSchema.optional(),
   userAgent: userAgentSchema.optional(),

@@ -301,7 +301,7 @@ function SourceDialog({
       userAgent: source?.userAgent || defaultUserAgent,
       nodeTags: source?.nodeTags || [],
       nodeNameFilter: source?.nodeNameFilter || '',
-      interval: source?.refreshIntervalHours ?? 6,
+      interval: source?.refreshIntervalHours ?? 24,
     },
     validators: {
       onSubmit: z.object({
@@ -331,7 +331,7 @@ function SourceDialog({
               return false
             }
           }, '节点名称过滤正则无效'),
-        interval: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24)]),
+        interval: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24), z.literal(48)]),
       }),
     },
     onSubmit: async ({ value }) => {
@@ -498,7 +498,7 @@ function SourceDialog({
             <form.Field name="interval">
               {(field) => (
                 <Select
-                  items={[0, 1, 6, 12, 24].map((hours) => ({
+                  items={[0, 1, 6, 12, 24, 48].map((hours) => ({
                     value: String(hours),
                     label: hours === 0 ? '关闭' : `${hours} 小时`,
                   }))}
@@ -515,6 +515,7 @@ function SourceDialog({
                       <SelectItem value="6">6 小时</SelectItem>
                       <SelectItem value="12">12 小时</SelectItem>
                       <SelectItem value="24">24 小时</SelectItem>
+                      <SelectItem value="48">48 小时</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
