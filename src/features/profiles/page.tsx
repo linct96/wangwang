@@ -170,9 +170,6 @@ export function ProfilesPage() {
                                   <RefreshCw className={cn('size-4 mr-2', isCompiling && 'spin')} />
                                   {isCompiling ? '正在生成...' : '重新生成'}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem render={<Link to="/profiles/$id/edit" params={{ id: profile.id }} />}>
-                                  <Pencil className="size-4 mr-2" /> 编辑设置
-                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem variant="destructive" onClick={() => setDeleting(profile)}>
                                   <Trash2 className="size-4 mr-2" /> 删除配置
@@ -226,6 +223,15 @@ export function ProfilesPage() {
                           </span>
                         </div>
                         <div className="profile-action-buttons">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            nativeButton={false}
+                            render={<Link to="/profiles/$id/edit" params={{ id: profile.id }} />}
+                          >
+                            <Pencil className="size-3.5" />
+                            编辑设置
+                          </Button>
                           <Button variant="outline" size="sm" onClick={() => copySubscription(profile.subscriptionUrl)}>
                             <Copy className="size-3.5" />
                             复制链接

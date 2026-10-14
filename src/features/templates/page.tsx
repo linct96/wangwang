@@ -1,24 +1,37 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Copy, Eye, FileCode2, FilePlus2, Globe, Layers, Pencil, Plus, Trash2, Upload, Zap } from 'lucide-react'
+import {
+  Copy,
+  Eye,
+  FileCode2,
+  FilePlus2,
+  Layers,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+  Zap,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useApi } from '@/api/use-api'
 import type { TemplateDetail, TemplateSummary } from '@/api/types'
-import { AppConfirmDialog, AppDialog, PageState } from '@/components/app-primitives'
-import { Badge } from '@/components/ui/badge'
+import { AppConfirmDialog, AppDialog, IconButton, PageState } from '@/components/app-primitives'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDate } from '@/lib/format'
 import { TemplatePreview } from './template-preview'
 import type { NewTemplateSource } from './editor'
 import '@/styles/templates.css'
-
-const builtinTemplateIcons = {
-  'builtin:minimal': { icon: Zap, color: 'text-amber-500 bg-amber-500/10' },
-  'builtin:standard': { icon: Layers, color: 'text-blue-500 bg-blue-500/10' },
-  'builtin:full': { icon: Globe, color: 'text-indigo-500 bg-indigo-500/10' },
-} as const
 
 export function TemplatesPage() {
   const navigate = useNavigate()
@@ -82,49 +95,37 @@ export function TemplatesPage() {
             <span className="template-section-count">{builtin.length}</span>
           </div>
           <div className="template-grid">
-            {builtin.map((template) => {
-              const iconConfig = builtinTemplateIcons[template.id as keyof typeof builtinTemplateIcons] || {
-                icon: Zap,
-                color: 'text-amber-500 bg-amber-500/10',
-              }
-              const TemplateIcon = iconConfig.icon
-              return (
-                <article className="template-card" key={template.id}>
-                  <div className="template-card-body">
-                    <header className="template-card-header">
-                      <div
-                        className={`template-card-icon flex size-8 items-center justify-center rounded ${iconConfig.color}`}
-                      >
-                        <TemplateIcon className="size-4" />
-                      </div>
-                      <div className="template-card-info">
-                        <div className="template-card-title-row">
-                          <h3 title={template.name}>{template.name}</h3>
-                          <Badge variant="secondary">内置</Badge>
-                        </div>
-                        <p>{template.description || '复制后使用的预设规则模板'}</p>
-                      </div>
-                    </header>
-                  </div>
-                  <footer className="template-card-footer">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
-                      <Eye className="size-3.5" />
-                      预览
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy === template.id}
-                      onClick={() => void duplicate(template)}
-                    >
-                      <Copy className="size-3.5" />
-                      复制
-                    </Button>
-                  </footer>
-                </article>
-              )
-            })}
+            {builtin.map((template) => (
+              <article className="template-card" key={template.id}>
+                <div className="template-card-body">
+                  <header className="template-card-header">
+                    <div className="template-card-icon flex size-8 items-center justify-center rounded text-blue-500 bg-blue-500/10">
+                      <Layers className="size-4" />
+                    </div>
+                    <div className="template-card-info">
+                      <h3 title={template.name}>{template.name}</h3>
+                      <p>{template.description || '复制后使用的预设规则模板'}</p>
+                    </div>
+                  </header>
+                </div>
+                <footer className="template-card-footer">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPreviewing(template)}>
+                    <Eye className="size-3.5" />
+                    预览
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy === template.id}
+                    onClick={() => void duplicate(template)}
+                  >
+                    <Copy className="size-3.5" />
+                    复制
+                  </Button>
+                </footer>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -135,7 +136,7 @@ export function TemplatesPage() {
           </div>
           {initialLoading ? (
             <section className="template-grid" aria-busy="true" aria-label="正在加载我的模板">
-              {Array.from({ length: 3 }, (_, index) => (
+              {Array.from({ length: 4 }, (_, index) => (
                 <article className="template-card" key={index} aria-hidden="true">
                   <div className="template-card-body">
                     <header className="template-card-header">
@@ -148,10 +149,10 @@ export function TemplatesPage() {
                     </header>
                   </div>
                   <footer className="template-card-footer">
-                    <Skeleton className="h-4 w-20" />
                     <div className="flex gap-1.5">
-                      <Skeleton className="h-7 w-16" />
-                      <Skeleton className="h-7 w-16" />
+                      <Skeleton className="h-7 w-14" />
+                      <Skeleton className="h-7 w-14" />
+                      <Skeleton className="h-7 w-14" />
                     </div>
                   </footer>
                 </article>
@@ -167,11 +168,31 @@ export function TemplatesPage() {
                         <FileCode2 className="size-4" />
                       </div>
                       <div className="template-card-info">
-                        <div className="template-card-title-row">
-                          <h3 title={template.name}>{template.name}</h3>
-                          <Badge variant="outline">自定义</Badge>
-                        </div>
+                        <h3 title={template.name}>{template.name}</h3>
                         <p>{template.description || '自定义 Mihomo YAML 规则模板'}</p>
+                      </div>
+                      <div className="template-card-actions">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger render={<IconButton label="更多操作" />}>
+                            <MoreHorizontal className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem
+                                disabled={busy === template.id}
+                                onClick={() => void duplicate(template)}
+                              >
+                                <Copy className="size-4 mr-2" />
+                                复制
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem variant="destructive" onClick={() => setDeleting(template)}>
+                                <Trash2 className="size-4 mr-2" />
+                                删除
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </header>
                     <div className="template-card-meta">
@@ -202,26 +223,6 @@ export function TemplatesPage() {
                       <Eye className="size-3.5" />
                       预览
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy === template.id}
-                      onClick={() => void duplicate(template)}
-                    >
-                      <Copy className="size-3.5" />
-                      复制
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setDeleting(template)}
-                    >
-                      <Trash2 className="size-3.5" />
-                      删除
-                    </Button>
                   </footer>
                 </article>
               ))}
@@ -239,28 +240,22 @@ export function TemplatesPage() {
       {choosingSource && (
         <AppDialog title="新建模板" onClose={() => setChoosingSource(false)} contentClassName="sm:max-w-lg">
           <div className="template-source-grid">
-            {builtin.map((template) => {
-              const iconConfig =
-                builtinTemplateIcons[template.id as keyof typeof builtinTemplateIcons] ||
-                builtinTemplateIcons['builtin:minimal']
-              const TemplateIcon = iconConfig.icon
-              return (
-                <button
-                  key={template.id}
-                  type="button"
-                  className="template-source-card"
-                  onClick={() => create(template.id as NewTemplateSource)}
-                >
-                  <div className={`template-source-icon ${iconConfig.color}`}>
-                    <TemplateIcon className="size-4.5" />
-                  </div>
-                  <div className="template-source-text">
-                    <strong>从{template.name}创建</strong>
-                    <p>{template.description || '复制预设规则，创建自定义模板'}</p>
-                  </div>
-                </button>
-              )
-            })}
+            {builtin.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                className="template-source-card"
+                onClick={() => create(template.id as NewTemplateSource)}
+              >
+                <div className="template-source-icon text-blue-500 bg-blue-500/10">
+                  <Layers className="size-4.5" />
+                </div>
+                <div className="template-source-text">
+                  <strong>从{template.name}创建</strong>
+                  <p>{template.description || '复制预设规则，创建自定义模板'}</p>
+                </div>
+              </button>
+            ))}
 
             <button type="button" className="template-source-card" onClick={() => create('import')}>
               <div className="template-source-icon text-emerald-500 bg-emerald-500/10">
