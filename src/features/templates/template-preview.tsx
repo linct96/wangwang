@@ -38,7 +38,10 @@ export function TemplatePreview({
       })
       if (!signal?.aborted) setPreview({ ...result, template })
     } catch (reason) {
-      if (!signal?.aborted) setError(reason instanceof Error ? reason.message : '预览生成失败')
+      if (!signal?.aborted) {
+        setPreview(undefined)
+        setError(reason instanceof Error ? reason.message : '预览生成失败')
+      }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
@@ -47,7 +50,7 @@ export function TemplatePreview({
   useEffect(() => {
     if (!isEditing && (!auto || !templateId)) return
     const controller = new AbortController()
-    setPreview(undefined)
+    setLoading(true)
     const timer = setTimeout(() => void load(controller.signal), 250)
     return () => {
       clearTimeout(timer)
@@ -58,7 +61,7 @@ export function TemplatePreview({
 
   const currentYaml = preview?.yaml ?? ''
   // 标签保留模板槽位身份，编译 YAML 中的示例节点只用于 YAML 预览。
-  const templateYaml = yaml ?? preview?.template.yaml ?? ''
+  const templateYaml = preview?.template.yaml ?? yaml ?? ''
 
   const groups = useMemo<ConfigPreviewGroup[]>(() => {
     if (!templateYaml) return []
@@ -91,7 +94,7 @@ export function TemplatePreview({
       title="配置预览"
       defaultViewMode="groups"
       groups={groups}
-      sourceSlots={isEditing ? sourceSlots : preview?.template.sourceSlots}
+      sourceSlots={preview?.template.sourceSlots ?? sourceSlots}
       groupsLoading={loading}
       groupsEmptyText="暂无策略组数据"
       groupsEmptySubText="当前模板尚未解析到有效 proxy-groups 策略组"

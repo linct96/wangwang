@@ -15,7 +15,6 @@ import {
   Radio,
   RefreshCw,
   Server,
-  Sparkles,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -43,6 +42,8 @@ export type ConfigPreviewGroup = {
 }
 
 export type ConfigPreviewSourceSlot = TemplateSourceSlot
+
+const emptyGroups: ConfigPreviewGroup[] = []
 
 export type ConfigPreviewPanelProps = {
   className?: string
@@ -89,12 +90,12 @@ export function ConfigPreviewPanel({
   defaultViewMode = 'groups',
   onViewModeChange,
   showViewModeToggle = true,
-  groups = [],
+  groups: incomingGroups = emptyGroups,
   groupsLoading = false,
   groupsEmptyText = '暂无策略组数据',
   groupsEmptySubText = '在左侧配置规则与节点源后，此处将自动呈现',
-  sourceSlots,
-  providerNames,
+  sourceSlots: incomingSourceSlots,
+  providerNames: incomingProviderNames,
   showIncludeAllTags = true,
   yaml = '',
   yamlLoading = false,
@@ -109,6 +110,28 @@ export function ConfigPreviewPanel({
 }: ConfigPreviewPanelProps) {
   const [internalViewMode, setInternalViewMode] = useState<'groups' | 'yaml'>(defaultViewMode)
   const currentViewMode = controlledViewMode ?? internalViewMode
+  const [previousGroups, setPreviousGroups] = useState({
+    groups: incomingGroups,
+    sourceSlots: incomingSourceSlots,
+    providerNames: incomingProviderNames,
+  })
+  if (
+    !groupsLoading &&
+    (previousGroups.groups !== incomingGroups ||
+      previousGroups.sourceSlots !== incomingSourceSlots ||
+      previousGroups.providerNames !== incomingProviderNames)
+  ) {
+    setPreviousGroups({
+      groups: incomingGroups,
+      sourceSlots: incomingSourceSlots,
+      providerNames: incomingProviderNames,
+    })
+  }
+  const { groups, sourceSlots, providerNames } = groupsLoading
+    ? previousGroups
+    : { groups: incomingGroups, sourceSlots: incomingSourceSlots, providerNames: incomingProviderNames }
+  const isLoading = currentViewMode === 'groups' ? groupsLoading : yamlLoading
+  const isRefreshing = isLoading && (currentViewMode === 'groups' ? groups.length > 0 : Boolean(yaml))
 
   const setViewMode = (mode: 'groups' | 'yaml') => {
     if (onViewModeChange) {
@@ -245,300 +268,312 @@ export function ConfigPreviewPanel({
       </div>
 
       {/* 策略组或 YAML 内容区 */}
-      <div className="preview-panel-body flex flex-col min-h-0">
-        {currentViewMode === 'groups' ? (
-          groupsLoading ? (
-            <div className="preview-empty-state">
-              <Sparkles className="size-6 text-muted-foreground/50 spin mb-2" />
-              <span className="text-xs text-muted-foreground">正在解析策略组结构...</span>
-            </div>
-          ) : groups.length > 0 ? (
-            <>
-              <div className="flex items-center justify-between gap-2 pb-2 shrink-0">
-                <Badge variant="secondary" className="text-[10.5px] h-4.5 px-1.5 font-normal shrink-0">
-                  {groups.length} 组
-                </Badge>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  onClick={toggleAll}
-                  className="text-[11px] h-6 px-1.5 text-muted-foreground hover:text-foreground"
-                >
-                  {isAnyExpanded ? '折叠全部' : '展开全部'}
-                </Button>
+      <div className="relative flex flex-col flex-1 min-h-0" aria-busy={isLoading}>
+        <div
+          className={cn('preview-panel-body flex flex-col min-h-0', isRefreshing && 'opacity-50 grayscale')}
+          inert={isLoading}
+        >
+          {currentViewMode === 'groups' ? (
+            groupsLoading && !groups.length ? (
+              <div className="preview-empty-state">
+                <span className="text-xs text-muted-foreground">正在解析策略组结构...</span>
               </div>
+            ) : groups.length > 0 ? (
+              <>
+                <div className="flex items-center justify-between gap-2 pb-2 shrink-0">
+                  <Badge variant="secondary" className="text-[10.5px] h-4.5 px-1.5 font-normal shrink-0">
+                    {groups.length} 组
+                  </Badge>
 
-              <div className="preview-groups-container">
-                {groups.map((group) => {
-                  const isExpanded = !collapsedGroups[group.name]
-                  const groupNodes = group.nodes ?? []
-                  const groupStatics = group.staticProxies ?? []
-                  const groupProviders = group.use ?? []
-                  const showAllProxiesTag = group.includeAllProxies && (showIncludeAllTags || !groupNodes.length)
-                  const showAllProvidersTag =
-                    group.includeAllProviders && (showIncludeAllTags || !groupProviders.length)
-                  const totalMembers =
-                    groupNodes.length +
-                    groupStatics.length +
-                    groupProviders.length +
-                    (showAllProxiesTag ? 1 : 0) +
-                    (showAllProvidersTag ? 1 : 0)
-                  const isEmpty = totalMembers === 0
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={toggleAll}
+                    className="text-[11px] h-6 px-1.5 text-muted-foreground hover:text-foreground"
+                  >
+                    {isAnyExpanded ? '折叠全部' : '展开全部'}
+                  </Button>
+                </div>
 
-                  const isPlaceholderProvider = (name: string) =>
-                    providerSlotMap.has(name) &&
-                    (showIncludeAllTags || (!group.includeAllProviders && !providerNames?.[name]))
-                  const renderProvider = (name: string) => {
-                    const slot = providerSlotMap.get(name)
-                    const title = `${group.includeAllProviders ? 'include-all-providers' : 'use'}: ${name}`
-                    if (!showIncludeAllTags && (group.includeAllProviders || providerNames?.[name])) {
-                      if (slot && !group.includeAllProviders)
+                <div className="preview-groups-container">
+                  {groups.map((group) => {
+                    const isExpanded = !collapsedGroups[group.name]
+                    const groupNodes = group.nodes ?? []
+                    const groupStatics = group.staticProxies ?? []
+                    const groupProviders = group.use ?? []
+                    const showAllProxiesTag = group.includeAllProxies && (showIncludeAllTags || !groupNodes.length)
+                    const showAllProvidersTag =
+                      group.includeAllProviders && (showIncludeAllTags || !groupProviders.length)
+                    const totalMembers =
+                      groupNodes.length +
+                      groupStatics.length +
+                      groupProviders.length +
+                      (showAllProxiesTag ? 1 : 0) +
+                      (showAllProvidersTag ? 1 : 0)
+                    const isEmpty = totalMembers === 0
+
+                    const isPlaceholderProvider = (name: string) =>
+                      providerSlotMap.has(name) &&
+                      (showIncludeAllTags || (!group.includeAllProviders && !providerNames?.[name]))
+                    const renderProvider = (name: string) => {
+                      const slot = providerSlotMap.get(name)
+                      const title = `${group.includeAllProviders ? 'include-all-providers' : 'use'}: ${name}`
+                      if (!showIncludeAllTags && (group.includeAllProviders || providerNames?.[name])) {
+                        if (slot && !group.includeAllProviders)
+                          return (
+                            <SourceSlotTag
+                              key={name}
+                              slot={slot}
+                              resolvedName={providerNames?.[name] ?? slot.name}
+                              title={title}
+                            />
+                          )
                         return (
-                          <SourceSlotTag
+                          <div
                             key={name}
-                            slot={slot}
-                            resolvedName={providerNames?.[name] ?? slot.name}
+                            className="preview-node-tag border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
                             title={title}
-                          />
+                          >
+                            <Boxes className="size-3 text-indigo-500 shrink-0" />
+                            <span className="preview-node-tag-name">{providerNames?.[name] ?? slot?.name ?? name}</span>
+                          </div>
                         )
-                      return (
-                        <div
-                          key={name}
-                          className="preview-node-tag border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                          title={title}
-                        >
-                          <Boxes className="size-3 text-indigo-500 shrink-0" />
-                          <span className="preview-node-tag-name">{providerNames?.[name] ?? slot?.name ?? name}</span>
-                        </div>
+                      }
+                      return slot ? (
+                        <SourceSlotTag key={name} slot={slot} title={title} placeholder />
+                      ) : (
+                        <Badge key={name} variant="outline" title={title}>
+                          <Boxes data-icon="inline-start" />
+                          {`订阅源 · ${providerNames?.[name] ?? name}`}
+                        </Badge>
                       )
                     }
-                    return slot ? (
-                      <SourceSlotTag key={name} slot={slot} title={title} placeholder />
-                    ) : (
-                      <Badge key={name} variant="outline" title={title}>
-                        <Boxes data-icon="inline-start" />
-                        {`订阅源 · ${providerNames?.[name] ?? name}`}
-                      </Badge>
-                    )
-                  }
 
-                  return (
-                    <div key={group.name} className="preview-group-card">
-                      {/* 卡片头部 */}
-                      <div className="preview-group-card-header" onClick={() => toggleGroup(group.name)}>
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <button
-                            type="button"
-                            aria-label={isExpanded ? '折叠' : '展开'}
-                            className="text-muted-foreground hover:text-foreground shrink-0"
-                          >
-                            {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                          </button>
-                          <span className="font-medium text-xs text-foreground truncate" title={group.name}>
-                            {group.name}
-                          </span>
-                          <Badge variant="secondary">{group.type}</Badge>
+                    return (
+                      <div key={group.name} className="preview-group-card">
+                        {/* 卡片头部 */}
+                        <div className="preview-group-card-header" onClick={() => toggleGroup(group.name)}>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <button
+                              type="button"
+                              aria-label={isExpanded ? '折叠' : '展开'}
+                              className="text-muted-foreground hover:text-foreground shrink-0"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="size-3.5" />
+                              ) : (
+                                <ChevronRight className="size-3.5" />
+                              )}
+                            </button>
+                            <span className="font-medium text-xs text-foreground truncate" title={group.name}>
+                              {group.name}
+                            </span>
+                            <Badge variant="secondary">{group.type}</Badge>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isEmpty ? (
+                              <Badge variant="secondary">0 节点</Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                {groupNodes.length > 0 ? `${groupNodes.length} 节点` : `${totalMembers} 项`}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isEmpty ? (
-                            <Badge variant="secondary">0 节点</Badge>
-                          ) : (
-                            <Badge variant="secondary">
-                              {groupNodes.length > 0 ? `${groupNodes.length} 节点` : `${totalMembers} 项`}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 展开内容 */}
-                      {isExpanded && (
-                        <div className="preview-group-card-content">
-                          {/* 规则过滤提示 */}
-                          {(group.filter || group.excludeFilter) && (
-                            <div className="preview-group-filter-banner">
-                              <Filter className="size-3 text-muted-foreground shrink-0" />
-                              <span className="text-[10.5px] text-muted-foreground truncate">
-                                {group.filter && `包含: ${group.filter}`}
-                                {group.filter && group.excludeFilter && ' · '}
-                                {group.excludeFilter && `排除: ${group.excludeFilter}`}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* 静态代理引用与节点 Tag 列表 */}
-                          {totalMembers > 0 ? (
-                            <div className="preview-node-ref-tags">
-                              {showAllProvidersTag && (
-                                <div
-                                  className="preview-node-tag border-dashed border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
-                                  title="全部订阅源 (include-all-providers)"
-                                >
-                                  <Boxes className="size-3 text-indigo-500 shrink-0" />
-                                  <span className="preview-node-tag-name">全部订阅源</span>
-                                </div>
-                              )}
-                              {showAllProxiesTag && (
-                                <div
-                                  className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
-                                  title="全部节点 (include-all-proxies)"
-                                >
-                                  <Network className="size-3 text-amber-500 shrink-0" />
-                                  <span className="preview-node-tag-name">全部节点</span>
-                                </div>
-                              )}
-                              {groupProviders.filter(isPlaceholderProvider).map(renderProvider)}
-                              {groupStatics.map((sp) => {
-                                if (sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')) {
-                                  return (
-                                    <SourceSlotTag
-                                      key={sp}
-                                      slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位', type: 'nodes' }}
-                                      placeholder
-                                    />
-                                  )
-                                }
-                                const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
-
-                                return (
-                                  <div key={sp} className="preview-node-tag" title={sp}>
-                                    {isBuiltin && <Radio className="size-3 text-emerald-500 shrink-0" />}
-                                    <span className="preview-node-tag-name">{sp}</span>
-                                  </div>
-                                )
-                              })}
-                              {groupNodes.slice(0, 80).map((node, index) => {
-                                const slot = node.slotKey ? slotMap.get(node.slotKey) : undefined
-                                const title = `${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`
-                                if (slot)
-                                  return (
-                                    <SourceSlotTag
-                                      key={`${node.id}-${index}`}
-                                      slot={slot}
-                                      resolvedName={node.name}
-                                      title={title}
-                                    />
-                                  )
-                                return (
-                                  <div
-                                    key={`${node.id}-${index}`}
-                                    className={cn(
-                                      'preview-node-tag',
-                                      !showIncludeAllTags &&
-                                        group.includeAllProxies &&
-                                        'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200',
-                                    )}
-                                    title={title}
-                                  >
-                                    {!showIncludeAllTags && group.includeAllProxies ? (
-                                      <Network className="size-3 text-amber-500 shrink-0" />
-                                    ) : (
-                                      <Server className="size-3 text-muted-foreground shrink-0" />
-                                    )}
-                                    <span className="preview-node-tag-name">{node.name}</span>
-                                  </div>
-                                )
-                              })}
-                              {groupNodes.length > 80 && (
-                                <span className="text-[11px] text-muted-foreground self-center px-1">
-                                  +{groupNodes.length - 80} 更多
+                        {/* 展开内容 */}
+                        {isExpanded && (
+                          <div className="preview-group-card-content">
+                            {/* 规则过滤提示 */}
+                            {(group.filter || group.excludeFilter) && (
+                              <div className="preview-group-filter-banner">
+                                <Filter className="size-3 text-muted-foreground shrink-0" />
+                                <span className="text-[10.5px] text-muted-foreground truncate">
+                                  {group.filter && `包含: ${group.filter}`}
+                                  {group.filter && group.excludeFilter && ' · '}
+                                  {group.excludeFilter && `排除: ${group.excludeFilter}`}
                                 </span>
-                              )}
-                              {groupProviders.filter((name) => !isPlaceholderProvider(name)).map(renderProvider)}
-                            </div>
-                          ) : (
-                            <div className="preview-empty-group-note">
-                              <span>暂无节点</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="preview-empty-state">
-              <Layers className="size-8 text-muted-foreground/40 mb-2" />
-              <p className="font-medium text-xs text-foreground">{groupsEmptyText}</p>
-              <span className="text-[11px] text-muted-foreground mt-0.5">{groupsEmptySubText}</span>
-            </div>
-          )
-        ) : (
-          <div className="preview-yaml-pane">
-            <div className="flex items-center justify-between gap-2 pb-2 shrink-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {yaml ? (
-                  <Badge variant="secondary" className="text-[10.5px] h-4.5 px-1.5 font-mono shrink-0">
-                    {yamlLines} 行 · {yamlSizeKb} KB
-                  </Badge>
-                ) : null}
-                {typeof nodeCount === 'number' && (
-                  <Badge variant="outline" className="text-[10.5px] h-4.5 px-1.5 font-mono shrink-0">
-                    {nodeCount} 节点
-                  </Badge>
-                )}
-              </div>
+                              </div>
+                            )}
 
-              <div className="flex items-center gap-1 shrink-0">
-                {yaml && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => void copyYaml()}
-                    title="复制 YAML 内容"
-                    aria-label="复制 YAML 内容"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                  >
-                    {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
-                  </Button>
-                )}
+                            {/* 静态代理引用与节点 Tag 列表 */}
+                            {totalMembers > 0 ? (
+                              <div className="preview-node-ref-tags">
+                                {showAllProvidersTag && (
+                                  <div
+                                    className="preview-node-tag border-dashed border-indigo-500/40 bg-indigo-500/10 text-indigo-950 dark:text-indigo-200"
+                                    title="全部订阅源 (include-all-providers)"
+                                  >
+                                    <Boxes className="size-3 text-indigo-500 shrink-0" />
+                                    <span className="preview-node-tag-name">全部订阅源</span>
+                                  </div>
+                                )}
+                                {showAllProxiesTag && (
+                                  <div
+                                    className="preview-node-tag border-dashed border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200"
+                                    title="全部节点 (include-all-proxies)"
+                                  >
+                                    <Network className="size-3 text-amber-500 shrink-0" />
+                                    <span className="preview-node-tag-name">全部节点</span>
+                                  </div>
+                                )}
+                                {groupProviders.filter(isPlaceholderProvider).map(renderProvider)}
+                                {groupStatics.map((sp) => {
+                                  if (sp.startsWith('__WANGWANG_SOURCE_SLOT_') && sp.endsWith('__')) {
+                                    return (
+                                      <SourceSlotTag
+                                        key={sp}
+                                        slot={slotMap.get(sp) ?? { key: sp, name: '节点源槽位', type: 'nodes' }}
+                                        placeholder
+                                      />
+                                    )
+                                  }
+                                  const isBuiltin = sp === 'DIRECT' || sp === 'REJECT' || sp === 'GLOBAL'
 
-                {onRefreshYaml && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    disabled={yamlLoading}
-                    onClick={onRefreshYaml}
-                    title="刷新配置预览"
-                    aria-label="刷新配置预览"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                  >
-                    <RefreshCw className={cn('size-3.5', yamlLoading && 'spin')} />
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {yamlLoading ? (
-              <div className="preview-empty-state flex-1">
-                <Sparkles className="size-6 text-muted-foreground/50 spin mb-2" />
-                <span className="text-xs text-muted-foreground">正在生成配置预览...</span>
-              </div>
-            ) : yamlError && !yaml ? (
-              <div className="preview-empty-state flex-1">
-                <AlertTriangle className="size-8 text-amber-500/60 mb-2" />
-                <p className="font-medium text-xs text-foreground">{yamlError}</p>
-                <span className="text-[11px] text-muted-foreground mt-0.5">请检查模板语法或关联的节点配置</span>
-              </div>
-            ) : yaml ? (
-              <div className="preview-yaml-scroll">
-                <pre>
-                  <code>{yaml}</code>
-                </pre>
-              </div>
+                                  return (
+                                    <div key={sp} className="preview-node-tag" title={sp}>
+                                      {isBuiltin && <Radio className="size-3 text-emerald-500 shrink-0" />}
+                                      <span className="preview-node-tag-name">{sp}</span>
+                                    </div>
+                                  )
+                                })}
+                                {groupNodes.slice(0, 80).map((node, index) => {
+                                  const slot = node.slotKey ? slotMap.get(node.slotKey) : undefined
+                                  const title = `${node.name}${node.sourceName ? ` (${node.sourceName})` : ''}`
+                                  if (slot)
+                                    return (
+                                      <SourceSlotTag
+                                        key={`${node.id}-${index}`}
+                                        slot={slot}
+                                        resolvedName={node.name}
+                                        title={title}
+                                      />
+                                    )
+                                  return (
+                                    <div
+                                      key={`${node.id}-${index}`}
+                                      className={cn(
+                                        'preview-node-tag',
+                                        !showIncludeAllTags &&
+                                          group.includeAllProxies &&
+                                          'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200',
+                                      )}
+                                      title={title}
+                                    >
+                                      {!showIncludeAllTags && group.includeAllProxies ? (
+                                        <Network className="size-3 text-amber-500 shrink-0" />
+                                      ) : (
+                                        <Server className="size-3 text-muted-foreground shrink-0" />
+                                      )}
+                                      <span className="preview-node-tag-name">{node.name}</span>
+                                    </div>
+                                  )
+                                })}
+                                {groupNodes.length > 80 && (
+                                  <span className="text-[11px] text-muted-foreground self-center px-1">
+                                    +{groupNodes.length - 80} 更多
+                                  </span>
+                                )}
+                                {groupProviders.filter((name) => !isPlaceholderProvider(name)).map(renderProvider)}
+                              </div>
+                            ) : (
+                              <div className="preview-empty-group-note">
+                                <span>暂无节点</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             ) : (
-              <div className="preview-empty-state flex-1">
-                <FileCode2 className="size-8 text-muted-foreground/40 mb-2" />
-                <p className="font-medium text-xs text-foreground">{yamlEmptyText}</p>
-                <span className="text-[11px] text-muted-foreground mt-0.5">{yamlEmptySubText}</span>
+              <div className="preview-empty-state">
+                <Layers className="size-8 text-muted-foreground/40 mb-2" />
+                <p className="font-medium text-xs text-foreground">{groupsEmptyText}</p>
+                <span className="text-[11px] text-muted-foreground mt-0.5">{groupsEmptySubText}</span>
               </div>
-            )}
+            )
+          ) : (
+            <div className="preview-yaml-pane">
+              <div className="flex items-center justify-between gap-2 pb-2 shrink-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {yaml ? (
+                    <Badge variant="secondary" className="text-[10.5px] h-4.5 px-1.5 font-mono shrink-0">
+                      {yamlLines} 行 · {yamlSizeKb} KB
+                    </Badge>
+                  ) : null}
+                  {typeof nodeCount === 'number' && (
+                    <Badge variant="outline" className="text-[10.5px] h-4.5 px-1.5 font-mono shrink-0">
+                      {nodeCount} 节点
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  {yaml && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => void copyYaml()}
+                      title="复制 YAML 内容"
+                      aria-label="复制 YAML 内容"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    >
+                      {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                    </Button>
+                  )}
+
+                  {onRefreshYaml && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={yamlLoading}
+                      onClick={onRefreshYaml}
+                      title="刷新配置预览"
+                      aria-label="刷新配置预览"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    >
+                      <RefreshCw className={cn('size-3.5', yamlLoading && 'spin')} />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {yamlLoading && !yaml ? (
+                <div className="preview-empty-state flex-1">
+                  <span className="text-xs text-muted-foreground">正在生成配置预览...</span>
+                </div>
+              ) : yamlError && !yaml ? (
+                <div className="preview-empty-state flex-1">
+                  <AlertTriangle className="size-8 text-amber-500/60 mb-2" />
+                  <p className="font-medium text-xs text-foreground">{yamlError}</p>
+                  <span className="text-[11px] text-muted-foreground mt-0.5">请检查模板语法或关联的节点配置</span>
+                </div>
+              ) : yaml ? (
+                <div className="preview-yaml-scroll">
+                  <pre>
+                    <code>{yaml}</code>
+                  </pre>
+                </div>
+              ) : (
+                <div className="preview-empty-state flex-1">
+                  <FileCode2 className="size-8 text-muted-foreground/40 mb-2" />
+                  <p className="font-medium text-xs text-foreground">{yamlEmptyText}</p>
+                  <span className="text-[11px] text-muted-foreground mt-0.5">{yamlEmptySubText}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {isRefreshing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted/30 cursor-wait" role="status">
+            <span className="text-xs text-muted-foreground">正在刷新预览...</span>
           </div>
         )}
       </div>
