@@ -72,17 +72,23 @@ console.log(await response.json())
 
 部署前运行 `pnpm db:migrate:remote`（本地为 `pnpm db:migrate:local`），应用初始化基线及后续增量迁移，再部署 Worker。未选择「全部订阅源」时返回空列表。
 
+## 测试
+
+```bash
+pnpm test       # 单次运行
+pnpm test:watch # 开发时监听
+```
+
+Vitest 使用独立 Node 配置，测试集中放在 `tests/`，不启动 Cloudflare Worker，也不访问真实数据库或网络。
+
+`tests/main-flow.test.ts` 保留 6 个主流程用例：URI / Base64 / YAML 订阅导入、内置模板生成配置、可视化编辑与节点槽位展开、订阅源槽位输出 provider。暂不覆盖登录、D1 持久化、队列调度和大量边界情况。
+
 ## 验证与部署
 
 ```bash
 pnpm format:check
 pnpm lint
 pnpm test
-pnpm test:jobs:d1
 pnpm build
 pnpm deploy
 ```
-
-`pnpm test` 使用 Node 24 原生 TypeScript，覆盖订阅 URL 校验、订阅索引显式重建、单行索引查询与 HMAC 次数、刷新故障回滚、任务重试/分发/租约恢复及 UI 数据流。刷新测试使用带事务的内存 SQLite；订阅索引适配器不模拟 D1 batch 事务。
-
-`pnpm test:jobs:d1` 复用 Wrangler 的 Miniflare，在隔离的本地 D1 上运行同一组刷新/重试测试，包含事务中途约束失败、重复投递、并发修改和 2000 节点边界。不会修改开发或远程数据库；队列投递和上游下载由测试驱动，不代表线上时延、配额或 Queue 调度基准。

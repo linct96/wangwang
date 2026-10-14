@@ -6,7 +6,6 @@
 - `package.json` / `pnpm-lock.yaml`：shadcn 4.21.1、@base-ui/react 1.8.0；删除 radix-ui 及其依赖，锁文件不再包含 Radix 包。
 - `src/components/ui/combobox.tsx`：原本已为 Base UI；改为子路径导入，保留本地 pointer-events/滚轮处理及裁剪。
 - Sonner、CodeMirror、dnd-kit 等非 Radix/Base 竞争原语库保持不动；原生 Input/Field/Table 等 shadcn 组件无需迁移。
-- `scripts/test-ui.mjs` 接入 `pnpm test`：单一库/API 扫描、显式表单按钮类型、首屏标签、半选/进度 SSR、分段选择空值及数字值。
 
 ## 验证
 

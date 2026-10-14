@@ -9,8 +9,8 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
-    "test": "node scripts/test-security.mjs && node scripts/test-jobs.mjs && node scripts/test-subscriptions.mjs && node scripts/test-ui.mjs && node scripts/test-react-effects.mjs",
-    "test:jobs:d1": "node scripts/test-jobs.mjs --d1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy",
     "package:deploy": "pnpm build && node scripts/package-deploy.mjs",
@@ -59,6 +59,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
+    "vitest": "^5.0.4",
     "wrangler": "^4.125.0"
   }
 }
