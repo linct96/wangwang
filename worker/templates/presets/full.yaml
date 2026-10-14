@@ -1,0 +1,390 @@
+---
+name: 完全规则模板
+description: 标准超集 / 多服务分流 / IP 规则
+order: 3
+---
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+
+# 并发尝试解析得到的多个 IP，采用先成功的连接
+tcp-concurrent: true
+
+# 持久化选中节点和 Fake-IP 映射
+profile:
+  store-selected: true
+  store-fake-ip: true
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+
+  # 极速模式：DNS 查询不强制遵循分流规则
+  respect-rules: false
+
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - +.localdomain
+    - localhost
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - localhost.weixin.qq.com
+    - localhost.*.weixin.qq.com
+    - +.ntp.org
+    - +.stun.*.*
+    - +.stun.*.*.*
+    - +.stun.*.*.*.*
+    - +.stun.*.*.*.*.*
+    - +.n.n.srv.nintendo.net
+    - +.stun.playstation.net
+    - +.xboxlive.com
+
+  # DNS 引导服务器
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+
+  # 使用本地 UDP DNS，减少加密 DNS 连接开销
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+
+  # 代理节点域名使用本地 DNS
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+
+  # 直连出口使用本地 DNS
+  direct-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+
+  direct-nameserver-follow-policy: true
+
+  nameserver-policy:
+    'geosite:private':
+      - system
+
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: ⚡ 自动选择
+    type: url-test
+    include-all-proxies: true
+    include-all-providers: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+  - name: ♻️ 故障转移
+    type: fallback
+    include-all-proxies: true
+    include-all-providers: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+  - name: 🤖 AI 服务
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🐱 GitHub
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🔍 Google
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: ✈️ Telegram
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: Ⓜ️ Microsoft
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🍎 Apple
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🎮 游戏平台
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🎬 流媒体
+    type: select
+    include-all-proxies: true
+    include-all-providers: true
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚡ 自动选择
+      - ♻️ 故障转移
+      - DIRECT
+  - name: 🛑 广告拦截
+    type: select
+    default-selected: REJECT
+    proxies:
+      - REJECT
+      - DIRECT
+rule-providers:
+  category-ads-all-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs'
+    path: ./ruleset/category-ads-all-domain.mrs
+    interval: 86400
+  private-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs'
+    path: ./ruleset/private-domain.mrs
+    interval: 86400
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs'
+    path: ./ruleset/private-ip.mrs
+    interval: 86400
+  category-ai-!cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs'
+    path: ./ruleset/category-ai-!cn-domain.mrs
+    interval: 86400
+  github-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs'
+    path: ./ruleset/github-domain.mrs
+    interval: 86400
+  google-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs'
+    path: ./ruleset/google-domain.mrs
+    interval: 86400
+  google-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs'
+    path: ./ruleset/google-ip.mrs
+    interval: 86400
+  telegram-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs'
+    path: ./ruleset/telegram-domain.mrs
+    interval: 86400
+  telegram-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs'
+    path: ./ruleset/telegram-ip.mrs
+    interval: 86400
+  youtube-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs'
+    path: ./ruleset/youtube-domain.mrs
+    interval: 86400
+  netflix-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs'
+    path: ./ruleset/netflix-domain.mrs
+    interval: 86400
+  netflix-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs'
+    path: ./ruleset/netflix-ip.mrs
+    interval: 86400
+  spotify-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs'
+    path: ./ruleset/spotify-domain.mrs
+    interval: 86400
+  tiktok-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs'
+    path: ./ruleset/tiktok-domain.mrs
+    interval: 86400
+  microsoft@cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft@cn.mrs'
+    path: ./ruleset/microsoft@cn-domain.mrs
+    interval: 86400
+  microsoft-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs'
+    path: ./ruleset/microsoft-domain.mrs
+    interval: 86400
+  apple-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs'
+    path: ./ruleset/apple-cn-domain.mrs
+    interval: 86400
+  apple-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs'
+    path: ./ruleset/apple-domain.mrs
+    interval: 86400
+  gfw-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs'
+    path: ./ruleset/gfw.mrs
+    interval: 86400
+  games-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games@cn.mrs'
+    path: ./ruleset/games-cn-domain.mrs
+    interval: 86400
+  games-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games.mrs'
+    path: ./ruleset/games-domain.mrs
+    interval: 86400
+  steam-cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.mrs'
+    path: ./ruleset/steam-cn-domain.mrs
+    interval: 86400
+  steam-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs'
+    path: ./ruleset/steam-domain.mrs
+    interval: 86400
+  cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs'
+    path: ./ruleset/cn-domain.mrs
+    interval: 86400
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs'
+    path: ./ruleset/cn-ip.mrs
+    interval: 86400
+rules:
+  - DOMAIN,services.googleapis.cn,🚀 节点选择
+  - RULE-SET,private-domain,DIRECT
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - RULE-SET,category-ads-all-domain,🛑 广告拦截
+  - RULE-SET,category-ai-!cn-domain,🤖 AI 服务
+  - RULE-SET,github-domain,🐱 GitHub
+  - RULE-SET,youtube-domain,🎬 流媒体
+  - RULE-SET,google-domain,🔍 Google
+  - RULE-SET,google-ip,🔍 Google,no-resolve
+  - RULE-SET,telegram-domain,✈️ Telegram
+  - RULE-SET,telegram-ip,✈️ Telegram,no-resolve
+  - RULE-SET,microsoft@cn-domain,DIRECT
+  - RULE-SET,microsoft-domain,Ⓜ️ Microsoft
+  - RULE-SET,apple-cn-domain,DIRECT
+  - RULE-SET,apple-domain,🍎 Apple
+  - RULE-SET,steam-cn-domain,DIRECT
+  - RULE-SET,gfw-domain,🚀 节点选择
+  - RULE-SET,games-cn-domain,DIRECT
+  - RULE-SET,steam-domain,🎮 游戏平台
+  - RULE-SET,games-domain,🎮 游戏平台
+  - RULE-SET,netflix-domain,🎬 流媒体
+  - RULE-SET,netflix-ip,🎬 流媒体,no-resolve
+  - RULE-SET,spotify-domain,🎬 流媒体
+  - RULE-SET,tiktok-domain,🎬 流媒体
+  - RULE-SET,cn-domain,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - MATCH,🐟 漏网之鱼
+
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
