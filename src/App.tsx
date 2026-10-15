@@ -51,7 +51,6 @@ export default function App() {
 
   useEffect(() => {
     let active = true
-    setAuthError('')
     void loadAuthStatus()
       .then((status) => active && setAuth(status))
       .catch((reason) => active && setAuthError(reason instanceof Error ? reason.message : '认证状态检查失败'))
@@ -69,7 +68,13 @@ export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       {!auth ? (
-        <AuthLoading error={authError} onRetry={() => setAttempt((value) => value + 1)} />
+        <AuthLoading
+          error={authError}
+          onRetry={() => {
+            setAuthError('')
+            setAttempt((value) => value + 1)
+          }}
+        />
       ) : auth.authenticated ? (
         <RouterProvider router={router} />
       ) : (
