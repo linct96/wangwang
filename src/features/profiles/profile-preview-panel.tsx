@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
 import type {
   ProfileNodeBinding,
@@ -38,10 +38,22 @@ export function ProfilePreviewPanel({
   onToggleCollapse,
 }: ProfilePreviewPanelProps) {
   const [viewMode, setViewMode] = useState<'groups' | 'yaml'>('groups')
-  const [yamlLoading, setYamlLoading] = useState(false)
   const [yamlData, setYamlData] = useState<string>('')
   const [yamlError, setYamlError] = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+  const yamlRequest = useMemo(
+    () => ({
+      viewMode,
+      templateId,
+      nodeBinding,
+      subscriptionSourceIds,
+      slotBindings,
+      refreshTick,
+    }),
+    [viewMode, templateId, nodeBinding, subscriptionSourceIds, slotBindings, refreshTick],
+  )
+  const [settledYamlRequest, setSettledYamlRequest] = useState<typeof yamlRequest>()
+  const yamlLoading = viewMode === 'yaml' && Boolean(templateId) && settledYamlRequest !== yamlRequest
 
   const effectiveYamlError = !templateId ? '请先在左侧选择订阅模板' : yamlError
   const providerNames = Object.fromEntries((sources || []).map(({ id, name }) => [sourceProviderName(id), name]))
@@ -53,10 +65,10 @@ export function ProfilePreviewPanel({
   }
 
   useEffect(() => {
+    const { viewMode, templateId, nodeBinding, subscriptionSourceIds, slotBindings } = yamlRequest
     if (viewMode !== 'yaml' || !templateId) return
 
     const controller = new AbortController()
-    setYamlLoading(true)
 
     const timer = setTimeout(async () => {
       try {
@@ -89,7 +101,7 @@ export function ProfilePreviewPanel({
         }
       } finally {
         if (!controller.signal.aborted) {
-          setYamlLoading(false)
+          setSettledYamlRequest(yamlRequest)
         }
       }
     }, 250)
@@ -98,7 +110,7 @@ export function ProfilePreviewPanel({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [viewMode, templateId, nodeBinding, subscriptionSourceIds, slotBindings, refreshTick])
+  }, [yamlRequest])
 
   return (
     <ConfigPreviewPanel

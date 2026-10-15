@@ -119,11 +119,9 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   const [subscriptionsExpanded, setSubscriptionsExpanded] = useState(true)
   const [validationTarget, setValidationTarget] = useState<{ sectionId: string; field: string }>()
 
-  const [templateDetail, setTemplateDetail] = useState<TemplateDetail>()
-  const [templateDetailLoading, setTemplateDetailLoading] = useState(false)
+  const [templateDetailsCache, setTemplateDetailsCache] = useState(() => new Map<string, TemplateDetail>())
   const [templateDetailError, setTemplateDetailError] = useState<{ id: TemplateId; message: string }>()
   const [templateDetailAttempt, setTemplateDetailAttempt] = useState(0)
-  const templateDetailsCache = useRef(new Map<string, TemplateDetail>())
   const initialized = useRef(false)
 
   const form = useForm({
@@ -277,7 +275,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   useEffect(() => {
     if (!id) return
     const controller = new AbortController()
-    setProfileLoading(true)
     void api<Profile>(`/profiles/${id}`, { signal: controller.signal })
       .then((value) => {
         if (!controller.signal.aborted) {
@@ -322,22 +319,18 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   }, [form, id, initialTemplateId, profile, templates, custom, formMounted])
 
   const selectedTemplateId = useStore(form.store, (state) => state.values.templateId)
+  const templateDetail = templateDetailsCache.get(selectedTemplateId)
+  const templateDetailLoading = Boolean(
+    selectedTemplateId && !templateDetail && templateDetailError?.id !== selectedTemplateId,
+  )
 
   useEffect(() => {
-    if (!selectedTemplateId) return
-    setTemplateDetailError(undefined)
-    if (templateDetailsCache.current.has(selectedTemplateId)) {
-      setTemplateDetail(templateDetailsCache.current.get(selectedTemplateId))
-      setTemplateDetailLoading(false)
-      return
-    }
+    if (!selectedTemplateId || templateDetailsCache.has(selectedTemplateId)) return
     const controller = new AbortController()
-    setTemplateDetailLoading(true)
     void api<TemplateDetail>(`/templates/${selectedTemplateId}`, { signal: controller.signal })
       .then((detail) => {
         if (!controller.signal.aborted) {
-          templateDetailsCache.current.set(selectedTemplateId, detail)
-          setTemplateDetail(detail)
+          setTemplateDetailsCache((current) => new Map(current).set(selectedTemplateId, detail))
         }
       })
       .catch((reason) => {
@@ -348,11 +341,8 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           })
         }
       })
-      .finally(() => {
-        if (!controller.signal.aborted) setTemplateDetailLoading(false)
-      })
     return () => controller.abort()
-  }, [selectedTemplateId, templateDetailAttempt])
+  }, [selectedTemplateId, templateDetailAttempt, templateDetailsCache])
 
   const loading = profileLoading || templatesLoading || sourcesLoading || tagsLoading || nodesLoading
   const loadError = profileError || templateError || sourceError || tagError || nodesError
@@ -372,6 +362,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
           },
       ) || []
 
+    setTemplateDetailError(undefined)
     form.setFieldValue('templateId', templateId)
     form.setFieldValue('slotBindings', newBindings)
     setCollapsedSlotKeys({})
@@ -857,7 +848,6 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                     templateDetailError={templateDetailError}
                     onRetryTemplateDetail={() => {
                       setTemplateDetailError(undefined)
-                      setTemplateDetailLoading(true)
                       setTemplateDetailAttempt((value) => value + 1)
                     }}
                     templateId={templateId}
