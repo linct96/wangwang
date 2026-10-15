@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/client'
 import type { GeoCatalogResponse, GeoCatalogType, GeoProvider } from './geo-catalog'
 type Result = GeoCatalogResponse
@@ -7,27 +7,24 @@ export function useGeoCatalog(
   type: GeoCatalogType,
   provider: GeoProvider,
 ): { data?: Result; error?: string; loading: boolean } {
-  const key = `${type}:${provider}`
-  const [state, setState] = useState<{ key: string; data?: Result; error?: string; loading: boolean }>({
-    key,
-    loading: provider !== 'custom',
-  })
+  const query = useMemo(() => ({ type, provider }), [type, provider])
+  const [state, setState] = useState<{ query: typeof query; data?: Result; error?: string }>()
   useEffect(() => {
-    if (provider === 'custom') return
-    setState({ key, loading: true })
-    const request = cache.get(key) || api<Result>(`/geo/catalog?type=${type}&provider=${provider}`)
+    if (query.provider === 'custom') return
+    const key = `${query.type}:${query.provider}`
+    const request = cache.get(key) || api<Result>(`/geo/catalog?type=${query.type}&provider=${query.provider}`)
     cache.set(key, request)
     let active = true
     request
-      .then((data) => active && setState({ key, data, loading: false }))
+      .then((data) => active && setState({ query, data }))
       .catch((e) => {
         if (cache.get(key) === request) cache.delete(key)
-        if (active) setState({ key, error: e instanceof Error ? e.message : '请求失败', loading: false })
+        if (active) setState({ query, error: e instanceof Error ? e.message : '请求失败' })
       })
     return () => {
       active = false
     }
-  }, [key, type, provider])
+  }, [query])
   if (provider === 'custom') return { loading: false }
-  return state.key === key ? state : { loading: true }
+  return state?.query === query ? { data: state.data, error: state.error, loading: false } : { loading: true }
 }

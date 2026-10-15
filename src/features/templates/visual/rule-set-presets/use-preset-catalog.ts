@@ -27,21 +27,26 @@ function loadCatalog(force = false) {
 
 export function useRuleSetPresetCatalog(enabled: boolean) {
   const [state, setState] = useState<{
+    enabled: boolean
     data?: RuleSetPresetCatalogResponse
     error?: string
     loading: boolean
-  }>({ data: cachedCatalog, loading: false })
+  }>({ enabled, data: cachedCatalog, loading: enabled })
+
+  if (state.enabled !== enabled) {
+    setState({ ...state, enabled, loading: enabled || state.loading })
+  }
 
   useEffect(() => {
     if (!enabled) return
-    setState((current) => ({ ...current, loading: true }))
     let active = true
     loadCatalog()
-      .then((data) => active && setState({ data, loading: false }))
+      .then((data) => active && setState({ enabled, data, loading: false }))
       .catch(
         (error) =>
           active &&
           setState({
+            enabled,
             data: cachedCatalog,
             error: error instanceof Error ? error.message : '社区目录加载失败',
             loading: false,
@@ -55,15 +60,16 @@ export function useRuleSetPresetCatalog(enabled: boolean) {
   function reload() {
     setState((current) => ({ ...current, loading: true, error: undefined }))
     loadCatalog(true)
-      .then((data) => setState({ data, loading: false }))
+      .then((data) => setState((current) => ({ ...current, data, error: undefined, loading: false })))
       .catch((error) =>
-        setState({
+        setState((current) => ({
+          ...current,
           data: cachedCatalog,
           error: error instanceof Error ? error.message : '社区目录加载失败',
           loading: false,
-        }),
+        })),
       )
   }
 
-  return { ...state, reload }
+  return { data: state.data, error: state.error, loading: state.loading, reload }
 }
