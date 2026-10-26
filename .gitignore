@@ -13,6 +13,7 @@ dist-ssr
 .deploy
 *.local
 .wrangler
+.vitest/
 .env*
 !.env.example
 .dev.vars*
