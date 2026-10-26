@@ -1,4 +1,5 @@
 import { stringify } from 'yaml'
+import { compileRegexFilters, REGEX_ERROR } from '../../shared/regex'
 import type { PhysicalProxyConfig } from '../db'
 import { slotProviderName, type TemplateSourceSlot } from './source-slots'
 import type { ProfileProxyProviders } from '../profile-proxy-providers'
@@ -90,14 +91,9 @@ export function renderMihomoConfig({
 }
 
 function compileNodeFilter(value: unknown, field: string) {
-  if (typeof value !== 'string' || !value.trim()) return []
   try {
-    return value
-      .split('`')
-      .map((pattern) => pattern.trim())
-      .filter(Boolean)
-      .map((pattern) => (pattern.startsWith('(?i)') ? new RegExp(pattern.slice(4), 'i') : new RegExp(pattern)))
+    return compileRegexFilters(value)
   } catch {
-    throw new Error(`${field} 包含无效正则表达式`)
+    throw new Error(`${field}：${REGEX_ERROR}`)
   }
 }

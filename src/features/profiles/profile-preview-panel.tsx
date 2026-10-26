@@ -122,8 +122,8 @@ export function ProfilePreviewPanel({
       providerNames={providerNames}
       showIncludeAllTags={false}
       groupsLoading={loading}
-      groupsEmptyText="暂无策略组数据"
-      groupsEmptySubText="在左侧选择规则模板并配置节点源，此处将自动呈现"
+      groupsEmptyText={preview.error ? '预览失败' : '暂无策略组数据'}
+      groupsEmptySubText={preview.error || '在左侧选择规则模板并配置节点源，此处将自动呈现'}
       yaml={yamlData}
       yamlLoading={yamlLoading}
       yamlError={effectiveYamlError}

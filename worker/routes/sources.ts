@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { body, fail, ok } from '../http'
+import { body, fail, ok, RequestBodyError } from '../http'
+import { REGEX_ERROR, validRegex } from '../../shared/regex'
 import { profileNodeSources, profileSlotSources, profileSubscriptionSources, sources } from '../db'
 import {
   affectedProfileIdsForSource,
@@ -16,11 +17,7 @@ import { normalizeTagInputs, normalizeTagName } from '../tag-model'
 import { replaceSourceTags, sourceTagViews } from '../tag-store'
 import { sourceRequiredByProfile } from '../profile-slot-bindings'
 
-const nodeNameFilterSchema = z
-  .string()
-  .trim()
-  .max(200)
-  .refine((value) => !value || safeRegExp(value), '节点名称过滤正则无效')
+const nodeNameFilterSchema = z.string().trim().max(200).refine(validRegex, `节点名称过滤：${REGEX_ERROR}`)
 const nodeTagsSchema = z.array(z.string().trim().min(1).max(24)).max(10)
 const userAgentSchema = z
   .string()
@@ -52,12 +49,11 @@ export const sourceUpdateSchema = z.object({
   userAgent: userAgentSchema.optional(),
 })
 
-function safeRegExp(value: string) {
+function sourceUrl(value: string) {
   try {
-    new RegExp(value)
-    return true
-  } catch {
-    return false
+    return assertRemoteUrl(value)
+  } catch (error) {
+    throw new RequestBodyError(error instanceof Error ? error.message : '订阅 URL 无效')
   }
 }
 
@@ -113,8 +109,8 @@ sourcesRouter.post('/', async (c) => {
   const database = db(c.env)
   const [{ value }] = await database.select({ value: count() }).from(sources).where(eq(sources.kind, 'url'))
   if (Number(value) >= 20) return fail(c, 409, 'SOURCE_LIMIT', '节点源数量已达到 20 个')
-  assertRemoteUrl(input.url)
-  const name = input.name || new URL(input.url).hostname
+  const url = sourceUrl(input.url)
+  const name = input.name || url.hostname
   const nodeNameFilter = normalizeNodeNameFilter(input.nodeNameFilter)
   const now = new Date()
   const source = {
@@ -150,7 +146,7 @@ sourcesRouter.patch('/:id', async (c) => {
   const disabling = input.enabled === false && current.enabled
   if (disabling && (await sourceRequiredByProfile(c.env, current.id, true)))
     return fail(c, 409, 'SOURCE_REQUIRED_BY_SLOT', '该节点源仍被订阅配置引用，请先解除绑定后再停用')
-  if (input.url) assertRemoteUrl(input.url)
+  if (input.url) sourceUrl(input.url)
   const nodeNameFilter =
     input.nodeNameFilter === undefined ? current.nodeNameFilter : normalizeNodeNameFilter(input.nodeNameFilter)
   const currentNodeTags = (await sourceTagViews(c.env, [current.id])).get(current.id)?.map((tag) => tag.name) || []

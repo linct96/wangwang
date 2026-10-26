@@ -1,4 +1,5 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm'
+import { REGEX_ERROR, validRegex } from '../shared/regex'
 import { nodes, profileSlotBindings, profileSlotNodes, profileSlotSources, profileSlotTags, sources, tags } from './db'
 import { db } from './tasks'
 import { normalizeTagInputs } from './tag-model'
@@ -40,11 +41,7 @@ function normalizeRegex(value: string | null, subject: string, label: string) {
   const normalized = value?.trim() || null
   if (!normalized) return null
   if (normalized.length > 200) throw new Error(`${subject}的${label}正则不能超过 200 个字符`)
-  try {
-    new RegExp(normalized)
-  } catch {
-    throw new Error(`${subject}的${label}正则无效`)
-  }
+  if (!validRegex(normalized)) throw new Error(`${subject}的${label}：${REGEX_ERROR}`)
   return normalized
 }
 

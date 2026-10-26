@@ -37,21 +37,13 @@ import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { validRegex } from '../../../shared/regex'
 import { SlotBindingEditor } from './slot-binding-editor'
 import { SubscriptionSlotBindingEditor } from './subscription-slot-binding-editor'
 import { SubscriptionSourcesEditor } from './subscription-sources-editor'
 import { ProfilePreviewPanel } from './profile-preview-panel'
 import { useProfilePreview } from './use-profile-preview'
 import '@/styles/profile-editor.css'
-
-function validRegex(value: string | null) {
-  try {
-    if (value) new RegExp(value)
-    return true
-  } catch {
-    return false
-  }
-}
 
 const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '全部节点', type: 'nodes' as const }
 

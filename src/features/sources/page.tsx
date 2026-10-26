@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { REGEX_ERROR, validRegex } from '../../../shared/regex'
 import type { FormEvent } from 'react'
 import { Check, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -322,15 +323,7 @@ function SourceDialog({
           .string()
           .trim()
           .max(200, '过滤规则不能超过 200 个字符')
-          .refine((value) => {
-            if (!value) return true
-            try {
-              new RegExp(value)
-              return true
-            } catch {
-              return false
-            }
-          }, '节点名称过滤正则无效'),
+          .refine(validRegex, `节点名称过滤：${REGEX_ERROR}`),
         interval: z.union([z.literal(0), z.literal(1), z.literal(6), z.literal(12), z.literal(24), z.literal(48)]),
       }),
     },

@@ -1,4 +1,5 @@
 import { resolveProxyGroupIncludeAll } from '@/lib/mihomo'
+import { compileRegexFilters, REGEX_ERROR } from '../../../../shared/regex'
 import type {
   RuleDraft,
   RuleProviderDraft,
@@ -304,16 +305,12 @@ export function validateVisualDraft(draft: VisualTemplateDraft, initial: VisualI
     ] as const) {
       if (!value?.trim()) continue
       try {
-        value
-          .split('`')
-          .map((pattern) => pattern.trim())
-          .filter(Boolean)
-          .forEach((pattern) => (pattern.startsWith('(?i)') ? new RegExp(pattern.slice(4), 'i') : new RegExp(pattern)))
+        compileRegexFilters(value)
       } catch {
         add({
           level: 'error',
           code: `GROUP_${field.toUpperCase().replace('-', '_')}_INVALID`,
-          message: `代理组“${group.name}”的 ${field} 包含无效正则表达式`,
+          message: `代理组“${group.name}”的 ${field}：${REGEX_ERROR}`,
           groupId: group.id,
         })
       }

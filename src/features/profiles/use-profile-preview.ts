@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { parse } from 'yaml'
+import { compileRegex, compileRegexFilters } from '../../../shared/regex'
 import type { NodeOption, ProfileNodeBinding, ProfileSlotBinding, TemplateDetail } from '@/api/types'
 import { compareMihomoNames, resolveProxyGroupIncludeAll } from '@/lib/mihomo'
 import { slotProviderName, sourceProviderName } from '../../../shared/source-slots'
@@ -20,25 +21,7 @@ export type ProfilePreviewResult = {
   groups: ResolvedProxyGroup[]
   totalUniqueNodes: number
   emptyGroupCount: number
-}
-
-function compileFilter(patternStr?: unknown): RegExp[] {
-  if (typeof patternStr !== 'string' || !patternStr.trim()) return []
-  return patternStr
-    .split('`')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((p) => {
-      try {
-        if (p.startsWith('(?i)')) {
-          return new RegExp(p.slice(4), 'i')
-        }
-        return new RegExp(p)
-      } catch {
-        return null
-      }
-    })
-    .filter((r): r is RegExp => r !== null)
+  error?: string
 }
 
 export function useProfilePreview(
@@ -53,149 +36,146 @@ export function useProfilePreview(
       return { groups: [], totalUniqueNodes: 0, emptyGroupCount: 0 }
     }
 
-    let config: Record<string, unknown>
     try {
-      config = parse(template.yaml)
-    } catch {
-      return { groups: [], totalUniqueNodes: 0, emptyGroupCount: 0 }
-    }
+      const config = parse(template.yaml) as Record<string, unknown>
 
-    const rawGroups = (Array.isArray(config['proxy-groups']) ? config['proxy-groups'] : []) as Array<
-      Record<string, unknown>
-    >
+      const rawGroups = (Array.isArray(config['proxy-groups']) ? config['proxy-groups'] : []) as Array<
+        Record<string, unknown>
+      >
 
-    const nodesById = new Map(allNodes.map((node) => [node.id, node]))
-    const resolveBinding = (binding: ProfileNodeBinding) => {
-      if (binding.mode === 'node')
-        return binding.nodeIds
-          .map((id) => nodesById.get(id))
-          .filter((node): node is NodeOption => Boolean(node?.enabled && node.sourceEnabled))
-      if (binding.mode === 'tag') {
-        const selectedTags = new Set(binding.tags.map((tag) => tag.toLocaleLowerCase()))
-        let filtered = allNodes.filter(
-          (node) =>
-            node.enabled && node.sourceEnabled && node.tags.some((tag) => selectedTags.has(tag.toLocaleLowerCase())),
-        )
-        try {
+      const nodesById = new Map(allNodes.map((node) => [node.id, node]))
+      const resolveBinding = (binding: ProfileNodeBinding) => {
+        if (binding.mode === 'node')
+          return binding.nodeIds
+            .map((id) => nodesById.get(id))
+            .filter((node): node is NodeOption => Boolean(node?.enabled && node.sourceEnabled))
+        if (binding.mode === 'tag') {
+          const selectedTags = new Set(binding.tags.map((tag) => tag.toLocaleLowerCase()))
+          let filtered = allNodes.filter(
+            (node) =>
+              node.enabled && node.sourceEnabled && node.tags.some((tag) => selectedTags.has(tag.toLocaleLowerCase())),
+          )
           if (binding.includeRegex) {
-            const include = new RegExp(binding.includeRegex)
+            const include = compileRegex(binding.includeRegex)
             filtered = filtered.filter((node) => include.test(node.name))
           }
           if (binding.excludeRegex) {
-            const exclude = new RegExp(binding.excludeRegex)
+            const exclude = compileRegex(binding.excludeRegex)
             filtered = filtered.filter((node) => !exclude.test(node.name))
           }
-        } catch {
-          // 表单校验会显示无效正则，预览暂时忽略它。
+          return filtered
         }
-        return filtered
-      }
-      const selectedSourceIds = new Set(binding.sourceIds)
-      let filtered = allNodes.filter(
-        (node) => node.enabled && node.sourceEnabled && selectedSourceIds.has(node.sourceId),
-      )
-      try {
+        const selectedSourceIds = new Set(binding.sourceIds)
+        let filtered = allNodes.filter(
+          (node) => node.enabled && node.sourceEnabled && selectedSourceIds.has(node.sourceId),
+        )
         if (binding.includeRegex) {
-          const include = new RegExp(binding.includeRegex)
+          const include = compileRegex(binding.includeRegex)
           filtered = filtered.filter((node) => include.test(node.name))
         }
         if (binding.excludeRegex) {
-          const exclude = new RegExp(binding.excludeRegex)
+          const exclude = compileRegex(binding.excludeRegex)
           filtered = filtered.filter((node) => !exclude.test(node.name))
         }
-      } catch {
-        // 表单校验会显示无效正则，预览暂时忽略它。
+        return filtered
       }
-      return filtered
-    }
 
-    const subscriptionKeys = new Set(
-      template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
-    )
-    const subscriptionBindings = slotBindings.filter(
-      (binding) => subscriptionKeys.has(binding.slotKey) && binding.mode === 'source' && binding.sourceIds.length === 1,
-    )
-    const slotSourceIds = new Set(
-      subscriptionBindings.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])),
-    )
-    const staticProviders = config['proxy-providers']
-    const providerNames = new Set([
-      ...Object.keys(
-        staticProviders && typeof staticProviders === 'object' && !Array.isArray(staticProviders)
-          ? staticProviders
-          : {},
-      ),
-      ...subscriptionBindings.map(({ slotKey }) => slotProviderName(slotKey)),
-      ...subscriptionSourceIds.filter((id) => !slotSourceIds.has(id)).map(sourceProviderName),
-    ])
-    const resolvedSlots = new Map(
-      slotBindings
-        .filter(({ slotKey }) => !subscriptionKeys.has(slotKey))
-        .map((binding) => [binding.slotKey, resolveBinding(binding)]),
-    )
-    const slotMap = new Map(
-      template.sourceSlots
-        .filter(({ type }) => type !== 'subscription')
-        .map(({ key }) => [key, resolvedSlots.get(key) || []]),
-    )
-    const selectedNodesMap = new Map<string, NodeOption>()
-    for (const node of [resolveBinding(nodeBinding), ...slotMap.values()].flat())
-      if (!selectedNodesMap.has(node.physicalNodeId)) selectedNodesMap.set(node.physicalNodeId, node)
-    const selectedNodes = [...selectedNodesMap.values()]
-    const allUniqueNodeIds = new Set(selectedNodes.map(({ id }) => id))
-    const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
-      const includeFilters = compileFilter(g.filter)
-      const excludeFilters = compileFilter(g['exclude-filter'])
-      const matchesGroup = (node: NodeOption) =>
-        (!includeFilters.length || includeFilters.some((reg) => reg.test(node.name))) &&
-        !excludeFilters.some((reg) => reg.test(node.name))
-      const resolvedNodes: ResolvedProxyGroup['nodes'] = []
-      const staticProxies: string[] = []
-      const proxiesList = Array.isArray(g.proxies) ? g.proxies : []
+      const subscriptionKeys = new Set(
+        template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
+      )
+      const subscriptionBindings = slotBindings.filter(
+        (binding) =>
+          subscriptionKeys.has(binding.slotKey) && binding.mode === 'source' && binding.sourceIds.length === 1,
+      )
+      const slotSourceIds = new Set(
+        subscriptionBindings.flatMap((binding) => (binding.mode === 'source' ? binding.sourceIds : [])),
+      )
+      const staticProviders = config['proxy-providers']
+      const providerNames = new Set([
+        ...Object.keys(
+          staticProviders && typeof staticProviders === 'object' && !Array.isArray(staticProviders)
+            ? staticProviders
+            : {},
+        ),
+        ...subscriptionBindings.map(({ slotKey }) => slotProviderName(slotKey)),
+        ...subscriptionSourceIds.filter((id) => !slotSourceIds.has(id)).map(sourceProviderName),
+      ])
+      const resolvedSlots = new Map(
+        slotBindings
+          .filter(({ slotKey }) => !subscriptionKeys.has(slotKey))
+          .map((binding) => [binding.slotKey, resolveBinding(binding)]),
+      )
+      const slotMap = new Map(
+        template.sourceSlots
+          .filter(({ type }) => type !== 'subscription')
+          .map(({ key }) => [key, resolvedSlots.get(key) || []]),
+      )
+      const selectedNodesMap = new Map<string, NodeOption>()
+      for (const node of [resolveBinding(nodeBinding), ...slotMap.values()].flat())
+        if (!selectedNodesMap.has(node.physicalNodeId)) selectedNodesMap.set(node.physicalNodeId, node)
+      const selectedNodes = [...selectedNodesMap.values()]
+      const allUniqueNodeIds = new Set(selectedNodes.map(({ id }) => id))
+      const groups: ResolvedProxyGroup[] = rawGroups.map((g) => {
+        const includeFilters = compileRegexFilters(g.filter)
+        const excludeFilters = compileRegexFilters(g['exclude-filter'])
+        const matchesGroup = (node: NodeOption) =>
+          (!includeFilters.length || includeFilters.some((reg) => reg.test(node.name))) &&
+          !excludeFilters.some((reg) => reg.test(node.name))
+        const resolvedNodes: ResolvedProxyGroup['nodes'] = []
+        const staticProxies: string[] = []
+        const proxiesList = Array.isArray(g.proxies) ? g.proxies : []
 
-      for (const proxyItem of proxiesList) {
-        const itemKey = String(proxyItem)
-        const slotNodes = slotMap.get(itemKey)
-        if (slotNodes?.length)
-          resolvedNodes.push(...slotNodes.filter(matchesGroup).map((node) => ({ ...node, slotKey: itemKey })))
-        else staticProxies.push(itemKey)
-      }
-      const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
-      if (includeAllProxies)
-        resolvedNodes.push(
-          ...selectedNodes.filter(matchesGroup).sort((left, right) => compareMihomoNames(left.name, right.name)),
-        )
+        for (const proxyItem of proxiesList) {
+          const itemKey = String(proxyItem)
+          const slotNodes = slotMap.get(itemKey)
+          if (slotNodes?.length)
+            resolvedNodes.push(...slotNodes.filter(matchesGroup).map((node) => ({ ...node, slotKey: itemKey })))
+          else staticProxies.push(itemKey)
+        }
+        const { includeAllProxies, includeAllProviders } = resolveProxyGroupIncludeAll(g)
+        if (includeAllProxies)
+          resolvedNodes.push(
+            ...selectedNodes.filter(matchesGroup).sort((left, right) => compareMihomoNames(left.name, right.name)),
+          )
+
+        return {
+          name: String(g.name || '未命名策略组'),
+          type: String(g.type || 'select'),
+          filter: typeof g.filter === 'string' ? g.filter : undefined,
+          excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
+          nodes: resolvedNodes,
+          staticProxies,
+          use: includeAllProviders
+            ? [...providerNames].sort(compareMihomoNames)
+            : Array.isArray(g.use)
+              ? [...new Set(g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name))))]
+              : [],
+          includeAllProxies,
+          includeAllProviders,
+        }
+      })
+
+      const emptyGroupCount = groups.filter(
+        (g) =>
+          g.nodes.length === 0 &&
+          g.staticProxies.length === 0 &&
+          !g.use?.length &&
+          !g.includeAllProxies &&
+          !g.includeAllProviders,
+      ).length
 
       return {
-        name: String(g.name || '未命名策略组'),
-        type: String(g.type || 'select'),
-        filter: typeof g.filter === 'string' ? g.filter : undefined,
-        excludeFilter: typeof g['exclude-filter'] === 'string' ? g['exclude-filter'] : undefined,
-        nodes: resolvedNodes,
-        staticProxies,
-        use: includeAllProviders
-          ? [...providerNames].sort(compareMihomoNames)
-          : Array.isArray(g.use)
-            ? [...new Set(g.use.map((name) => (subscriptionKeys.has(name) ? slotProviderName(name) : String(name))))]
-            : [],
-        includeAllProxies,
-        includeAllProviders,
+        groups,
+        totalUniqueNodes: allUniqueNodeIds.size,
+        emptyGroupCount,
       }
-    })
-
-    const emptyGroupCount = groups.filter(
-      (g) =>
-        g.nodes.length === 0 &&
-        g.staticProxies.length === 0 &&
-        !g.use?.length &&
-        !g.includeAllProxies &&
-        !g.includeAllProviders,
-    ).length
-
-    return {
-      groups,
-      totalUniqueNodes: allUniqueNodeIds.size,
-      emptyGroupCount,
+    } catch (error) {
+      return {
+        groups: [],
+        totalUniqueNodes: 0,
+        emptyGroupCount: 0,
+        error: error instanceof Error ? error.message : '预览失败',
+      }
     }
   }, [template, nodeBinding, slotBindings, allNodes, subscriptionSourceIds])
 }

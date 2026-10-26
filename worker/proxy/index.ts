@@ -1,4 +1,5 @@
 import { parse, stringify } from 'yaml'
+import { compileRegex } from '../../shared/regex'
 import type { PhysicalProxyConfig, ProxyConfig } from '../db'
 import { parseAnytls } from './parsers/anytls'
 import { parseHysteria2 as parseHysteria2Uri } from './parsers/hysteria2'
@@ -182,7 +183,7 @@ export async function parseProxyText(text: string, nodeNameFilter: string | null
     }
   }
 
-  const filter = nodeNameFilter ? new RegExp(nodeNameFilter) : null
+  const filter = nodeNameFilter ? compileRegex(nodeNameFilter) : null
   const deduplicated = new Map<string, ParsedNode>()
   for (const config of configs) {
     if (filter?.test(config.name)) continue

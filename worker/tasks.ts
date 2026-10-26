@@ -1,5 +1,6 @@
 import { and, asc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { compileRegex } from '../shared/regex'
 import {
   jobs,
   nodes,
@@ -474,12 +475,12 @@ export async function refreshSource(env: Env, sourceId: string, lease: JobLease)
 }
 
 function nodeNameMatcher({ includeRegex, excludeRegex }: { includeRegex: string | null; excludeRegex: string | null }) {
-  let include: RegExp | undefined
-  let exclude: RegExp | undefined
+  let include: ReturnType<typeof compileRegex> | undefined
+  let exclude: ReturnType<typeof compileRegex> | undefined
   // 首次实际匹配时构造，保留空节点和包含规则短路时不触发无效正则的行为。
   return (name: string) =>
-    (!includeRegex || (include ??= new RegExp(includeRegex)).test(name)) &&
-    (!excludeRegex || !(exclude ??= new RegExp(excludeRegex)).test(name))
+    (!includeRegex || (include ??= compileRegex(includeRegex)).test(name)) &&
+    (!excludeRegex || !(exclude ??= compileRegex(excludeRegex)).test(name))
 }
 
 export async function selectSourceSlotNodes(

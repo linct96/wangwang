@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { REGEX_ERROR, validRegex } from '../../../shared/regex'
 import type { NodeOption, ProfileNodeBinding, Source, TagOption, TemplateSourceSlot } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -8,16 +9,6 @@ import { Segmented } from '@/components/ui/segmented'
 import { cn } from '@/lib/utils'
 import { DirectNodeBindingEditor } from './direct-node-binding-editor'
 import { SelectionActionButton } from './selection-action-button'
-
-function regexError(value: string | null) {
-  if (!value) return false
-  try {
-    new RegExp(value)
-    return false
-  } catch {
-    return true
-  }
-}
 
 function RegexFilterInputs({
   slotKey,
@@ -46,7 +37,7 @@ function RegexFilterInputs({
           aria-invalid={includeInvalid}
           onChange={(event) => onChange({ includeRegex: event.target.value || null, excludeRegex })}
         />
-        {includeInvalid && <FieldError>正则表达式语法无效</FieldError>}
+        {includeInvalid && <FieldError>{REGEX_ERROR}</FieldError>}
       </Field>
 
       <Field data-invalid={excludeInvalid}>
@@ -59,7 +50,7 @@ function RegexFilterInputs({
           aria-invalid={excludeInvalid}
           onChange={(event) => onChange({ includeRegex, excludeRegex: event.target.value || null })}
         />
-        {excludeInvalid && <FieldError>正则表达式语法无效</FieldError>}
+        {excludeInvalid && <FieldError>{REGEX_ERROR}</FieldError>}
       </Field>
     </div>
   )
@@ -82,8 +73,8 @@ export function SlotBindingEditor({
   allowReorder?: boolean
   onChange: (value: ProfileNodeBinding) => void
 }) {
-  const includeInvalid = (value.mode === 'source' || value.mode === 'tag') && regexError(value.includeRegex)
-  const excludeInvalid = (value.mode === 'source' || value.mode === 'tag') && regexError(value.excludeRegex)
+  const includeInvalid = (value.mode === 'source' || value.mode === 'tag') && !validRegex(value.includeRegex)
+  const excludeInvalid = (value.mode === 'source' || value.mode === 'tag') && !validRegex(value.excludeRegex)
 
   function setMode(mode: ProfileNodeBinding['mode']) {
     if (mode === value.mode) return
