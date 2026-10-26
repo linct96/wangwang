@@ -25,7 +25,10 @@ export default {
   },
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     if (controller.cron === '0 * * * *') ctx.waitUntil(enqueueDueSources(env, new Date(controller.scheduledTime)))
-    if (controller.cron === '*/5 * * * *') ctx.waitUntil(recoverJobs(env, new Date(controller.scheduledTime)))
+    if (controller.cron === '*/5 * * * *') {
+      ctx.waitUntil(enqueueDueSources(env, new Date(controller.scheduledTime)))
+      ctx.waitUntil(recoverJobs(env, new Date(controller.scheduledTime)))
+    }
     if (controller.cron === '17 3 * * *') ctx.waitUntil(syncRuleSetPresetCatalog(env))
   },
 } satisfies ExportedHandler<Env, QueueMessage>

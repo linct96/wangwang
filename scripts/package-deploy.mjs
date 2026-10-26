@@ -11,6 +11,12 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const deployDir = path.join(root, '.deploy')
 const stage = path.join(deployDir, `wangwang-${tag}`)
 const output = path.join(deployDir, `wangwang-deploy-v${version}.tar.gz`)
+let config
+try {
+  config = JSON.parse(await readFile(path.join(root, 'dist/admin/wangwang/wrangler.json'), 'utf8'))
+} catch (cause) {
+  throw new Error('无法读取 Worker 构建配置，请先运行 pnpm build', { cause })
+}
 
 await rm(deployDir, { recursive: true, force: true })
 await mkdir(path.join(stage, 'assets'), { recursive: true })
@@ -44,6 +50,7 @@ await writeFile(
       assetsDir: 'assets',
       assetsFile: 'assets.json',
       migrationsDir: 'migrations',
+      triggers: { crons: config.triggers.crons },
       requiredBindings: {
         d1: ['DB'],
         kv: ['KV'],

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import {
   jobs,
@@ -952,10 +952,12 @@ async function finishJob(env: Env, job: typeof jobs.$inferSelect, lease: JobLeas
     if (job.type === 'refresh_source') {
       statements.push(
         env.DB.prepare(
-          `UPDATE sources SET status='error', error=?, updated_at=? WHERE id=? AND EXISTS (
+          `UPDATE sources SET status='error', error=?, updated_at=?,
+          next_refresh_at=CASE WHEN enabled=1 AND refresh_interval_hours>0 THEN ? + refresh_interval_hours * 3600000 ELSE NULL END
+          WHERE id=? AND EXISTS (
           SELECT 1 FROM jobs j WHERE j.id=? AND j.lease_token=? AND j.status='running'
           AND j.refresh_commit_token IS NULL AND j.source_version=sources.version)`,
-        ).bind(text, now, job.entityId, lease.id, lease.token),
+        ).bind(text, now, now, job.entityId, lease.id, lease.token),
       )
     } else {
       statements.push(
@@ -1069,7 +1071,17 @@ export async function enqueueDueSources(env: Env, now = new Date()) {
   const due = await database
     .select({ id: sources.id })
     .from(sources)
-    .where(and(eq(sources.kind, 'url'), eq(sources.enabled, true), lte(sources.nextRefreshAt, now)))
+    .where(
+      and(
+        eq(sources.kind, 'url'),
+        eq(sources.enabled, true),
+        gt(sources.refreshIntervalHours, 0),
+        lte(
+          sql`coalesce(${sources.nextRefreshAt}, coalesce(${sources.lastRefreshedAt}, ${sources.createdAt}) + ${sources.refreshIntervalHours} * 3600000)`,
+          now.getTime(),
+        ),
+      ),
+    )
     .limit(20)
   for (const source of due) {
     const active = await database

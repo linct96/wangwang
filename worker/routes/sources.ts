@@ -125,6 +125,8 @@ sourcesRouter.post('/', async (c) => {
     nodeNameFilter,
     userAgent: input.userAgent,
     refreshIntervalHours: input.refreshIntervalHours,
+    nextRefreshAt:
+      input.refreshIntervalHours > 0 ? new Date(now.getTime() + input.refreshIntervalHours * 3_600_000) : null,
     enabled: true,
     status: 'idle' as const,
     createdAt: now,
@@ -160,10 +162,10 @@ sourcesRouter.patch('/:id', async (c) => {
   const userAgent = input.userAgent ?? current.userAgent
   const userAgentChanged = userAgent !== current.userAgent
   const interval = input.refreshIntervalHours ?? current.refreshIntervalHours
-  const nextRefreshAt =
-    current.kind === 'url' && (input.enabled ?? current.enabled) && interval > 0
-      ? new Date(Date.now() + interval * 3_600_000)
-      : null
+  let nextRefreshAt = current.nextRefreshAt
+  if (!(input.enabled ?? current.enabled) || interval <= 0) nextRefreshAt = null
+  else if (!current.enabled || interval !== current.refreshIntervalHours)
+    nextRefreshAt = new Date(Date.now() + interval * 3_600_000)
   const saved = await db(c.env)
     .update(sources)
     .set({
