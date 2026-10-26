@@ -92,6 +92,7 @@ app.get('/s/:token/config.yaml', async (c) => {
 export async function adminAsset(c: Context<{ Bindings: Env }>) {
   let response = await c.env.ASSETS.fetch(c.req.raw)
   if (response.status === 404 && c.req.method === 'GET') {
+    // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
     const url = new URL(c.req.url)
     url.pathname = '/index.html'
     response = await c.env.ASSETS.fetch(new Request(url, c.req.raw))

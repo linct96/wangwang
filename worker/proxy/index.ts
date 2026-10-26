@@ -79,6 +79,7 @@ function tlsOptions(url: URL, config: ProxyConfig) {
 }
 
 function parseStandardUrl(input: string): ProxyConfig {
+  // pi-lens-ignore: unchecked-throwing-call -- parseProxyText 逐行捕获解析异常并返回警告。
   const url = new URL(input)
   const type = url.protocol.slice(0, -1) === 'hy2' ? 'hysteria2' : url.protocol.slice(0, -1)
   const base: ProxyConfig = {

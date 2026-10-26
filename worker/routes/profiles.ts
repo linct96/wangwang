@@ -145,6 +145,7 @@ export const profilesRouter = new Hono<{ Bindings: Env }>()
 
 profilesRouter.get('/', async (c) => {
   const rows = await db(c.env).select().from(profiles).orderBy(desc(profiles.createdAt))
+  // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
   return ok(c, await Promise.all(rows.map((profile) => profileView(c.env, profile, new URL(c.req.url).origin))))
 })
 
@@ -157,6 +158,7 @@ profilesRouter.post('/reindex-tokens', async (c) => {
     })
     .from(profiles)
   await Promise.all(
+    // pi-lens-ignore: array-callback-return -- Promise.all 等待写入完成，无需返回业务值。
     rows.map(async (profile) => {
       const token = await subscriptionToken(c.env.SUBSCRIPTION_TOKEN_SECRET, profile.id, profile.tokenVersion)
       const hash = await subscriptionTokenHash(token)
@@ -217,6 +219,7 @@ profilesRouter.post('/', async (c) => {
   const job = await createJob(c.env, 'compile_profile', profile.id)
   const stored = await database.select().from(profiles).where(eq(profiles.id, profile.id)).get()
   return c.json(
+    // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
     { data: { profile: await profileView(c.env, stored!, new URL(c.req.url).origin, true), jobId: job.id } },
     202,
   )
@@ -268,6 +271,7 @@ profilesRouter.get('/:id', async (c) => {
     .where(eq(profiles.id, c.req.param('id')))
     .get()
   if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
+  // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
   return ok(c, await profileView(c.env, profile, new URL(c.req.url).origin, true))
 })
 
@@ -332,6 +336,7 @@ profilesRouter.patch('/:id', async (c) => {
   const job = await createJob(c.env, 'compile_profile', id)
   const updated = await database.select().from(profiles).where(eq(profiles.id, id)).get()
   return c.json(
+    // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
     { data: { profile: await profileView(c.env, updated!, new URL(c.req.url).origin, true), jobId: job.id } },
     202,
   )
@@ -367,5 +372,6 @@ profilesRouter.post('/:id/rotate-token', async (c) => {
     .where(and(eq(profiles.id, id), eq(profiles.tokenVersion, current.tokenVersion)))
     .returning({ id: profiles.id })
   if (!updated.length) return fail(c, 409, 'PROFILE_TOKEN_CONFLICT', '配置已变更，请重试')
+  // pi-lens-ignore: unchecked-throwing-call -- Hono 的请求 URL 已由运行时解析。
   return ok(c, { subscriptionUrl: `${new URL(c.req.url).origin}/s/${token}/config.yaml` })
 })

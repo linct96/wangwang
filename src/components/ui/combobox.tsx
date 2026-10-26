@@ -151,6 +151,7 @@ function ComboboxChipsInput({ className, ...props }: ComboboxPrimitive.Input.Pro
   )
 }
 
+// pi-lens-ignore: unnecessary-react-hook -- React.useRef 是实际的 Hook 调用。
 function useComboboxAnchor() {
   return React.useRef<HTMLDivElement | null>(null)
 }

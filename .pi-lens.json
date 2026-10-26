@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/apmantza/pi-lens/master/docs/schema/pi-lens-config-v1.json",
+  "rules": {
+    "bundler-imports": {
+      "disable": ["find-import-file-without-extension"]
+    }
+  },
+  "lsp": {
+    "serverOverrides": {
+      "css": {
+        "initializationOptions": {
+          "css": {
+            "lint": {
+              "unknownAtRules": "ignore"
+            }
+          }
+        }
+      }
+    }
+  }
+}

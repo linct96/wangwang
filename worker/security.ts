@@ -1,5 +1,6 @@
 export function validOrigin(request: Request) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return true
+  // pi-lens-ignore: unchecked-throwing-call -- 标准 Request.url 已由运行时验证。
   const url = new URL(request.url)
   if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true
   const origin = request.headers.get('Origin')
