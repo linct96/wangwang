@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { fail, ok } from '../http'
 import { RULE_SET_PRESETS, ruleSetPresetKey } from '../../src/features/templates/visual/rule-set-presets/catalog'
-import type { RuleSetPreset, RuleSetPresetCategory } from '../../src/features/templates/visual/rule-set-presets/types'
+import type {
+  RuleSetPreset,
+  RuleSetPresetCatalogResponse,
+  RuleSetPresetCategory,
+} from '../../src/features/templates/visual/rule-set-presets/types'
 
 type GitTreeItem = { path?: string; type?: 'blob' | 'tree'; sha?: string }
 type GitTree = { sha: string; tree: GitTreeItem[]; truncated?: boolean }
@@ -32,11 +36,15 @@ const SYNC_COOLDOWN = 5 * 60 * 1000
 const SYNC_COOLDOWN_KEY = 'rule-set-presets:sync:last'
 const META_REPO = 'MetaCubeX/meta-rules-dat'
 const LOYAL_REPO = 'Loyalsoldier/clash-rules'
+const syncRequests = new WeakMap<KVNamespace, Promise<StoredCatalog>>()
 
 async function githubTree(repo: string, ref: string, token?: string): Promise<GitTree> {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'wangwang' }
   if (token) headers.Authorization = `Bearer ${token}`
-  const response = await fetch(`https://api.github.com/repos/${repo}/git/trees/${ref}`, { headers })
+  const response = await fetch(`https://api.github.com/repos/${repo}/git/trees/${ref}`, {
+    headers,
+    signal: AbortSignal.timeout(8_000),
+  })
   if (!response.ok) throw new Error(`GitHub ${repo} ${response.status}`)
   const tree = (await response.json()) as GitTree
   if (tree.truncated) throw new Error(`GitHub ${repo} tree truncated`)
@@ -132,7 +140,15 @@ function mergeBuiltins(items: RuleSetPreset[]) {
   ]
 }
 
-export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog> {
+export function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog> {
+  const pending = syncRequests.get(env.KV)
+  if (pending) return pending
+  const request = syncCatalog(env).finally(() => syncRequests.delete(env.KV))
+  syncRequests.set(env.KV, request)
+  return request
+}
+
+async function syncCatalog(env: Env): Promise<StoredCatalog> {
   const previous = await env.KV.get<StoredCatalog>(CATALOG_KEY, { type: 'json' })
   const [metaResult, loyalResult] = await Promise.allSettled([
     githubTree(META_REPO, 'meta', env.GITHUB_TOKEN),
@@ -140,14 +156,15 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
   ])
   const previousSources = previous?.sources
   const checkedAt = new Date().toISOString()
-  const fallback = (source: 'metacubex' | 'loyalsoldier') =>
-    previousSources?.[source] || {
+  const fallback = (source: 'metacubex' | 'loyalsoldier'): SourceSnapshot => ({
+    ...(previousSources?.[source] || {
       items: previous?.items.filter((item) => item.source === source) || [],
       revision: previous?.revision || '',
       updatedAt: previous?.updatedAt || new Date(0).toISOString(),
-      checkedAt,
-      stale: true,
-    }
+    }),
+    checkedAt,
+    stale: true,
+  })
   let metacubex = fallback('metacubex')
   let loyalsoldier = fallback('loyalsoldier')
   if (metaResult.status === 'fulfilled') {
@@ -157,11 +174,13 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
         githubTree(META_REPO, childTree(metaGeo, 'geosite'), env.GITHUB_TOKEN),
         githubTree(META_REPO, childTree(metaGeo, 'geoip'), env.GITHUB_TOKEN),
       ])
+      const items = [
+        ...files(geosite, '.mrs').map((name) => metaPreset(name, 'domain')),
+        ...files(geoip, '.mrs').map((name) => metaPreset(name, 'ipcidr')),
+      ]
+      if (!items.length) throw new Error('MetaCubeX catalog is empty')
       metacubex = {
-        items: [
-          ...files(geosite, '.mrs').map((name) => metaPreset(name, 'domain')),
-          ...files(geoip, '.mrs').map((name) => metaPreset(name, 'ipcidr')),
-        ],
+        items,
         revision: `${metaResult.value.sha}:${metaGeo.sha}`,
         updatedAt: checkedAt,
         checkedAt,
@@ -170,14 +189,16 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
       metacubex = { ...metacubex, stale: true }
     }
   }
-  if (loyalResult.status === 'fulfilled')
-    loyalsoldier = {
-      items: files(loyalResult.value, '.txt').map(loyalPreset),
-      revision: loyalResult.value.sha,
-      updatedAt: checkedAt,
-      checkedAt,
-    }
-  else loyalsoldier = { ...loyalsoldier, stale: true }
+  if (loyalResult.status === 'fulfilled') {
+    const items = files(loyalResult.value, '.txt').map(loyalPreset)
+    if (items.length)
+      loyalsoldier = {
+        items,
+        revision: loyalResult.value.sha,
+        updatedAt: checkedAt,
+        checkedAt,
+      }
+  }
   if (!metacubex.items.length && !loyalsoldier.items.length) throw new Error('Rule-set preset sources unavailable')
   const updatedAt = [metacubex.updatedAt, loyalsoldier.updatedAt].sort().at(-1) || checkedAt
   const result = {
@@ -194,30 +215,50 @@ export async function syncRuleSetPresetCatalog(env: Env): Promise<StoredCatalog>
   return result
 }
 
-async function ruleSetPresetCatalog(env: Env) {
-  const stored = await env.KV.get<StoredCatalog>(CATALOG_KEY, { type: 'json' })
-  const compatible = stored?.version === CATALOG_VERSION && stored.builtinRevision === BUILTIN_CATALOG_REVISION
-  if (stored && compatible && !stored.stale && Date.now() - Date.parse(stored.updatedAt) < MAX_AGE)
-    return { ...stored, stale: false }
-  try {
-    return { ...(await syncRuleSetPresetCatalog(env)), stale: false }
-  } catch {
-    if (stored) return { ...stored, stale: true }
-    return { items: RULE_SET_PRESETS, updatedAt: null, revision: null, stale: true }
+function catalogResponse(stored: StoredCatalog | null): RuleSetPresetCatalogResponse {
+  if (!stored) return { items: RULE_SET_PRESETS, updatedAt: null, revision: null, stale: true }
+  const compatible = stored.version === CATALOG_VERSION && stored.builtinRevision === BUILTIN_CATALOG_REVISION
+  const age = Date.now() - Date.parse(stored.checkedAt || stored.updatedAt)
+  return {
+    items: mergeBuiltins(stored.items),
+    updatedAt: stored.updatedAt,
+    checkedAt: stored.checkedAt,
+    revision: stored.revision,
+    stale: !compatible || Boolean(stored.stale) || !(age < MAX_AGE),
+    sources: stored.sources && {
+      metacubex: sourceMetadata(stored.sources.metacubex),
+      loyalsoldier: sourceMetadata(stored.sources.loyalsoldier),
+    },
   }
+}
+
+function sourceMetadata({ updatedAt, checkedAt, revision, stale }: SourceSnapshot) {
+  return { updatedAt, checkedAt, revision, stale }
+}
+
+async function ruleSetPresetCatalog(env: Env) {
+  return catalogResponse(await env.KV.get<StoredCatalog>(CATALOG_KEY, { type: 'json' }))
 }
 
 export const ruleSetPresetsRouter = new Hono<{ Bindings: Env }>()
 
 ruleSetPresetsRouter.get('/catalog', async (c) => ok(c, await ruleSetPresetCatalog(c.env)))
 ruleSetPresetsRouter.post('/sync', async (c) => {
+  const pending = syncRequests.get(c.env.KV)
+  if (pending) {
+    try {
+      return ok(c, catalogResponse(await pending))
+    } catch {
+      return fail(c, 503, 'RULE_SET_PRESETS_UNAVAILABLE', '社区规则集同步失败，已保留原有目录')
+    }
+  }
   const force = c.req.query('force') === 'true'
   const now = Date.now()
   const last = Number(await c.env.KV.get(SYNC_COOLDOWN_KEY))
   if (!force && last && now - last < SYNC_COOLDOWN) return ok(c, await ruleSetPresetCatalog(c.env))
   try {
     await c.env.KV.put(SYNC_COOLDOWN_KEY, String(now), { expirationTtl: Math.ceil(SYNC_COOLDOWN / 1000) })
-    return ok(c, await syncRuleSetPresetCatalog(c.env))
+    return ok(c, catalogResponse(await syncRuleSetPresetCatalog(c.env)))
   } catch {
     return fail(c, 503, 'RULE_SET_PRESETS_UNAVAILABLE', '社区规则集同步失败')
   }

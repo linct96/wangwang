@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, Database, LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react'
 import { AppDialog } from '@/components/app-primitives'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -122,14 +123,19 @@ export function RuleSetPresetDialog({
     })
     return new Map([...targets].map(([name, values]) => [name, [...values].join('、')]))
   }, [draft.groups, draft.ruleProviders, draft.rules])
-  const listRef = useRef<HTMLDivElement>(null)
+  const [listElement, setListElement] = useState<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
     count: filtered.length,
-    getScrollElement: () => listRef.current,
+    getScrollElement: () => listElement,
     estimateSize: () => 86,
     getItemKey: (index) => filtered[index].id,
     overscan: 8,
+    enabled: open,
   })
+
+  useEffect(() => {
+    if (listElement) virtualizer.scrollToOffset(0)
+  }, [category, listElement, query, source, virtualizer])
 
   function show() {
     setQuery('')
@@ -257,48 +263,57 @@ export function RuleSetPresetDialog({
               <Checkbox checked={preferGhProxy} onCheckedChange={(checked) => setPreferGhProxy(checked === true)} />
               使用 gh-proxy 加速
             </label>
-            {(catalog.error || catalog.data?.stale) && <AlertTriangle className="size-3.5 text-amber-500" />}
-            {catalog.loading
-              ? null
-              : catalog.error
-                ? catalog.data
-                  ? '社区目录刷新失败，当前使用上次加载的数据'
-                  : '社区目录加载失败，当前使用内置预设'
-                : catalog.data?.stale
-                  ? '社区目录暂时使用上次同步的数据'
-                  : null}
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              {catalog.data?.updatedAt && !catalog.loading && (
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+            >
+              <span>
+                {catalog.data?.updatedAt ? '已缓存社区目录' : '内置预设'} · {filtered.length} / {presets.length} 项
+              </span>
+              {catalog.loading ? (
+                <span>正在后台更新，可继续选择</span>
+              ) : catalog.data?.updatedAt ? (
                 <span>
-                  更新于{' '}
-                  {new Date(catalog.data.updatedAt).toLocaleTimeString('zh-CN', {
+                  上次成功同步{' '}
+                  {new Date(catalog.data.updatedAt).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
                 </span>
-              )}
-              {staleSources.map((source) => (
-                <span key={source}>({source === 'metacubex' ? 'MetaCubeX' : 'Loyalsoldier'} 暂用缓存)</span>
-              ))}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2"
-                onClick={catalog.reload}
-                disabled={catalog.loading}
-              >
-                {catalog.loading ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-3.5" />
-                )}
-                {catalog.loading ? '刷新中' : '刷新'}
-              </Button>
+              ) : null}
             </div>
+            <Button type="button" variant="ghost" size="sm" onClick={catalog.reload} disabled={catalog.loading}>
+              {catalog.loading ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <RefreshCw data-icon="inline-start" />
+              )}
+              {catalog.loading ? '后台更新中' : '更新社区目录'}
+            </Button>
           </div>
+          {!catalog.loading && (catalog.error || catalog.data?.stale) && (
+            <Alert>
+              <AlertTriangle />
+              <AlertDescription>
+                {catalog.error ||
+                  (staleSources.length
+                    ? `${staleSources.map((source) => sourceLabels[source]).join('、')} 未能更新。`
+                    : '暂未获取到最新的社区目录。')}
+                {catalog.data?.updatedAt
+                  ? ' 已保留原有目录，可继续选择或重试更新。'
+                  : ' 当前显示内置预设，可重试更新。'}
+              </AlertDescription>
+            </Alert>
+          )}
 
-          <div ref={listRef} className="max-h-[min(56vh,520px)] overflow-y-auto pr-1">
+          <div ref={setListElement} className="max-h-[min(56vh,520px)] overflow-y-auto pr-1">
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const preset = filtered[virtualItem.index]
