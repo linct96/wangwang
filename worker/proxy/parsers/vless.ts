@@ -23,6 +23,13 @@ export function parseVless(url: URL, config: ProxyConfig) {
     config.tls = true
     config.servername = url.searchParams.get('sni') || url.hostname
     if (url.searchParams.get('fp')) config['client-fingerprint'] = url.searchParams.get('fp')
+    const alpn = url.searchParams.get('alpn')
+    if (alpn !== null) {
+      const protocols = alpn.split(',')
+      if (protocols.some((protocol) => !protocol || /\s/.test(protocol)))
+        throw new Error('ALPN 协议名不能为空，多个协议须用英文逗号分隔且不含空格')
+      config.alpn = protocols
+    }
   }
   if (security === 'reality')
     config['reality-opts'] = {

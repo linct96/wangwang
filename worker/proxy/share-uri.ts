@@ -45,6 +45,7 @@ function tlsParams(config: ProxyConfig, params: URLSearchParams) {
   const ech = config['ech-opts'] as { config?: string; 'query-server-name'?: string } | undefined
   params.set('security', reality ? 'reality' : config.tls ? 'tls' : 'none')
   if (config.servername) params.set('sni', value(config, 'servername'))
+  if (Array.isArray(config.alpn) && config.alpn.length) params.set('alpn', config.alpn.join(','))
   if (config['client-fingerprint']) params.set('fp', value(config, 'client-fingerprint'))
   if (reality?.['public-key']) params.set('pbk', reality['public-key'])
   if (reality?.['short-id']) params.set('sid', reality['short-id'])
