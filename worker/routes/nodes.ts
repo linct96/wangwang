@@ -383,7 +383,13 @@ nodesRouter.get('/', async (c) => {
       .innerJoin(physicalNodes, eq(physicalNodes.id, nodes.physicalNodeId))
       .innerJoin(sources, eq(sources.id, nodes.sourceId))
       .where(filters)
-      .orderBy(asc(physicalNodes.protocol), asc(physicalNodes.server), asc(nodes.originalName), asc(nodes.createdAt))
+      .orderBy(
+        asc(sql`coalesce(${nodes.alias}, ${nodes.originalName})`),
+        asc(physicalNodes.protocol),
+        asc(physicalNodes.server),
+        asc(nodes.originalName),
+        asc(nodes.createdAt),
+      )
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     database
