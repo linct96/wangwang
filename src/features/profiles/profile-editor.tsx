@@ -47,9 +47,27 @@ import '@/styles/profile-editor.css'
 
 const NODE_BINDING_EDITOR_SCOPE = { key: 'profile-node-binding', name: '全部节点', type: 'nodes' as const }
 
-function emptyNodeBinding(): ProfileNodeBinding {
-  return { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
-}
+const EMPTY_NODE_BINDING: ProfileNodeBinding = { mode: 'source', sourceIds: [], includeRegex: null, excludeRegex: null }
+
+const nodeBindingSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('source'),
+    sourceIds: z.array(z.string()).max(20, '最多选择 20 个节点源'),
+    includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+    excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
+  }),
+  z.object({
+    mode: z.literal('node'),
+    nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
+    missingNodeIds: z.array(z.string()),
+  }),
+  z.object({
+    mode: z.literal('tag'),
+    tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
+    includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
+    excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
+  }),
+])
 
 function emptyBindings(template: TemplateSummary | undefined): ProfileSlotBinding[] {
   return (
@@ -120,7 +138,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
     defaultValues: {
       name: '',
       templateId: initialTemplateId && !initialTemplateId.startsWith('builtin:') ? initialTemplateId : '',
-      nodeBinding: emptyNodeBinding(),
+      nodeBinding: EMPTY_NODE_BINDING,
       subscriptionSourceIds: [] as string[],
       slotBindings: [] as ProfileSlotBinding[],
     },
@@ -130,25 +148,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
         .object({
           name: z.string().trim().min(1, '请输入配置名称').max(60, '名称不能超过 60 个字符'),
           subscriptionSourceIds: z.array(z.string()).max(20, '最多选择 20 个订阅源'),
-          nodeBinding: z.discriminatedUnion('mode', [
-            z.object({
-              mode: z.literal('source'),
-              sourceIds: z.array(z.string()).max(20, '最多选择 20 个节点源'),
-              includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
-              excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
-            }),
-            z.object({
-              mode: z.literal('node'),
-              nodeIds: z.array(z.string()).min(1, '请至少选择一个节点'),
-              missingNodeIds: z.array(z.string()),
-            }),
-            z.object({
-              mode: z.literal('tag'),
-              tags: z.array(z.string()).min(1, '请至少选择一个节点标签').max(20, '标签不能超过 20 个'),
-              includeRegex: z.string().nullable().refine(validRegex, '节点筛选正则格式无效'),
-              excludeRegex: z.string().nullable().refine(validRegex, '节点过滤正则格式无效'),
-            }),
-          ]),
+          nodeBinding: z.custom<ProfileNodeBinding>(),
           slotBindings: z.array(
             z.discriminatedUnion('mode', [
               z.object({
@@ -178,16 +178,29 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             '请选择自定义模板，内置模板需先复制后使用',
           ),
         })
-        .refine(
-          (value) =>
-            value.nodeBinding.mode !== 'source' ||
-            value.nodeBinding.sourceIds.length > 0 ||
-            value.subscriptionSourceIds.length > 0 ||
-            templates
-              .find(({ id }) => id === value.templateId)
-              ?.sourceSlots.some(({ type }) => type === 'subscription'),
-          { message: '请选择全部节点、全部订阅源或绑定订阅源槽位', path: ['nodeBinding', 'sourceIds'] },
-        ),
+        .superRefine((value, context) => {
+          const template = templates.find(({ id }) => id === value.templateId)
+          if (!template?.includesAllProxies) return
+
+          const parsed = nodeBindingSchema.safeParse(value.nodeBinding)
+          if (!parsed.success) {
+            for (const issue of parsed.error.issues)
+              context.addIssue({ ...issue, path: ['nodeBinding', ...issue.path] })
+            return
+          }
+          if (
+            parsed.data.mode === 'source' &&
+            !parsed.data.sourceIds.length &&
+            !value.subscriptionSourceIds.length &&
+            !template.sourceSlots.some(({ type }) => type === 'subscription')
+          ) {
+            context.addIssue({
+              code: 'custom',
+              message: '请选择全部节点、全部订阅源或绑定订阅源槽位',
+              path: ['nodeBinding', 'sourceIds'],
+            })
+          }
+        }),
     },
     onSubmitInvalid: ({ value, formApi }) => {
       const field = Object.keys(formApi.state.errorMap.onDynamic ?? {})[0]
@@ -215,6 +228,9 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
       setError('')
       setPhase('saving')
       try {
+        const nodeBinding = templates.find(({ id }) => id === value.templateId)?.includesAllProxies
+          ? value.nodeBinding
+          : undefined
         const result = await api<{ profile: Profile; jobId: string }>(id ? `/profiles/${id}` : '/profiles', {
           method: id ? 'PATCH' : 'POST',
           body: JSON.stringify({
@@ -223,9 +239,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
             templateId: value.templateId,
             subscriptionSourceIds: value.subscriptionSourceIds,
             nodeBinding:
-              value.nodeBinding.mode === 'node'
-                ? { mode: value.nodeBinding.mode, nodeIds: value.nodeBinding.nodeIds }
-                : value.nodeBinding,
+              nodeBinding?.mode === 'node' ? { mode: nodeBinding.mode, nodeIds: nodeBinding.nodeIds } : nodeBinding,
             slotBindings: value.slotBindings.map((binding) =>
               binding.mode === 'node'
                 ? { slotKey: binding.slotKey, mode: binding.mode, nodeIds: binding.nodeIds }
@@ -302,7 +316,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
         : {
             name: '',
             templateId: selectedTemplate?.id || '',
-            nodeBinding: emptyNodeBinding(),
+            nodeBinding: EMPTY_NODE_BINDING,
             subscriptionSourceIds: [],
             slotBindings: initialBindings,
           },
@@ -311,6 +325,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
   }, [form, id, initialTemplateId, profile, templates, custom, formMounted])
 
   const selectedTemplateId = useStore(form.store, (state) => state.values.templateId)
+  const includesAllProxies = templates.find(({ id }) => id === selectedTemplateId)?.includesAllProxies
   const templateDetail = templateDetailsCache.get(selectedTemplateId)
   const templateDetailLoading = Boolean(
     selectedTemplateId && !templateDetail && templateDetailError?.id !== selectedTemplateId,
@@ -618,66 +633,68 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                 </form.Field>
               </section>
 
-              {/* 全部节点 */}
-              <section id="profile-nodes-section" className="profile-section" tabIndex={-1} aria-label="全部节点">
+              {includesAllProxies && (
                 <form.Field name="nodeBinding">
-                  {(field) => {
-                    return (
-                      <div className="flex flex-col gap-0">
-                        <div className="profile-section-header">
-                          <div
-                            className="profile-section-header-trigger"
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setNodesExpanded((prev) => !prev)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                setNodesExpanded((prev) => !prev)
-                              }
-                            }}
-                          >
-                            <ChevronDown className={cn('profile-collapse-icon', nodesExpanded && 'expanded')} />
-                            <div className="flex items-center gap-2">
-                              <Network className="size-4 text-amber-500" />
-                              <strong className="text-sm font-semibold text-foreground">全部节点</strong>
-                            </div>
-                          </div>
-                          <div className="profile-section-actions">
-                            {hasConfiguration(field.state.value) ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                                <CheckCircle2 className="size-3.5" />
-                                <span className="hidden sm:inline">已配置</span>
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground hidden sm:inline">未配置</span>
-                            )}
+                  {(field) => (
+                    <section
+                      id="profile-nodes-section"
+                      className="profile-section flex flex-col gap-0"
+                      tabIndex={-1}
+                      aria-label="全部节点"
+                    >
+                      <div className="profile-section-header">
+                        <div
+                          className="profile-section-header-trigger"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setNodesExpanded((prev) => !prev)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              setNodesExpanded((prev) => !prev)
+                            }
+                          }}
+                        >
+                          <ChevronDown className={cn('profile-collapse-icon', nodesExpanded && 'expanded')} />
+                          <div className="flex items-center gap-2">
+                            <Network className="size-4 text-amber-500" />
+                            <strong className="text-sm font-semibold text-foreground">全部节点</strong>
                           </div>
                         </div>
-
-                        {nodesExpanded && (
-                          <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
-                            <SlotBindingEditor
-                              slot={NODE_BINDING_EDITOR_SCOPE}
-                              allowReorder={false}
-                              value={field.state.value}
-                              sources={sources}
-                              nodes={nodes}
-                              tags={tagOptions}
-                              onChange={field.handleChange}
-                            />
-                            {!field.state.meta.isValid && (
-                              <div className="pt-2">
-                                <FieldError errors={field.state.meta.errors} />
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        <div className="profile-section-actions">
+                          {hasConfiguration(field.state.value) ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                              <CheckCircle2 className="size-3.5" />
+                              <span className="hidden sm:inline">已配置</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground hidden sm:inline">未配置</span>
+                          )}
+                        </div>
                       </div>
-                    )
-                  }}
+
+                      {nodesExpanded && (
+                        <div className="profile-section-body p-4 pt-3.5 flex flex-col gap-4 border-t border-border">
+                          <SlotBindingEditor
+                            slot={NODE_BINDING_EDITOR_SCOPE}
+                            allowReorder={false}
+                            value={field.state.value}
+                            sources={sources}
+                            nodes={nodes}
+                            tags={tagOptions}
+                            onChange={field.handleChange}
+                          />
+                          {!field.state.meta.isValid && (
+                            <div className="pt-2">
+                              <FieldError errors={field.state.meta.errors} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
                 </form.Field>
-              </section>
+              )}
 
               {/* 动态节点槽保持独立绑定。 */}
               <form.Subscribe
@@ -843,7 +860,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                       setTemplateDetailAttempt((value) => value + 1)
                     }}
                     templateId={templateId}
-                    nodeBinding={nodeBinding}
+                    nodeBinding={includesAllProxies ? nodeBinding : EMPTY_NODE_BINDING}
                     subscriptionSourceIds={subscriptionSourceIds}
                     slotBindings={slotBindings}
                     nodes={nodes}
@@ -876,7 +893,7 @@ function ProfileEditor({ id, initialTemplateId }: { id?: string; initialTemplate
                       const source = sources.find((source) => source.id === id)
                       return !source || source.kind !== 'url' || !source.enabled || !source.url
                     }) ||
-                    [values.nodeBinding, ...values.slotBindings].some(
+                    [includesAllProxies ? values.nodeBinding : EMPTY_NODE_BINDING, ...values.slotBindings].some(
                       (binding) =>
                         binding.mode === 'node' &&
                         binding.nodeIds.some((nodeId) => {

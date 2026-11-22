@@ -28,6 +28,8 @@ import {
 import { nodeTagViews, profileFilterTagIds } from './tag-store'
 import { renderMihomoConfig, type SelectedNode, type SelectedSlotNode } from './templates/renderer'
 import { resolveTemplate } from './templates/resolver'
+import type { TemplateSourceSlot } from './templates/source-slots'
+import { templateIncludesAllProxies } from './templates/validator'
 
 const MAX_SOURCE_BYTES = 1024 * 1024
 export const MAX_JOB_ATTEMPTS = 4 // 首次执行 + wrangler.jsonc 中的 3 次重试。
@@ -675,15 +677,19 @@ async function selectGlobalNodes(env: Env, profileId: string, binding: ProfileNo
 export async function selectProfileNodes(
   env: Env,
   profile: typeof profiles.$inferSelect,
-  slotNames = new Map<string, string>(),
-  providerSlotKeys = new Set<string>(),
+  template: { yaml: string; sourceSlots: TemplateSourceSlot[] },
 ): Promise<{ globalNodes: SelectedNode[]; slotNodes: SelectedSlotNode[] }> {
-  const [nodeBinding, allBindings] = await Promise.all([
-    readProfileNodeBinding(env, profile.id),
+  const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
+  const providerSlotKeys = new Set(
+    template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
+  )
+  const [globalNodes, allBindings] = await Promise.all([
+    templateIncludesAllProxies(template)
+      ? readProfileNodeBinding(env, profile.id).then((binding) => selectGlobalNodes(env, profile.id, binding))
+      : [],
     readProfileSlotBindings(env, profile.id),
   ])
   const bindings = allBindings.filter(({ slotKey }) => !providerSlotKeys.has(slotKey))
-  const globalNodes = await selectGlobalNodes(env, profile.id, nodeBinding)
   const slotNodes = [
     ...(await selectSourceSlotNodes(
       env,
@@ -825,7 +831,7 @@ async function selectDraftSourceSlotNodes(
 export async function selectDraftProfileNodes(
   env: Env,
   draft: {
-    nodeBinding: ProfileNodeBindingInput
+    nodeBinding?: ProfileNodeBindingInput
     slotBindings: ProfileSlotBindingInput[]
     tags?: string[]
   },
@@ -833,7 +839,7 @@ export async function selectDraftProfileNodes(
   providerSlotKeys = new Set<string>(),
 ): Promise<{ globalNodes: SelectedNode[]; slotNodes: SelectedSlotNode[] }> {
   const bindings = draft.slotBindings.filter(({ slotKey }) => !providerSlotKeys.has(slotKey))
-  const globalNodes = await selectDraftGlobalNodes(env, draft.nodeBinding)
+  const globalNodes = draft.nodeBinding ? await selectDraftGlobalNodes(env, draft.nodeBinding) : []
   const slotNodes = [
     ...(await selectDraftSourceSlotNodes(
       env,
@@ -887,11 +893,7 @@ export async function compileProfile(env: Env, profileId: string, lease?: JobLea
   const template = await resolveTemplate(env, profile.templateId)
   if (!template) throw new PermanentJobError('订阅模板不存在')
 
-  const slotNames = new Map(template.sourceSlots.map(({ key, name }) => [key, name]))
-  const providerSlotKeys = new Set(
-    template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
-  )
-  const selected = await selectProfileNodes(env, profile, slotNames, providerSlotKeys)
+  const selected = await selectProfileNodes(env, profile, template)
   let yaml: string
   try {
     const [bindings, subscriptionSourceIds] = await Promise.all([

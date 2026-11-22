@@ -4,6 +4,7 @@ import { profileSlotBindings, profiles, templateSlots, templates } from '../db'
 import type { TemplateId } from '../db'
 import { builtinTemplate } from './builtin'
 import type { TemplateSourceSlot } from './source-slots'
+import { templateIncludesAllProxies } from './validator'
 
 export type ResolvedTemplate = {
   id: string
@@ -54,6 +55,7 @@ export function templateView(template: ResolvedTemplate, profileCount: number, i
     readOnly: builtin,
     profileCount,
     sourceSlots: template.sourceSlots,
+    includesAllProxies: templateIncludesAllProxies(template),
     createdAt: template.createdAt || null,
     updatedAt: template.updatedAt || null,
     yaml: includeYaml ? template.yaml : undefined,

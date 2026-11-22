@@ -145,6 +145,7 @@ export type TemplateSummary = {
   readOnly: boolean
   profileCount: number
   sourceSlots: TemplateSourceSlot[]
+  includesAllProxies: boolean
   createdAt: string | null
   updatedAt: string | null
 }

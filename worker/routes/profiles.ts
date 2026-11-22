@@ -8,13 +8,14 @@ import { createJob, db, selectDraftProfileNodes } from '../tasks'
 import { subscriptionToken, subscriptionTokenHash } from '../security'
 import { resolveTemplate } from '../templates/resolver'
 import { renderMihomoConfig } from '../templates/renderer'
+import { templateIncludesAllProxies } from '../templates/validator'
 import {
   readProfileSlotBindings,
   replaceProfileSlotBindings,
   validateProfileNodeBinding,
   validateProfileSlotBindings,
 } from '../profile-slot-bindings'
-import { readProfileNodeBinding, replaceProfileNodeBinding } from '../profile-node-binding'
+import { EMPTY_PROFILE_NODE_BINDING, readProfileNodeBinding, replaceProfileNodeBinding } from '../profile-node-binding'
 import {
   readProfileSubscriptionSources,
   replaceProfileSubscriptionSources,
@@ -88,7 +89,7 @@ export const profileSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
     enabled: z.boolean().default(true),
-    nodeBinding: nodeBindingSchema,
+    nodeBinding: nodeBindingSchema.optional(),
     subscriptionSourceIds: z.array(z.string().min(1)).max(20).default([]),
     slotBindings: slotBindingsSchema,
     tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
@@ -106,18 +107,13 @@ export const profileUpdateSchema = profileSchema
   })
   .strict()
 
-async function templateSlots(env: Env, templateId: string) {
-  const template = await resolveTemplate(env, templateId)
-  return template?.sourceSlots || null
-}
-
 export async function profileView(
   env: Env,
   profile: typeof profiles.$inferSelect,
   origin: string,
   includeYaml = false,
 ) {
-  const slots = (await templateSlots(env, profile.templateId)) || []
+  const slots = (await resolveTemplate(env, profile.templateId))?.sourceSlots || []
   const [nodeBinding, subscriptionSourceIds, bindings, tags] = await Promise.all([
     readProfileNodeBinding(env, profile.id),
     readProfileSubscriptionSources(env, profile.id),
@@ -178,19 +174,22 @@ profilesRouter.post('/', async (c) => {
   const database = db(c.env)
   const [{ value }] = await database.select({ value: count() }).from(profiles)
   if (Number(value) >= 20) return fail(c, 409, 'PROFILE_LIMIT', '配置数量已达到 20 个')
-  const slots = await templateSlots(c.env, input.templateId)
-  if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const template = await resolveTemplate(c.env, input.templateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const slots = template.sourceSlots
 
   let nodeBinding
   let bindings
   const subscriptionSourceIds = [...new Set(input.subscriptionSourceIds)]
   try {
     ;[nodeBinding, bindings] = await Promise.all([
-      validateProfileNodeBinding(
-        c.env,
-        input.nodeBinding,
-        subscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
-      ),
+      templateIncludesAllProxies(template)
+        ? validateProfileNodeBinding(
+            c.env,
+            input.nodeBinding ?? EMPTY_PROFILE_NODE_BINDING,
+            subscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
+          )
+        : EMPTY_PROFILE_NODE_BINDING,
       validateProfileSlotBindings(c.env, slots, input.slotBindings, subscriptionSourceIds),
     ])
   } catch (error) {
@@ -227,7 +226,7 @@ profilesRouter.post('/', async (c) => {
 
 const previewProfileSchema = z.object({
   templateId: templateIdSchema,
-  nodeBinding: nodeBindingSchema,
+  nodeBinding: profileSchema.shape.nodeBinding,
   subscriptionSourceIds: profileSchema.shape.subscriptionSourceIds,
   slotBindings: slotBindingsSchema.default([]),
   tags: z.array(z.string().trim().min(1).max(24)).max(20).default([]),
@@ -255,7 +254,12 @@ profilesRouter.post('/preview', async (c) => {
     const providerSlotKeys = new Set(
       template.sourceSlots.filter(({ type }) => type === 'subscription').map(({ key }) => key),
     )
-    const { globalNodes, slotNodes } = await selectDraftProfileNodes(c.env, input, slotNames, providerSlotKeys)
+    const { globalNodes, slotNodes } = await selectDraftProfileNodes(
+      c.env,
+      { ...input, nodeBinding: templateIncludesAllProxies(template) ? input.nodeBinding : undefined },
+      slotNames,
+      providerSlotKeys,
+    )
     const uniquePhysicalCount = new Set([...globalNodes, ...slotNodes].map((n) => n.physicalNodeId)).size
     const yaml = renderMihomoConfig({ globalNodes, slotNodes, template, proxyProviders })
     return ok(c, { yaml, error: null, nodeCount: uniquePhysicalCount })
@@ -284,19 +288,22 @@ profilesRouter.patch('/:id', async (c) => {
   if (input.templateId && input.templateId !== current.templateId && !input.slotBindings)
     return fail(c, 400, 'PROFILE_SLOT_BINDINGS_INVALID', '切换模板时必须重新绑定动态节点槽')
 
-  const slots = await templateSlots(c.env, input.templateId || current.templateId)
-  if (!slots) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const template = await resolveTemplate(c.env, input.templateId || current.templateId)
+  if (!template) return fail(c, 404, 'TEMPLATE_NOT_FOUND', '订阅模板不存在')
+  const slots = template.sourceSlots
   const subscriptionSourceIds =
     input.subscriptionSourceIds === undefined ? undefined : [...new Set(input.subscriptionSourceIds)]
   const nextSubscriptionSourceIds = subscriptionSourceIds ?? (await readProfileSubscriptionSources(c.env, id))
   let nodeBinding
   if (input.nodeBinding || input.templateId || input.slotBindings || subscriptionSourceIds) {
     try {
-      nodeBinding = await validateProfileNodeBinding(
-        c.env,
-        input.nodeBinding || (await readProfileNodeBinding(c.env, id)),
-        nextSubscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
-      )
+      if (templateIncludesAllProxies(template)) {
+        nodeBinding = await validateProfileNodeBinding(
+          c.env,
+          input.nodeBinding ?? (await readProfileNodeBinding(c.env, id)),
+          nextSubscriptionSourceIds.length > 0 || slots.some(({ type }) => type === 'subscription'),
+        )
+      }
     } catch (error) {
       return fail(c, 400, 'PROFILE_NODE_BINDING_INVALID', error instanceof Error ? error.message : '节点选择无效')
     }

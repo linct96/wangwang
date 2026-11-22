@@ -178,12 +178,7 @@ templatesRouter.post('/preview', async (c) => {
     if (input.profileId) {
       const profile = await db(c.env).select().from(profiles).where(eq(profiles.id, input.profileId)).get()
       if (!profile) return fail(c, 404, 'PROFILE_NOT_FOUND', '配置不存在')
-      ;({ globalNodes, slotNodes } = await selectProfileNodes(
-        c.env,
-        profile,
-        new Map(slots.map(({ key, name }) => [key, name])),
-        new Set(slots.filter(({ type }) => type === 'subscription').map(({ key }) => key)),
-      ))
+      ;({ globalNodes, slotNodes } = await selectProfileNodes(c.env, profile, template))
       proxyProviders = await resolveProfileProxyProviders(
         c.env,
         slots,

@@ -88,6 +88,12 @@ export function parseTemplateYaml(yaml: string, sourceSlots: TemplateSourceSlot[
   return config
 }
 
+export function templateIncludesAllProxies(template: { yaml: string; sourceSlots: TemplateSourceSlot[] }) {
+  const config = parseTemplateYaml(template.yaml, template.sourceSlots)
+  const groups = config['proxy-groups'] as Array<Record<string, unknown>>
+  return groups.some((group) => group['include-all'] === true || group['include-all-proxies'] === true)
+}
+
 export function validateRenderedConfig(config: MihomoTemplateConfig) {
   if (Object.hasOwn(config, 'x-wangwang')) throw new Error('生成配置不能包含 x-wangwang')
   const providers = config['proxy-providers']

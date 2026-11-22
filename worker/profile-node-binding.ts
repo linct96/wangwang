@@ -4,6 +4,13 @@ import { db } from './tasks'
 import { ensureTags } from './tag-store'
 import type { ProfileNodeBinding, ProfileNodeBindingInput } from './profile-slot-bindings'
 
+export const EMPTY_PROFILE_NODE_BINDING = {
+  mode: 'source',
+  sourceIds: [],
+  includeRegex: null,
+  excludeRegex: null,
+} satisfies ProfileNodeBindingInput
+
 export async function readProfileNodeBinding(env: Env, profileId: string): Promise<ProfileNodeBinding> {
   const [binding, sourceRows, nodeRows, tagRows] = await Promise.all([
     db(env).select().from(profileNodeBinding).where(eq(profileNodeBinding.profileId, profileId)).get(),
